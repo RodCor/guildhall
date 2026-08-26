@@ -1,6 +1,11 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "paths": {
+      "@guildhall/a2a-worker": ["../../packages/a2a-worker/src/index.ts"],
+      "@guildhall/contracts": ["../../packages/contracts/src/index.ts"],
+      "@guildhall/trust-engine": ["../../packages/trust-engine/src/index.ts"]
+    },
     "types": ["@cloudflare/workers-types"]
   },
   "include": ["src/**/*.ts"]

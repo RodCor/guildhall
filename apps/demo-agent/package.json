@@ -12,7 +12,10 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@a2a-js/sdk": "1.0.1"
+    "@a2a-js/sdk": "1.0.1",
+    "@guildhall/a2a-worker": "workspace:*",
+    "@guildhall/contracts": "workspace:*",
+    "@guildhall/trust-engine": "workspace:*"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20260826.1",

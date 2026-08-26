@@ -2,8 +2,23 @@
   "$schema": "../../node_modules/wrangler/config-schema.json",
   "name": "guildhall-scribe",
   "main": "src/scribe.ts",
+  // Required: pnpm wrangler secret put HOSTED_AGENT_PRIVATE_JWK --config wrangler.scribe.jsonc
   "compatibility_date": "2026-08-26",
   "compatibility_flags": ["nodejs_compat"],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "HOSTED_AGENT_TASKS",
+        "class_name": "HostedAgentTaskStore",
+      },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["HostedAgentTaskStore"],
+    },
+  ],
   "observability": {
     "enabled": true,
   },

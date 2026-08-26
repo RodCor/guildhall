@@ -19,6 +19,7 @@ import { handleOAuthRoute } from "./auth/oauth.js";
 import { handleSessionRoute } from "./auth/session.js";
 import { getAutonomyPolicy, listAgentKeys } from "./repositories/index.js";
 import { handlePublicApiRoute } from "./publicApi.js";
+import { handleGuildBrokerRoute } from "./a2a/guildBroker.js";
 import type { GuildhallEnv } from "./types.js";
 
 export { MissionCoordinator } from "./durable/MissionCoordinator.js";
@@ -46,6 +47,8 @@ export default {
     if (oauthResponse !== null) return oauthResponse;
     const sessionResponse = await handleSessionRoute(request, env);
     if (sessionResponse !== null) return sessionResponse;
+    const guildBrokerResponse = await handleGuildBrokerRoute(request, env);
+    if (guildBrokerResponse !== null) return guildBrokerResponse;
     const publicApiResponse = await handlePublicApiRoute(request, env);
     if (publicApiResponse !== null) return publicApiResponse;
     const agentResponse = await handleAgentRoute(request, env);

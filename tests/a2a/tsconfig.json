@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "paths": {
+      "@guildhall/a2a-worker": ["../../packages/a2a-worker/src/index.ts"],
+      "@guildhall/contracts": ["../../packages/contracts/src/index.ts"]
+    },
+    "types": [
+      "@cloudflare/vitest-plugin/types",
+      "@cloudflare/workers-types",
+      "node",
+      "vitest/globals"
+    ]
+  },
+  "include": ["../../apps/demo-agent/src/**/*.ts", "./**/*.ts"]
+}

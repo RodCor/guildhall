@@ -1,19 +1,20 @@
+import type { AgentSkill } from "@a2a-js/sdk";
 import {
-  A2A_PROTOCOL_VERSION,
-  type AgentCard,
-  type AgentSkill,
-} from "@a2a-js/sdk";
+  COMMITMENT_V1_EXTENSION_URI,
+  createA2AAgentCard,
+  type A2AAgentCard,
+  type A2AAgentSkill,
+} from "@guildhall/a2a-worker";
 
-export const COMMITMENT_EXTENSION_URI =
-  "https://guildhall.example/extensions/commitment/v1";
+import { hostedIdentity } from "./identity";
 
 export type HostedAgentKind = "scout" | "scribe" | "warden";
 
-type HostedAgentProfile = Readonly<{
-  description: string;
-  displayName: string;
-  skill: AgentSkill;
-}>;
+interface HostedAgentProfile {
+  readonly description: string;
+  readonly displayName: string;
+  readonly skill: AgentSkill;
+}
 
 const JSON_MODE = "application/json";
 
@@ -21,16 +22,14 @@ const profiles: Readonly<Record<HostedAgentKind, HostedAgentProfile>> = {
   scout: {
     displayName: "Guildhall Scout",
     description:
-      "Deterministic accessibility-finding agent for Guildhall reference missions.",
+      "Deterministic parser for the allowlisted Accessibility Dungeon fixture; produces signed structured findings and never fetches arbitrary URLs.",
     skill: {
       id: "accessibility-findings",
       name: "Accessibility Findings",
       description:
-        "Inspects the public fixture and returns protocol-shaped accessibility findings.",
-      tags: ["accessibility", "audit", "deterministic"],
-      examples: [
-        "Find accessibility issues in the Guildhall reference fixture.",
-      ],
+        "Parses only accessibility-dungeon-v1 and returns deterministic structured findings.",
+      tags: ["accessibility", "audit", "deterministic", "bounded-fixture"],
+      examples: ["Inspect accessibility-dungeon-v1 as the bound scout role."],
       inputModes: [JSON_MODE],
       outputModes: [JSON_MODE],
       securityRequirements: [],
@@ -39,14 +38,19 @@ const profiles: Readonly<Record<HostedAgentKind, HostedAgentProfile>> = {
   scribe: {
     displayName: "Guildhall Scribe",
     description:
-      "Deterministic remediation-planning agent with a controlled failure fixture.",
+      "Deterministic remediation-template agent for supplied structured findings, including one explicit controlled-failure demo scenario.",
     skill: {
       id: "accessibility-remediation",
       name: "Accessibility Remediation Plan",
       description:
-        "Turns accessibility findings into a structured remediation plan.",
-      tags: ["accessibility", "remediation", "deterministic"],
-      examples: ["Plan remediations for the Guildhall reference findings."],
+        "Produces one remediation step for every supplied finding; the named demo fixture may intentionally fail the remote task.",
+      tags: [
+        "accessibility",
+        "remediation",
+        "deterministic",
+        "failure-fixture",
+      ],
+      examples: ["Plan remediations for Scout's structured findings."],
       inputModes: [JSON_MODE],
       outputModes: [JSON_MODE],
       securityRequirements: [],
@@ -55,16 +59,14 @@ const profiles: Readonly<Record<HostedAgentKind, HostedAgentProfile>> = {
   warden: {
     displayName: "Guildhall Warden",
     description:
-      "Deterministic replacement agent able to inherit either reference assignment.",
+      "Deterministic recovery agent that accepts Scout or Scribe work only when role, slot, pact, and assignment digest are unchanged.",
     skill: {
-      id: "accessibility-recovery",
-      name: "Accessibility Mission Recovery",
+      id: "accessibility-exact-role-recovery",
+      name: "Exact-role Accessibility Recovery",
       description:
-        "Continues an unchanged finding or remediation role after a helper defaults.",
-      tags: ["accessibility", "replacement", "recovery", "deterministic"],
-      examples: [
-        "Inherit the exact role slot from a defaulted Guildhall helper.",
-      ],
+        "Recovers an unchanged Scout or Scribe assignment after validating exact replacement invariants.",
+      tags: ["accessibility", "replacement", "recovery", "exact-role"],
+      examples: ["Inherit the unchanged role slot from a defaulted helper."],
       inputModes: [JSON_MODE],
       outputModes: [JSON_MODE],
       securityRequirements: [],
@@ -75,44 +77,47 @@ const profiles: Readonly<Record<HostedAgentKind, HostedAgentProfile>> = {
 export function buildAgentCard(
   kind: HostedAgentKind,
   origin: string,
-): AgentCard {
+): A2AAgentCard {
   const profile = profiles[kind];
-
-  return {
+  const identity = hostedIdentity(kind);
+  const base = createA2AAgentCard({
     name: profile.displayName,
     description: profile.description,
-    supportedInterfaces: [
-      {
-        url: `${origin}/a2a`,
-        protocolBinding: "HTTP+JSON",
-        tenant: "",
-        protocolVersion: A2A_PROTOCOL_VERSION,
-      },
-    ],
-    provider: {
-      organization: "Guildhall",
-      url: origin,
-    },
-    version: "0.0.0-spike",
+    version: "1.0.0",
+    endpointUrl: `${origin}/a2a/v1`,
+    provider: { organization: "Guildhall", url: origin },
+    skills: [toAdapterSkill(profile.skill)],
+  });
+  return {
+    ...base,
     capabilities: {
-      streaming: false,
-      pushNotifications: false,
-      extensions: [
-        {
-          uri: COMMITMENT_EXTENSION_URI,
-          description:
-            "Bounded party formation, immutable pact acceptance, replacement, and receipts.",
-          required: true,
-          params: undefined,
-        },
-      ],
-      extendedAgentCard: false,
+      ...base.capabilities,
+      extensions: base.capabilities.extensions.map((extension) =>
+        extension.uri === COMMITMENT_V1_EXTENSION_URI
+          ? {
+              ...extension,
+              params: {
+                agentId: identity.agentId,
+                artifactSignatureDomain: "PACTBRIDGE-ARTIFACT-V1",
+                keyId: identity.keyId,
+                publicJwk: identity.publicJwk,
+              },
+            }
+          : extension,
+      ),
     },
-    securitySchemes: {},
+  };
+}
+
+function toAdapterSkill(skill: AgentSkill): A2AAgentSkill {
+  return {
+    id: skill.id,
+    name: skill.name,
+    description: skill.description,
+    tags: skill.tags,
+    examples: skill.examples,
+    inputModes: skill.inputModes,
+    outputModes: skill.outputModes,
     securityRequirements: [],
-    defaultInputModes: [JSON_MODE],
-    defaultOutputModes: [JSON_MODE],
-    skills: [profile.skill],
-    signatures: [],
   };
 }

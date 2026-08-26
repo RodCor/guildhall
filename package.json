@@ -18,6 +18,8 @@
     "test:capability-parity": "vitest run tests/capability-parity",
     "test:webmcp": "pnpm --filter @guildhall/capability-manifest test && pnpm --filter @guildhall/web typecheck",
     "test:mcp": "pnpm --filter @guildhall/node test && pnpm --filter @guildhall/node typecheck",
+    "test:a2a": "vitest run tests/a2a && vitest run --config tests/a2a/vitest.durable.config.ts && pnpm --filter @guildhall/demo-agent typecheck",
+    "test:a2a-conformance": "vitest run tests/a2a-conformance && pnpm --filter @guildhall/a2a-worker typecheck",
     "test:state-machine": "vitest run tests/state-machine --exclude tests/state-machine/properties.test.ts",
     "test:state-properties": "vitest run tests/state-machine/properties.test.ts",
     "test:protocol-core": "tsc --noEmit -p tests/protocol-core/tsconfig.json && vitest run --config tests/protocol-core/vitest.config.ts",
@@ -25,6 +27,7 @@
     "typecheck": "pnpm -r --if-present typecheck"
   },
   "devDependencies": {
+    "@a2a-js/sdk": "1.0.1",
     "@cloudflare/vitest-plugin": "1.1.0",
     "@cloudflare/workers-types": "5.20260826.1",
     "@types/node": "26.3.0",
