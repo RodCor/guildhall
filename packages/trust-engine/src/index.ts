@@ -1,3 +1,5 @@
 export * from "./eventHashChain.js";
+export * from "./requestProof.js";
+export * from "./safetyScanner.js";
 
 export const trustEngineStatus = "event-chain" as const;

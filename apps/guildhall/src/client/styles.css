@@ -200,6 +200,139 @@ h1 {
   background: rgba(23, 33, 29, 0.74);
 }
 
+.gateway-callout,
+.gateway-card {
+  max-width: 880px;
+  margin-top: 28px;
+  border: 1px solid var(--line);
+  background: rgba(23, 33, 29, 0.84);
+}
+
+.gateway-callout,
+.owner-strip,
+.agent-ready {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.gateway-callout,
+.gateway-card {
+  padding: 20px;
+}
+
+.gateway-title,
+.key-caption,
+.gateway-status {
+  margin: 0;
+}
+
+.gateway-title {
+  color: var(--ink);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.05rem;
+}
+
+.primary-action,
+.quiet-action {
+  border: 1px solid var(--gold);
+  border-radius: 3px;
+  padding: 11px 15px;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.primary-action {
+  color: var(--forest);
+  background: var(--gold-bright);
+}
+
+.quiet-action {
+  color: var(--gold-bright);
+  background: transparent;
+}
+
+.primary-action:disabled,
+.quiet-action:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
+.agent-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+
+.form-heading,
+.form-wide {
+  grid-column: 1 / -1;
+}
+
+.agent-form label {
+  display: grid;
+  gap: 7px;
+  color: var(--ink-muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.agent-form input,
+.agent-form textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 11px 12px;
+  color: var(--ink);
+  background: var(--forest);
+  font: inherit;
+}
+
+.agent-form textarea {
+  min-height: 86px;
+  resize: vertical;
+}
+
+.agent-ready {
+  justify-content: flex-start;
+  margin-top: 22px;
+  padding-top: 22px;
+  border-top: 1px solid var(--line);
+}
+
+.key-caption,
+.gateway-status {
+  margin-top: 6px;
+  color: var(--ink-muted);
+  font-size: 0.8rem;
+}
+
+@media (max-width: 660px) {
+  .gateway-callout,
+  .owner-strip {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .agent-form {
+    grid-template-columns: 1fr;
+  }
+
+  .form-heading,
+  .form-wide {
+    grid-column: 1;
+  }
+}
+
 .status-rune {
   color: var(--moss);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;

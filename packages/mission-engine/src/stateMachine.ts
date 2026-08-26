@@ -66,6 +66,14 @@ export function transition(
   command: LifecycleCommand,
 ): TransitionResult {
   if (state.terminalOutcome !== null) return failure(state, "TERMINAL_MISSION");
+  if (
+    state.safety === "paused" &&
+    command.type !== "cancel" &&
+    command.type !== "safety_pause" &&
+    command.type !== "safety_redact"
+  ) {
+    return failure(state, "ILLEGAL_TRANSITION");
+  }
 
   switch (command.type) {
     case "publish":
@@ -235,9 +243,13 @@ export function transition(
       const acceptances = {
         ...state.acceptances,
         [command.agentId]: {
+          acceptanceId: command.acceptanceId,
           agentId: command.agentId,
+          keyId: command.keyId,
           pactVersion: command.pactVersion,
           pactDigest: command.pactDigest,
+          signature: command.signature,
+          acceptedAt: command.acceptedAt,
         },
       };
       const bound = requiredSigners.every(
@@ -468,6 +480,30 @@ export function transition(
 
     case "safety_pause":
       return success(state, { safety: "paused" }, ["safety_paused"]);
+
+    case "safety_redact":
+      if (
+        state.stage === "DRAFT" ||
+        state.stage === "PREPARE" ||
+        state.stage === "RESERVE" ||
+        state.stage === "COMMIT"
+      ) {
+        return success(
+          state,
+          {
+            stage: "RECEIPT",
+            safety: "paused",
+            terminalOutcome: "canceled",
+            verificationPending: false,
+            correctionAvailable: false,
+          },
+          ["safety_redacted", "mission_canceled", "receipt_issued"],
+        );
+      }
+      return success(state, { safety: "paused" }, [
+        "safety_redacted",
+        "safety_paused",
+      ]);
 
     case "safety_reject":
       return success(state, { safety: "rejected" }, ["safety_rejected"]);

@@ -94,7 +94,9 @@ export function appendMissionEvent(
 
   return {
     ...eventWithoutHash,
-    eventHash: canonicalJsonDigestSync(eventWithoutHash),
+    eventHash: canonicalJsonDigestSync(
+      eventEnvelopeProjection(eventWithoutHash),
+    ),
   };
 }
 
@@ -102,8 +104,9 @@ export function appendMissionEvent(
  * Create the next event in a complete mission chain.
  *
  * The content digest commits to the payload. The event hash commits to the
- * complete public envelope, including that content digest and the previous
- * event hash, but excluding only the event hash itself.
+ * immutable envelope (including that digest and the previous event hash) but
+ * deliberately excludes the separately stored visible payload. This permits
+ * an audited safety marker to replace public content without rewriting links.
  */
 export function createChainedMissionEvent(
   input: UnhashedMissionEvent,
@@ -126,6 +129,17 @@ export function createChainedMissionEvent(
 export function verifyMissionEventChain(
   events: readonly MissionEvent[],
 ): EventChainVerificationResult {
+  const declaredRedactions = new Set(
+    events.flatMap((event) => {
+      const command = event.payload.command;
+      return event.type === "safety_redacted" &&
+        isRecord(command) &&
+        command.type === "safety_redact" &&
+        typeof command.redactedEventId === "string"
+        ? [command.redactedEventId]
+        : [];
+    }),
+  );
   let expectedPreviousHash: string | null = null;
   let expectedSequence = 1;
 
@@ -165,8 +179,12 @@ export function verifyMissionEventChain(
     let expectedContentDigest: string;
     let expectedEventHash: string;
     try {
-      expectedContentDigest = canonicalJsonDigestSync(event.payload);
-      expectedEventHash = canonicalJsonDigestSync(eventHashProjection(event));
+      expectedContentDigest = isAuthorizedRedaction(event, declaredRedactions)
+        ? event.contentDigest
+        : canonicalJsonDigestSync(event.payload);
+      expectedEventHash = canonicalJsonDigestSync(
+        eventEnvelopeProjection(event),
+      );
     } catch (error) {
       return invalidChain(events.length, {
         code: "CANONICALIZATION_FAILED",
@@ -221,11 +239,31 @@ export function verifyMissionEventChain(
 /** Worker-facing alias retained as the canonical public verifier name. */
 export const verifyEventChain = verifyMissionEventChain;
 
-function eventHashProjection(
-  event: MissionEvent,
-): Omit<MissionEvent, "eventHash"> {
-  const { eventHash: _eventHash, ...projection } = event;
+function eventEnvelopeProjection(
+  event: Omit<MissionEvent, "eventHash"> | MissionEvent,
+): Omit<MissionEvent, "eventHash" | "payload"> {
+  const {
+    eventHash: _eventHash,
+    payload: _payload,
+    ...projection
+  } = event as MissionEvent;
   return projection;
+}
+
+function isAuthorizedRedaction(
+  event: MissionEvent,
+  declaredRedactions: ReadonlySet<string>,
+): boolean {
+  return (
+    declaredRedactions.has(event.eventId) &&
+    event.payload.kind === "redacted-public-payload" &&
+    typeof event.payload.rulesetVersion === "string" &&
+    Object.keys(event.payload).length === 2
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function invalidChain(

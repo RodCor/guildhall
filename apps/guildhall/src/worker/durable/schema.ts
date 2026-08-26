@@ -40,11 +40,14 @@ CREATE TABLE IF NOT EXISTS pact_versions (
 );
 
 CREATE TABLE IF NOT EXISTS pact_acceptances (
+  acceptance_id TEXT NOT NULL UNIQUE,
   agent_id TEXT NOT NULL,
+  key_id TEXT NOT NULL,
   pact_version INTEGER NOT NULL,
   pact_digest TEXT NOT NULL,
-  sequence INTEGER NOT NULL,
+  signature TEXT NOT NULL,
   accepted_at TEXT NOT NULL,
+  sequence INTEGER NOT NULL,
   PRIMARY KEY (agent_id, pact_version)
 );
 
@@ -84,6 +87,13 @@ CREATE TABLE IF NOT EXISTS events (
   previous_event_hash TEXT,
   event_hash TEXT NOT NULL UNIQUE,
   emitted_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS event_redactions (
+  redaction_id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL UNIQUE REFERENCES events(event_id),
+  marker_json TEXT NOT NULL,
+  redacted_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS command_results (

@@ -10,9 +10,13 @@ export interface CandidatePact {
 }
 
 export interface PactAcceptanceRecord {
+  readonly acceptanceId: string;
   readonly agentId: string;
+  readonly keyId: string;
   readonly pactVersion: number;
   readonly pactDigest: string;
+  readonly signature: string;
+  readonly acceptedAt: string;
 }
 
 export interface RuntimeRoleSlot {
@@ -64,8 +68,12 @@ export type LifecycleCommand =
   | {
       readonly type: "accept_pact";
       readonly agentId: string;
+      readonly acceptanceId: string;
+      readonly keyId: string;
       readonly pactVersion: number;
       readonly pactDigest: string;
+      readonly signature: string;
+      readonly acceptedAt: string;
     }
   | { readonly type: "revise_mission" }
   | { readonly type: "start_execution" }
@@ -88,6 +96,7 @@ export type LifecycleCommand =
     }
   | { readonly type: "verification_passed" }
   | { readonly type: "safety_pause" }
+  | { readonly type: "safety_redact"; readonly redactedEventId: string }
   | { readonly type: "safety_reject" }
   | { readonly type: "cancel" }
   | { readonly type: "expire" };

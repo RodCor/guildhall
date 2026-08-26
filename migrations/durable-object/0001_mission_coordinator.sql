@@ -37,11 +37,14 @@ CREATE TABLE IF NOT EXISTS pact_versions (
 );
 
 CREATE TABLE IF NOT EXISTS pact_acceptances (
+  acceptance_id TEXT NOT NULL UNIQUE,
   agent_id TEXT NOT NULL,
+  key_id TEXT NOT NULL,
   pact_version INTEGER NOT NULL,
   pact_digest TEXT NOT NULL,
-  sequence INTEGER NOT NULL,
+  signature TEXT NOT NULL,
   accepted_at TEXT NOT NULL,
+  sequence INTEGER NOT NULL,
   PRIMARY KEY (agent_id, pact_version)
 );
 

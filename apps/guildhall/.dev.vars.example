@@ -1,0 +1,4 @@
+PUBLIC_ORIGIN=https://guildhall.example
+GITHUB_CLIENT_ID=replace-with-your-oauth-app-client-id
+GITHUB_CLIENT_SECRET=replace-locally
+AUTH_COOKIE_SECRET=replace-with-at-least-32-random-bytes

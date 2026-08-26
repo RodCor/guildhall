@@ -1,4 +1,8 @@
-import type { MissionEvent, MissionStage } from "@guildhall/contracts";
+import {
+  MissionEventSchema,
+  type MissionEvent,
+  type MissionStage,
+} from "@guildhall/contracts";
 import {
   deriveDisplayState,
   initialLifecycleState,
@@ -9,6 +13,7 @@ import {
 import {
   appendMissionEvent,
   canonicalDigestSync,
+  createRedactedPublicPayload,
 } from "@guildhall/trust-engine";
 import { DurableObject } from "cloudflare:workers";
 
@@ -35,8 +40,40 @@ interface MissionStateRow {
 
 interface EventRow {
   [key: string]: SqlStorageValue;
+  event_id: string;
   event_json: string;
+  marker_json: string | null;
 }
+
+interface EventRedactionRow {
+  [key: string]: SqlStorageValue;
+  redaction_id: string;
+  event_id: string;
+  marker_json: string;
+  redacted_at: string;
+}
+
+export type EmergencyEventRedactionResult =
+  | {
+      readonly ok: true;
+      readonly redactionId: string;
+      readonly eventId: string;
+      readonly marker: ReturnType<typeof createRedactedPublicPayload>;
+      readonly missionPaused: boolean;
+      readonly missionCanceled: boolean;
+      readonly resultingSequence: number;
+      readonly replay: boolean;
+    }
+  | {
+      readonly ok: false;
+      readonly code:
+        | "MISSION_NOT_INITIALIZED"
+        | "EVENT_NOT_FOUND"
+        | "EVENT_NOT_REDACTABLE"
+        | "REDACTION_CONFLICT"
+        | "EXPECTED_SEQUENCE_MISMATCH"
+        | "SAFETY_PAUSE_REJECTED";
+    };
 
 interface CommandResultRow {
   [key: string]: SqlStorageValue;
@@ -82,6 +119,12 @@ const DEADLINE_TYPES = new Set<DeadlineType>([
 ]);
 
 const PROJECTION_RETRY_BASE_MS = 1_000;
+
+class RedactionPauseError extends Error {
+  constructor(readonly code: string) {
+    super(code);
+  }
+}
 
 /**
  * One SQLite-backed Durable Object owns each mission. All transition decisions,
@@ -138,6 +181,134 @@ export class MissionCoordinator extends DurableObject<GuildhallEnv> {
     await this.scheduleNextAlarm();
 
     return result;
+  }
+
+  /**
+   * Masks one public event and places the mission in the safety-paused state in
+   * the same authoritative SQLite transaction. Event hashes remain immutable;
+   * only the public payload projection is replaced with a marker.
+   */
+  async emergencyRedactEvent(input: {
+    readonly redactionId: string;
+    readonly eventId: string;
+    readonly redactedAt: string;
+    readonly pauseCommand: CoordinatorCommand;
+  }): Promise<EmergencyEventRedactionResult> {
+    const marker = createRedactedPublicPayload();
+    let outcome: EmergencyEventRedactionResult;
+    try {
+      outcome = this.ctx.storage.transactionSync(() => {
+        const byId = this.ctx.storage.sql
+          .exec<EventRedactionRow>(
+            `SELECT redaction_id, event_id, marker_json, redacted_at
+           FROM event_redactions WHERE redaction_id = ? LIMIT 1`,
+            input.redactionId,
+          )
+          .toArray()[0];
+        if (byId !== undefined) {
+          return byId.event_id === input.eventId
+            ? ({
+                ok: true,
+                redactionId: byId.redaction_id,
+                eventId: byId.event_id,
+                marker: JSON.parse(byId.marker_json) as typeof marker,
+                missionPaused: this.readState()?.terminalOutcome === null,
+                missionCanceled:
+                  this.readState()?.terminalOutcome === "canceled",
+                resultingSequence: this.readState()?.sequence ?? 0,
+                replay: true,
+              } satisfies EmergencyEventRedactionResult)
+            : ({ ok: false, code: "REDACTION_CONFLICT" } as const);
+        }
+        const byEvent = this.ctx.storage.sql
+          .exec<EventRedactionRow>(
+            `SELECT redaction_id, event_id, marker_json, redacted_at
+           FROM event_redactions WHERE event_id = ? LIMIT 1`,
+            input.eventId,
+          )
+          .toArray()[0];
+        if (byEvent !== undefined) {
+          return {
+            ok: true,
+            redactionId: byEvent.redaction_id,
+            eventId: byEvent.event_id,
+            marker: JSON.parse(byEvent.marker_json) as typeof marker,
+            missionPaused: this.readState()?.terminalOutcome === null,
+            missionCanceled: this.readState()?.terminalOutcome === "canceled",
+            resultingSequence: this.readState()?.sequence ?? 0,
+            replay: true,
+          } satisfies EmergencyEventRedactionResult;
+        }
+        const state = this.readState();
+        if (state === null) {
+          return { ok: false, code: "MISSION_NOT_INITIALIZED" } as const;
+        }
+        const targetEvent = this.ctx.storage.sql
+          .exec<{ event_type: string }>(
+            `SELECT event_type FROM events WHERE event_id = ? LIMIT 1`,
+            input.eventId,
+          )
+          .toArray()[0];
+        if (targetEvent === undefined)
+          return { ok: false, code: "EVENT_NOT_FOUND" } as const;
+        if (targetEvent.event_type === "safety_redacted") {
+          return { ok: false, code: "EVENT_NOT_REDACTABLE" } as const;
+        }
+
+        let resultingSequence = state.sequence;
+        if (state.safety !== "paused") {
+          const requestHash = canonicalDigestSync(input.pauseCommand);
+          const pause = this.executeCommandInOpenTransaction(
+            input.pauseCommand,
+            requestHash,
+            input.redactedAt,
+          );
+          if (!pause.ok) {
+            throw new RedactionPauseError(pause.code);
+          }
+          resultingSequence = pause.resultingSequence;
+        }
+        this.ctx.storage.sql.exec(
+          `INSERT INTO event_redactions(
+           redaction_id, event_id, marker_json, redacted_at
+         ) VALUES (?, ?, ?, ?)`,
+          input.redactionId,
+          input.eventId,
+          JSON.stringify(marker),
+          input.redactedAt,
+        );
+        const finalState = this.readState();
+        return {
+          ok: true,
+          redactionId: input.redactionId,
+          eventId: input.eventId,
+          marker,
+          missionPaused: finalState?.terminalOutcome === null,
+          missionCanceled: finalState?.terminalOutcome === "canceled",
+          resultingSequence,
+          replay: false,
+        } satisfies EmergencyEventRedactionResult;
+      });
+    } catch (error) {
+      if (error instanceof RedactionPauseError) {
+        return {
+          ok: false,
+          code:
+            error.code === "EXPECTED_SEQUENCE_MISMATCH"
+              ? "EXPECTED_SEQUENCE_MISMATCH"
+              : "SAFETY_PAUSE_REJECTED",
+        };
+      }
+      throw error;
+    }
+
+    if (outcome.ok) {
+      await this.flushEffectOutbox();
+      await this.flushProjectionOutbox();
+      this.broadcastRedaction(outcome.eventId, outcome.marker);
+    }
+    await this.scheduleNextAlarm();
+    return outcome;
   }
 
   getSnapshot(afterSequence = 0): MissionSnapshotPacket {
@@ -322,111 +493,118 @@ export class MissionCoordinator extends DurableObject<GuildhallEnv> {
     const requestHash = canonicalDigestSync(input);
     const now = new Date().toISOString();
 
-    return this.ctx.storage.transactionSync(() => {
-      const existing = this.ctx.storage.sql
-        .exec<CommandResultRow>(
-          `SELECT command_id, request_hash, response_json, resulting_sequence
+    return this.ctx.storage.transactionSync(() =>
+      this.executeCommandInOpenTransaction(input, requestHash, now),
+    );
+  }
+
+  private executeCommandInOpenTransaction(
+    input: CoordinatorCommand,
+    requestHash: string,
+    now: string,
+  ): CoordinatorCommandResult {
+    const existing = this.ctx.storage.sql
+      .exec<CommandResultRow>(
+        `SELECT command_id, request_hash, response_json, resulting_sequence
            FROM command_results WHERE command_id = ? LIMIT 1`,
-          input.commandId,
-        )
-        .toArray()[0];
-      if (existing !== undefined) {
-        if (existing.request_hash === requestHash) {
-          return JSON.parse(existing.response_json) as CoordinatorCommandResult;
-        }
-        return {
-          ok: false,
-          commandId: input.commandId,
-          requestHash,
-          resultingSequence: existing.resulting_sequence,
-          code: "COMMAND_ID_REUSED",
-        };
+        input.commandId,
+      )
+      .toArray()[0];
+    if (existing !== undefined) {
+      if (existing.request_hash === requestHash) {
+        return JSON.parse(existing.response_json) as CoordinatorCommandResult;
       }
-
-      const state = this.readState();
-      if (state === null) {
-        return this.persistRejection(
-          input.commandId,
-          requestHash,
-          0,
-          "MISSION_NOT_INITIALIZED",
-          now,
-        );
-      }
-
-      if (!isCoordinatorCommand(input as unknown)) {
-        return this.persistRejection(
-          String(
-            (input as unknown as { commandId?: unknown }).commandId ??
-              "invalid",
-          ),
-          requestHash,
-          state.sequence,
-          "INVALID_COMMAND",
-          now,
-        );
-      }
-
-      if (
-        input.expectedSequence !== undefined &&
-        input.expectedSequence !== state.sequence
-      ) {
-        return this.persistRejection(
-          input.commandId,
-          requestHash,
-          state.sequence,
-          "EXPECTED_SEQUENCE_MISMATCH",
-          now,
-          input.expectedSequence,
-          state.sequence,
-        );
-      }
-
-      let reduced: ReturnType<typeof transition>;
-      try {
-        reduced = transition(state, input.command);
-      } catch {
-        return this.persistRejection(
-          input.commandId,
-          requestHash,
-          state.sequence,
-          "INVALID_COMMAND",
-          now,
-        );
-      }
-      if (!reduced.ok) {
-        return this.persistRejection(
-          input.commandId,
-          requestHash,
-          state.sequence,
-          reduced.code,
-          now,
-        );
-      }
-
-      const appendedEvents = this.appendEvents(
-        state,
-        reduced.state,
-        reduced.events,
-        input,
-        now,
-      );
-      this.persistState(reduced.state, now);
-      this.persistRelationalSnapshot(reduced.state, now);
-      this.enqueueEffect(appendedEvents, reduced.state.sequence, now);
-      this.enqueueProjection(reduced.state, now);
-
-      const response: CoordinatorCommandResult = {
-        ok: true,
+      return {
+        ok: false,
         commandId: input.commandId,
         requestHash,
-        resultingSequence: reduced.state.sequence,
-        eventTypes: reduced.events,
-        projectionEnqueued: true,
+        resultingSequence: existing.resulting_sequence,
+        code: "COMMAND_ID_REUSED",
       };
-      this.persistCommandResult(response, now);
-      return response;
-    });
+    }
+
+    const state = this.readState();
+    if (state === null) {
+      return this.persistRejection(
+        input.commandId,
+        requestHash,
+        0,
+        "MISSION_NOT_INITIALIZED",
+        now,
+      );
+    }
+
+    if (!isCoordinatorCommand(input as unknown)) {
+      return this.persistRejection(
+        String(
+          (input as unknown as { commandId?: unknown }).commandId ?? "invalid",
+        ),
+        requestHash,
+        state.sequence,
+        "INVALID_COMMAND",
+        now,
+      );
+    }
+
+    if (
+      input.expectedSequence !== undefined &&
+      input.expectedSequence !== state.sequence
+    ) {
+      return this.persistRejection(
+        input.commandId,
+        requestHash,
+        state.sequence,
+        "EXPECTED_SEQUENCE_MISMATCH",
+        now,
+        input.expectedSequence,
+        state.sequence,
+      );
+    }
+
+    let reduced: ReturnType<typeof transition>;
+    try {
+      reduced = transition(state, input.command);
+    } catch {
+      return this.persistRejection(
+        input.commandId,
+        requestHash,
+        state.sequence,
+        "INVALID_COMMAND",
+        now,
+      );
+    }
+    if (!reduced.ok) {
+      return this.persistRejection(
+        input.commandId,
+        requestHash,
+        state.sequence,
+        reduced.code,
+        now,
+      );
+    }
+
+    const appendedEvents = this.appendEvents(
+      state,
+      reduced.state,
+      reduced.events,
+      input,
+      now,
+    );
+    this.persistState(reduced.state, now);
+    this.persistRelationalSnapshot(reduced.state, now);
+    this.enqueueEffect(appendedEvents, reduced.state.sequence, now);
+    this.enqueueProjection(reduced.state, now);
+
+    const response: CoordinatorCommandResult = {
+      ok: true,
+      commandId: input.commandId,
+      requestHash,
+      resultingSequence: reduced.state.sequence,
+      eventTypes: reduced.events,
+      projectionEnqueued: true,
+    };
+    this.persistCommandResult(response, now);
+    return response;
   }
 
   private persistRejection(
@@ -501,6 +679,7 @@ export class MissionCoordinator extends DurableObject<GuildhallEnv> {
         },
         previousEventHash,
       });
+      MissionEventSchema.parse(event);
       this.ctx.storage.sql.exec(
         `INSERT INTO events(
            sequence, event_id, event_type, event_json, content_digest,
@@ -601,13 +780,17 @@ export class MissionCoordinator extends DurableObject<GuildhallEnv> {
     for (const acceptance of Object.values(state.acceptances)) {
       this.ctx.storage.sql.exec(
         `INSERT INTO pact_acceptances(
-           agent_id, pact_version, pact_digest, sequence, accepted_at
-         ) VALUES (?, ?, ?, ?, ?)`,
+           acceptance_id, agent_id, key_id, pact_version, pact_digest,
+           signature, accepted_at, sequence
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        acceptance.acceptanceId,
         acceptance.agentId,
+        acceptance.keyId,
         acceptance.pactVersion,
         acceptance.pactDigest,
+        acceptance.signature,
+        acceptance.acceptedAt,
         state.sequence,
-        now,
       );
     }
 
@@ -633,12 +816,42 @@ export class MissionCoordinator extends DurableObject<GuildhallEnv> {
   private readEvents(afterSequence: number): MissionEvent[] {
     return this.ctx.storage.sql
       .exec<EventRow>(
-        `SELECT event_json FROM events
-         WHERE sequence > ? ORDER BY sequence`,
+        `SELECT events.event_id, events.event_json,
+                event_redactions.marker_json
+         FROM events
+         LEFT JOIN event_redactions
+           ON event_redactions.event_id = events.event_id
+         WHERE events.sequence > ? ORDER BY events.sequence`,
         afterSequence,
       )
       .toArray()
-      .map((row) => JSON.parse(row.event_json) as MissionEvent);
+      .map((row) =>
+        this.applyPublicRedaction(
+          JSON.parse(row.event_json) as MissionEvent,
+          row.marker_json,
+        ),
+      );
+  }
+
+  private applyPublicRedaction(
+    event: MissionEvent,
+    knownMarkerJson?: string | null,
+  ): MissionEvent {
+    const markerJson =
+      knownMarkerJson ??
+      this.ctx.storage.sql
+        .exec<{ marker_json: string }>(
+          `SELECT marker_json FROM event_redactions
+           WHERE event_id = ? LIMIT 1`,
+          event.eventId,
+        )
+        .toArray()[0]?.marker_json;
+    return markerJson === undefined || markerJson === null
+      ? event
+      : {
+          ...event,
+          payload: JSON.parse(markerJson) as MissionEvent["payload"],
+        };
   }
 
   private enqueueEffect(
@@ -687,7 +900,9 @@ export class MissionCoordinator extends DurableObject<GuildhallEnv> {
       const payload = JSON.parse(row.payload_json) as {
         events: MissionEvent[];
       };
-      this.broadcastEvents(payload.events);
+      this.broadcastEvents(
+        payload.events.map((event) => this.applyPublicRedaction(event)),
+      );
       this.ctx.storage.sql.exec(
         `UPDATE effect_outbox
          SET status = 'complete', attempts = attempts + 1, completed_at = ?
@@ -766,6 +981,21 @@ export class MissionCoordinator extends DurableObject<GuildhallEnv> {
         ws.serializeAttachment({
           afterSequence: delta.at(-1)?.sequence ?? attachment.afterSequence,
         } satisfies WebSocketAttachment);
+      } catch {
+        ws.close(1011, "stream delivery failed");
+      }
+    }
+  }
+
+  private broadcastRedaction(
+    eventId: string,
+    marker: ReturnType<typeof createRedactedPublicPayload>,
+  ): void {
+    for (const ws of this.ctx.getWebSockets("mission-read-model")) {
+      try {
+        ws.send(
+          JSON.stringify({ type: "redaction", eventId, payload: marker }),
+        );
       } catch {
         ws.close(1011, "stream delivery failed");
       }

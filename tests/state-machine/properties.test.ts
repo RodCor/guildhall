@@ -17,9 +17,13 @@ const probeCommands: readonly LifecycleCommand[] = [
   { type: "negotiation_timeout" },
   {
     type: "accept_pact",
+    acceptanceId: "70000000-0000-4000-8000-000000000001",
     agentId: "agent",
+    keyId: "70000000-0000-4000-8000-000000000002",
     pactVersion: 1,
     pactDigest: "digest",
+    signature: "S".repeat(86),
+    acceptedAt: "2026-08-26T12:00:00.000Z",
   },
   { type: "revise_mission" },
   { type: "start_execution" },

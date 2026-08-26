@@ -9,9 +9,19 @@ import { describe, expect, it } from "vitest";
 import type { MissionCoordinator } from "../../apps/guildhall/src/worker/durable/MissionCoordinator";
 import type { CoordinatorCommand } from "../../apps/guildhall/src/worker/durable/protocol";
 import {
+  createAgent,
+  registerAgentKey,
+  upsertGithubOwnerAndSession,
+} from "../../apps/guildhall/src/worker/repositories";
+import {
   projectMissionCatalog,
   readMissionCatalogRow,
 } from "../../apps/guildhall/src/worker/repositories/missionCatalog";
+import {
+  deriveEd25519KeyId,
+  hashOpaqueCredential,
+  randomBase64UrlToken,
+} from "../../apps/guildhall/src/worker/auth/crypto";
 import { verifyEventChain } from "../../packages/trust-engine/src";
 
 const REQUESTER = "10000000-0000-4000-8000-000000000001";
@@ -19,6 +29,7 @@ const HELPER_RED = "20000000-0000-4000-8000-000000000001";
 const HELPER_BLUE = "20000000-0000-4000-8000-000000000002";
 const ROLE_RED = "30000000-0000-4000-8000-000000000001";
 const PACT_DIGEST = "P".repeat(43);
+const ACCEPTANCE_KEY_ID = "70000000-0000-4000-8000-000000000001";
 const guildhallWorker = (exports as unknown as { default: Fetcher }).default;
 
 type CoordinatorRpc = Pick<
@@ -55,22 +66,8 @@ describe("MissionCoordinator transactional protocol core", () => {
     const stub = await negotiatingMission("concurrent-acceptances");
 
     const [requester, helper] = await Promise.all([
-      stub.executeCommand(
-        command({
-          type: "accept_pact",
-          agentId: REQUESTER,
-          pactVersion: 1,
-          pactDigest: PACT_DIGEST,
-        }),
-      ),
-      stub.executeCommand(
-        command({
-          type: "accept_pact",
-          agentId: HELPER_RED,
-          pactVersion: 1,
-          pactDigest: PACT_DIGEST,
-        }),
-      ),
+      stub.executeCommand(command(acceptPact(REQUESTER))),
+      stub.executeCommand(command(acceptPact(HELPER_RED))),
     ]);
 
     expect(requester.ok).toBe(true);
@@ -263,23 +260,44 @@ describe("MissionCoordinator transactional protocol core", () => {
                (SELECT COUNT(*) FROM command_results) AS commands`,
           )
           .one();
+        const acceptances = state.storage.sql
+          .exec<{
+            acceptance_id: string;
+            key_id: string;
+            signature: string;
+            accepted_at: string;
+          }>(
+            `SELECT acceptance_id, key_id, signature, accepted_at
+             FROM pact_acceptances ORDER BY agent_id`,
+          )
+          .toArray();
         expect(snapshot).toMatchObject({
           sequence: inspection.snapshot!.sequence,
           stage: "RECEIPT",
         });
         expect(counts.events).toBe(inspection.events.length);
         expect(counts.commands).toBeGreaterThan(0);
+        expect(acceptances).toHaveLength(2);
+        expect(
+          acceptances.every(
+            (acceptance) =>
+              acceptance.key_id === ACCEPTANCE_KEY_ID &&
+              acceptance.signature.length === 86 &&
+              Number.isFinite(Date.parse(acceptance.accepted_at)),
+          ),
+        ).toBe(true);
       },
     );
   });
 
   it("exposes the minimal canonical HTTP command API", async () => {
+    const authHeaders = await seedHttpOwner();
     const missionId = missionUuid("http-api");
     const created = await guildhallWorker.fetch(
       `https://guildhall.test/api/missions/${missionId}`,
       {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...authHeaders },
         body: JSON.stringify({ requesterAgentId: REQUESTER }),
       },
     );
@@ -289,8 +307,11 @@ describe("MissionCoordinator transactional protocol core", () => {
       `https://guildhall.test/api/missions/${missionId}/commands`,
       {
         method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(command({ type: "publish" })),
+        headers: { "content-type": "application/json", ...authHeaders },
+        body: JSON.stringify({
+          ...command({ type: "publish" }, { expectedSequence: 0 }),
+          actor: { agentId: REQUESTER },
+        }),
       },
     );
     expect(published.status).toBe(200);
@@ -305,6 +326,52 @@ describe("MissionCoordinator transactional protocol core", () => {
     expect(await snapshot.json()).toMatchObject({ latestSequence: 1 });
   });
 });
+
+async function seedHttpOwner(): Promise<Record<string, string>> {
+  const ownerId = "90000000-0000-4000-8000-000000000001";
+  const sessionToken = randomBase64UrlToken();
+  const csrfToken = randomBase64UrlToken();
+  const now = new Date().toISOString();
+  const principal = await upsertGithubOwnerAndSession(env.GUILD_DB, {
+    proposedOwnerId: ownerId,
+    githubUserId: 9001,
+    githubLogin: "guildhall-test-owner",
+    githubAvatarUrl: null,
+    sessionHash: await hashOpaqueCredential(sessionToken),
+    csrfHash: await hashOpaqueCredential(csrfToken),
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    createdAt: now,
+  });
+  await createAgent(env.GUILD_DB, {
+    agentId: REQUESTER,
+    ownerId: principal.ownerId,
+    slug: "protocol-requester",
+    characterName: "Protocol Requester",
+    characterClass: "Artificer",
+    technicalName: "Protocol Core Test",
+    guildName: "Guildhall Tests",
+    publicBio: "Exercises the authenticated command adapter.",
+    createdAt: now,
+  });
+  const keyPair = (await crypto.subtle.generateKey({ name: "Ed25519" }, false, [
+    "sign",
+    "verify",
+  ])) as CryptoKeyPair;
+  const publicJwk = await crypto.subtle.exportKey("jwk", keyPair.publicKey);
+  await registerAgentKey(env.GUILD_DB, {
+    keyId: await deriveEd25519KeyId("browser", publicJwk),
+    ownerId: principal.ownerId,
+    agentId: REQUESTER,
+    publicJwk,
+    source: "browser",
+    createdAt: now,
+  });
+  return {
+    Cookie: `__Host-guild_session=${sessionToken}; __Host-guild_csrf=${csrfToken}`,
+    Origin: "https://guildhall.test",
+    "X-Guild-CSRF": csrfToken,
+  };
+}
 
 async function recruitingMission(name: string) {
   const stub = coordinator(name);
@@ -349,14 +416,7 @@ async function negotiatingMission(name: string) {
 async function completeMission(name: string) {
   const stub = await negotiatingMission(name);
   for (const agentId of [REQUESTER, HELPER_RED]) {
-    await stub.executeCommand(
-      command({
-        type: "accept_pact",
-        agentId,
-        pactVersion: 1,
-        pactDigest: PACT_DIGEST,
-      }),
-    );
+    await stub.executeCommand(command(acceptPact(agentId)));
   }
   await stub.executeCommand(command({ type: "start_execution" }));
   await stub.executeCommand(
@@ -390,6 +450,21 @@ function command(
     source: "http",
     issuedAt: new Date().toISOString(),
     command: lifecycleCommand,
+  };
+}
+
+function acceptPact(
+  agentId: string,
+): Extract<CoordinatorCommand["command"], { type: "accept_pact" }> {
+  return {
+    type: "accept_pact",
+    acceptanceId: crypto.randomUUID(),
+    agentId,
+    keyId: ACCEPTANCE_KEY_ID,
+    pactVersion: 1,
+    pactDigest: PACT_DIGEST,
+    signature: "S".repeat(86),
+    acceptedAt: new Date().toISOString(),
   };
 }
 

@@ -62,6 +62,8 @@ export function App() {
               </p>
             </div>
           </div>
+
+          <OwnerGateway />
         </section>
 
         <section className="surface-section" aria-labelledby="surface-title">
@@ -98,3 +100,4 @@ export function App() {
     </div>
   );
 }
+import { OwnerGateway } from "./auth/OwnerGateway";

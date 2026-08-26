@@ -1,0 +1,3 @@
+{
+  "publicInput": "<button onclick=\"syntheticHandler()\">Run</button>"
+}

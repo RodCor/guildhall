@@ -14,6 +14,8 @@ const scout = "agent-scout";
 const scribe = "agent-scribe";
 const warden = "agent-warden";
 const pactDigest = "pact-digest-v1";
+const acceptanceKeyId = "70000000-0000-4000-8000-000000000001";
+const acceptedAt = "2026-08-26T12:00:00.000Z";
 
 const scoutSlot: RuntimeRoleSlot = {
   roleSlotId: "slot-scout",
@@ -42,6 +44,22 @@ function apply(
   return result.state;
 }
 
+function acceptPact(
+  agentId: string,
+  digest = pactDigest,
+): Extract<LifecycleCommand, { type: "accept_pact" }> {
+  return {
+    type: "accept_pact",
+    acceptanceId: crypto.randomUUID(),
+    agentId,
+    keyId: acceptanceKeyId,
+    pactVersion: 1,
+    pactDigest: digest,
+    signature: "S".repeat(86),
+    acceptedAt,
+  };
+}
+
 function boundParty(
   helperIds = [scout, scribe],
   slots = [scoutSlot, scribeSlot],
@@ -61,12 +79,7 @@ function boundParty(
   });
   state = apply(state, { type: "submit_proposal", pactVersion: 1, pactDigest });
   for (const agentId of [requester, ...helperIds]) {
-    state = apply(state, {
-      type: "accept_pact",
-      agentId,
-      pactVersion: 1,
-      pactDigest,
-    });
+    state = apply(state, acceptPact(agentId));
   }
   return state;
 }
@@ -94,12 +107,7 @@ describe("pure mission lifecycle", () => {
       pactDigest,
     });
     for (const agentId of [requester, scout, scribe]) {
-      state = apply(state, {
-        type: "accept_pact",
-        agentId,
-        pactVersion: 1,
-        pactDigest,
-      });
+      state = apply(state, acceptPact(agentId));
     }
     expect(state.stage).toBe("EXECUTE");
     expect(deriveDisplayState(state)).toBe("Bound");
@@ -143,12 +151,7 @@ describe("pure mission lifecycle", () => {
       pactDigest,
     });
     for (const agentId of [requester, scout]) {
-      state = apply(state, {
-        type: "accept_pact",
-        agentId,
-        pactVersion: 1,
-        pactDigest,
-      });
+      state = apply(state, acceptPact(agentId));
     }
     expect(state.selectedHelperIds).toEqual([scout]);
     expect(deriveDisplayState(state)).toBe("Bound");
@@ -172,19 +175,9 @@ describe("pure mission lifecycle", () => {
       pactDigest,
     });
 
-    const mixed = transition(state, {
-      type: "accept_pact",
-      agentId: scout,
-      pactVersion: 1,
-      pactDigest: "different-digest",
-    });
+    const mixed = transition(state, acceptPact(scout, "different-digest"));
     expect(mixed).toMatchObject({ ok: false, code: "PACT_MISMATCH" });
-    const outsider = transition(state, {
-      type: "accept_pact",
-      agentId: warden,
-      pactVersion: 1,
-      pactDigest,
-    });
+    const outsider = transition(state, acceptPact(warden));
     expect(outsider).toMatchObject({ ok: false, code: "SIGNER_NOT_REQUIRED" });
   });
 
@@ -205,12 +198,7 @@ describe("pure mission lifecycle", () => {
       pactVersion: 1,
       pactDigest,
     });
-    state = apply(state, {
-      type: "accept_pact",
-      agentId: requester,
-      pactVersion: 1,
-      pactDigest,
-    });
+    state = apply(state, acceptPact(requester));
     const priorVersion = state.missionVersion;
     state = apply(state, { type: "revise_mission" });
     expect(state).toMatchObject({
@@ -355,6 +343,44 @@ describe("pure mission lifecycle", () => {
     state = apply(state, { type: "verify" });
     state = apply(state, { type: "verification_passed" });
     expect(deriveDisplayState(state)).toBe("Completed");
+  });
+
+  it("cancels an unbound mission when public content is redacted", () => {
+    let state = initialLifecycleState({
+      missionId: "mission-1",
+      requesterAgentId: requester,
+    });
+    state = apply(state, { type: "publish" });
+    const redacted = transition(state, {
+      type: "safety_redact",
+      redactedEventId: "event-1",
+    });
+    expect(redacted).toMatchObject({
+      ok: true,
+      state: { safety: "paused", terminalOutcome: "canceled" },
+      events: ["safety_redacted", "mission_canceled", "receipt_issued"],
+    });
+  });
+
+  it("freezes normal completion after a bound-mission redaction", () => {
+    const bound = boundParty([scout], [scoutSlot]);
+    const redacted = transition(bound, {
+      type: "safety_redact",
+      redactedEventId: "event-1",
+    });
+    if (!redacted.ok) throw new Error(redacted.code);
+    expect(deriveDisplayState(redacted.state)).toBe("Paused for safety");
+    expect(
+      transition(redacted.state, {
+        type: "submit_artifact",
+        roleSlotId: scoutSlot.roleSlotId,
+      }),
+    ).toMatchObject({ ok: false, code: "ILLEGAL_TRANSITION" });
+    expect(transition(redacted.state, { type: "cancel" })).toMatchObject({
+      ok: true,
+      state: { terminalOutcome: "canceled" },
+      events: ["compensation_started", "mission_canceled", "receipt_issued"],
+    });
   });
 
   it("returns illegal transitions without mutating the original state", () => {
