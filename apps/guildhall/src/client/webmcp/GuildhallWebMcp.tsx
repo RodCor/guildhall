@@ -6,8 +6,11 @@ import {
 } from "@guildhall/capability-manifest";
 import {
   artifactSigningBytes,
+  buildPact,
   canonicalJsonDigest,
+  MissionSchema,
   pactSigningBytes,
+  type AllocationAssignment,
 } from "@guildhall/contracts";
 import { useEffect, useState } from "react";
 
@@ -106,13 +109,26 @@ async function invokeBrowserCapability(
       );
     case "guild.publish_mission":
       return publishMission(input, context, activeAgentId);
-    case "guild.apply_to_mission":
+    case "guild.apply_to_mission": {
+      const identity = await ensureBrowserSigningIdentity();
       return sendCommand(
         input,
-        { type: "apply", agentId: requireActiveAgent(activeAgentId) },
+        {
+          type: "apply",
+          agentId: requireActiveAgent(activeAgentId),
+          keyId: identity.keyId,
+          missionVersion: requiredInteger(input, "missionVersion"),
+          relevantCapabilities: requiredStringArray(
+            input,
+            "relevantCapabilities",
+          ),
+          proposedContribution: requiredString(input, "proposedContribution"),
+          availability: requiredRecord(input, "availability"),
+        },
         context,
         activeAgentId,
       );
+    }
     case "guild.withdraw_application":
       return sendCommand(
         input,
@@ -120,28 +136,66 @@ async function invokeBrowserCapability(
         context,
         activeAgentId,
       );
-    case "guild.propose_allocation":
+    case "guild.propose_allocation": {
+      const negotiationStep = requiredString(input, "negotiationStep");
+      const identity = await ensureBrowserSigningIdentity();
+      if (negotiationStep === "capability-bid") {
+        return sendCommand(
+          input,
+          {
+            type: "submit_capability_bid",
+            agentId: requireActiveAgent(activeAgentId),
+            keyId: identity.keyId,
+            relevantCapabilities: requiredStringArray(
+              input,
+              "relevantCapabilities",
+            ),
+            proposedContribution: requiredString(input, "proposedContribution"),
+          },
+          context,
+          activeAgentId,
+        );
+      }
+      const missionId = requiredString(input, "missionId");
+      const packet = await fetchJson(`/api/missions/${segment(missionId)}`, {
+        signal: context.signal,
+      });
+      const mission = MissionSchema.parse(packet.definition);
+      const snapshot = requiredRecord(packet, "snapshot");
+      const proposalRound = requiredInteger(input, "pactVersion");
+      const currentCandidate = recordField(snapshot, "candidatePact");
+      const currentPact =
+        currentCandidate === null
+          ? null
+          : recordField(currentCandidate, "pact");
+      const pact = await buildPact({
+        mission,
+        selectedHelperIds: requiredStringArray(snapshot, "selectedHelperIds"),
+        pactVersion: proposalRound,
+        assignments: allocationAssignments(input.assignments),
+        createdAt:
+          proposalRound === 2 && currentPact !== null
+            ? requiredString(currentPact, "createdAt")
+            : new Date().toISOString(),
+      });
+      const proposal = {
+        proposerAgentId: requireActiveAgent(activeAgentId),
+        pactDigest: await canonicalJsonDigest(pact),
+        pact,
+      };
       return sendCommand(
         input,
-        {
-          type: "submit_proposal",
-          pactVersion: requiredInteger(input, "pactVersion"),
-          pactDigest: await canonicalJsonDigest({
-            protocol: "commitment/v1",
-            kind: "allocation-proposal",
-            ...copyFields(input, [
-              "missionId",
-              "pactVersion",
-              "assignments",
-              "deliveryDeadline",
-              "verificationCriterionIds",
-              "failureBehavior",
-            ]),
-          }),
-        },
+        negotiationStep === "requester-proposal"
+          ? { type: "submit_proposal", proposalRound, ...proposal }
+          : {
+              type: "submit_assignment_proposal",
+              keyId: identity.keyId,
+              ...proposal,
+            },
         context,
         activeAgentId,
       );
+    }
     case "guild.accept_pact": {
       const identity = await ensureBrowserSigningIdentity();
       const pactDigest = requiredString(input, "pactDigest");
@@ -249,11 +303,12 @@ async function publishMission(
     },
     context.signal,
   );
-  return ownerJson(
-    `/api/drafts/${segment(requiredString(draft, "draftId"))}/publish`,
-    { requesterAgentId },
+  const result = await ownerJson(
+    `/api/webmcp/drafts/${segment(requiredString(draft, "draftId"))}/publish`,
+    { requesterAgentId, commandId: context.commandId },
     context.signal,
   );
+  return normalizeMutationResult(mission.missionId, result, context.signal);
 }
 
 async function sendCommand(
@@ -263,8 +318,8 @@ async function sendCommand(
   activeAgentId: string | null,
 ): Promise<Record<string, unknown>> {
   const missionId = requiredString(input, "missionId");
-  return ownerJson(
-    `/api/missions/${segment(missionId)}/commands`,
+  const result = await ownerJson(
+    `/api/webmcp/missions/${segment(missionId)}/commands`,
     {
       commandId: context.commandId,
       expectedSequence: await expectedSequence(input, context.signal),
@@ -275,6 +330,34 @@ async function sendCommand(
     },
     context.signal,
   );
+  return normalizeMutationResult(missionId, result, context.signal);
+}
+
+async function normalizeMutationResult(
+  missionId: string,
+  result: Record<string, unknown>,
+  signal: AbortSignal,
+): Promise<Record<string, unknown>> {
+  const packet = await fetchJson(`/api/missions/${segment(missionId)}`, {
+    signal,
+  });
+  const snapshot = requiredRecord(packet, "snapshot");
+  const events = Array.isArray(packet.events) ? packet.events : [];
+  const event = events.at(-1);
+  const eventRecord = isRecord(event) ? event : {};
+  const candidate = recordField(snapshot, "candidatePact");
+  const pact = candidate === null ? null : recordField(candidate, "pact");
+  return {
+    missionId,
+    sequence: requiredInteger(packet, "latestSequence"),
+    missionVersion: requiredInteger(snapshot, "missionVersion"),
+    pactVersion: pact === null ? null : requiredInteger(pact, "pactVersion"),
+    displayState: requiredString(eventRecord, "displayState"),
+    event: eventRecord,
+    result,
+    replayed: false,
+    catalogPending: false,
+  };
 }
 
 async function expectedSequence(
@@ -412,6 +495,52 @@ function requiredRecord(
   const value = recordField(input, key);
   if (value === null) throw new TypeError(`${key} must be an object`);
   return value;
+}
+
+function requiredStringArray(
+  input: Readonly<Record<string, unknown>>,
+  key: string,
+  allowEmpty = false,
+): string[] {
+  const value = input[key];
+  if (
+    !Array.isArray(value) ||
+    (!allowEmpty && value.length === 0) ||
+    value.some((item) => typeof item !== "string" || item.length === 0)
+  ) {
+    throw new TypeError(`${key} must be a string array`);
+  }
+  return value as string[];
+}
+
+function allocationAssignments(value: unknown): AllocationAssignment[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new TypeError("assignments must be a non-empty array");
+  }
+  return value.map((candidate) => {
+    if (!isRecord(candidate))
+      throw new TypeError("assignment must be an object");
+    return {
+      roleSlotId: requiredString(candidate, "roleSlotId"),
+      agentId: requiredString(candidate, "agentId"),
+      responsibilities: requiredStringArray(candidate, "responsibilities"),
+      requiredCapabilities: requiredStringArray(
+        candidate,
+        "requiredCapabilities",
+      ),
+      dependencyRoleSlotIds: requiredStringArray(
+        candidate,
+        "dependencyRoleSlotIds",
+        true,
+      ),
+      outputIds: requiredStringArray(candidate, "outputIds"),
+      verificationCriterionIds: requiredStringArray(
+        candidate,
+        "verificationCriterionIds",
+      ),
+      pointAllocation: requiredInteger(candidate, "pointAllocation"),
+    };
+  });
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

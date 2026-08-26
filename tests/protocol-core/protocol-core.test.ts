@@ -23,12 +23,20 @@ import {
   randomBase64UrlToken,
 } from "../../apps/guildhall/src/worker/auth/crypto";
 import { verifyEventChain } from "../../packages/trust-engine/src";
+import {
+  applyToMission,
+  formParty,
+  submitAssignmentProposal,
+  submitCapabilityBid,
+  submitProposal,
+} from "../state-machine/fixtures";
 
 const REQUESTER = "10000000-0000-4000-8000-000000000001";
 const HELPER_RED = "20000000-0000-4000-8000-000000000001";
 const HELPER_BLUE = "20000000-0000-4000-8000-000000000002";
 const ROLE_RED = "30000000-0000-4000-8000-000000000001";
-const PACT_DIGEST = "P".repeat(43);
+const PACT_DIGEST_V1 = "P".repeat(43);
+const PACT_DIGEST_V2 = "Q".repeat(43);
 const ACCEPTANCE_KEY_ID = "70000000-0000-4000-8000-000000000001";
 const guildhallWorker = (exports as unknown as { default: Fetcher }).default;
 
@@ -48,8 +56,8 @@ describe("MissionCoordinator transactional protocol core", () => {
     const stub = await recruitingMission("concurrent-applications");
 
     const [red, blue] = await Promise.all([
-      stub.executeCommand(command({ type: "apply", agentId: HELPER_RED })),
-      stub.executeCommand(command({ type: "apply", agentId: HELPER_BLUE })),
+      stub.executeCommand(command(applyToMission(HELPER_RED))),
+      stub.executeCommand(command(applyToMission(HELPER_BLUE))),
     ]);
 
     expect(red.ok).toBe(true);
@@ -82,15 +90,12 @@ describe("MissionCoordinator transactional protocol core", () => {
   it("replays the exact stored result and conflicts on command-id reuse", async () => {
     const stub = await recruitingMission("command-idempotency");
     const commandId = crypto.randomUUID();
-    const firstCommand = command(
-      { type: "apply", agentId: HELPER_RED },
-      { commandId },
-    );
+    const firstCommand = command(applyToMission(HELPER_RED), { commandId });
 
     const first = await stub.executeCommand(firstCommand);
     const replay = await stub.executeCommand(firstCommand);
     const conflict = await stub.executeCommand(
-      command({ type: "apply", agentId: HELPER_BLUE }, { commandId }),
+      command(applyToMission(HELPER_BLUE), { commandId }),
     );
 
     expect(replay).toEqual(first);
@@ -107,7 +112,7 @@ describe("MissionCoordinator transactional protocol core", () => {
     );
 
     const accepted = await stub.executeCommand(
-      command({ type: "apply", agentId: HELPER_RED }),
+      command(applyToMission(HELPER_RED)),
     );
     const failedProjection = await stub.inspectCore();
 
@@ -187,7 +192,7 @@ describe("MissionCoordinator transactional protocol core", () => {
     expect(initial).toMatchObject({ type: "snapshot", latestSequence: 1 });
 
     const deltaMessage = nextSocketJson(socket!);
-    await stub.executeCommand(command({ type: "apply", agentId: HELPER_RED }));
+    await stub.executeCommand(command(applyToMission(HELPER_RED)));
     const delta = await deltaMessage;
     expect(delta).toMatchObject({ type: "events", latestSequence: 2 });
 
@@ -386,29 +391,65 @@ async function recruitingMission(name: string) {
 
 async function negotiatingMission(name: string) {
   const stub = await recruitingMission(name);
-  await stub.executeCommand(command({ type: "apply", agentId: HELPER_RED }));
+  await stub.executeCommand(command(applyToMission(HELPER_RED)));
   await stub.executeCommand(
-    command({
-      type: "form_party",
-      helperIds: [HELPER_RED],
-      roleSlots: [
-        {
-          roleSlotId: ROLE_RED,
-          originalAgentId: HELPER_RED,
-          occupantAgentId: HELPER_RED,
-          status: "active",
-          artifactRequired: true,
-          artifactDelivered: false,
-        },
-      ],
-    }),
+    command(
+      formParty(
+        [HELPER_RED],
+        [
+          {
+            roleSlotId: ROLE_RED,
+            originalAgentId: HELPER_RED,
+            occupantAgentId: HELPER_RED,
+            status: "active",
+            artifactRequired: true,
+            artifactDelivered: false,
+          },
+        ],
+      ),
+    ),
+  );
+  await stub.executeCommand(command(submitCapabilityBid(HELPER_RED)));
+  await stub.executeCommand(
+    command(
+      submitProposal(
+        1,
+        PACT_DIGEST_V1,
+        REQUESTER,
+        [
+          {
+            roleSlotId: ROLE_RED,
+            originalAgentId: HELPER_RED,
+            occupantAgentId: HELPER_RED,
+            status: "active",
+            artifactRequired: true,
+            artifactDelivered: false,
+          },
+        ],
+        undefined,
+        { missionId: missionUuid(name) },
+      ),
+    ),
   );
   await stub.executeCommand(
-    command({
-      type: "submit_proposal",
-      pactVersion: 1,
-      pactDigest: PACT_DIGEST,
-    }),
+    command(
+      submitAssignmentProposal(
+        PACT_DIGEST_V2,
+        HELPER_RED,
+        [
+          {
+            roleSlotId: ROLE_RED,
+            originalAgentId: HELPER_RED,
+            occupantAgentId: HELPER_RED,
+            status: "active",
+            artifactRequired: true,
+            artifactDelivered: false,
+          },
+        ],
+        "helper-counter",
+        { missionId: missionUuid(name) },
+      ),
+    ),
   );
   return stub;
 }
@@ -461,8 +502,8 @@ function acceptPact(
     acceptanceId: crypto.randomUUID(),
     agentId,
     keyId: ACCEPTANCE_KEY_ID,
-    pactVersion: 1,
-    pactDigest: PACT_DIGEST,
+    pactVersion: 2,
+    pactDigest: PACT_DIGEST_V2,
     signature: "S".repeat(86),
     acceptedAt: new Date().toISOString(),
   };

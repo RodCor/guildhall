@@ -5,6 +5,9 @@
   // Required: pnpm wrangler secret put HOSTED_AGENT_PRIVATE_JWK --config wrangler.warden.jsonc
   "compatibility_date": "2026-08-26",
   "compatibility_flags": ["nodejs_compat"],
+  "triggers": {
+    "crons": ["*/5 * * * *"],
+  },
   "durable_objects": {
     "bindings": [
       {

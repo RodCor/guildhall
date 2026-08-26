@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { canonicalJsonDigest } from "../../packages/contracts/src/index.js";
 import {
   deriveDisplayState,
   initialLifecycleState,
@@ -8,17 +9,32 @@ import {
   type LifecycleState,
   type RuntimeRoleSlot,
 } from "../../packages/mission-engine/src/index.js";
+import {
+  MISSION_ID,
+  PACT_DIGEST_A,
+  PACT_DIGEST_B,
+  PACT_DIGEST_C,
+  REQUESTER_AGENT_ID,
+  SCOUT_AGENT_ID,
+  SCRIBE_AGENT_ID,
+  WARDEN_AGENT_ID,
+  applyToMission,
+  formParty,
+  submitAssignmentProposal,
+  submitCapabilityBid,
+  submitProposal,
+} from "./fixtures.js";
 
-const requester = "agent-requester";
-const scout = "agent-scout";
-const scribe = "agent-scribe";
-const warden = "agent-warden";
-const pactDigest = "pact-digest-v1";
+const requester = REQUESTER_AGENT_ID;
+const scout = SCOUT_AGENT_ID;
+const scribe = SCRIBE_AGENT_ID;
+const warden = WARDEN_AGENT_ID;
+const pactDigest = PACT_DIGEST_A;
 const acceptanceKeyId = "70000000-0000-4000-8000-000000000001";
 const acceptedAt = "2026-08-26T12:00:00.000Z";
 
 const scoutSlot: RuntimeRoleSlot = {
-  roleSlotId: "slot-scout",
+  roleSlotId: "30000000-0000-4000-8000-000000000001",
   originalAgentId: scout,
   occupantAgentId: scout,
   status: "active",
@@ -26,7 +42,7 @@ const scoutSlot: RuntimeRoleSlot = {
   artifactDelivered: false,
 };
 const scribeSlot: RuntimeRoleSlot = {
-  roleSlotId: "slot-scribe",
+  roleSlotId: "30000000-0000-4000-8000-000000000002",
   originalAgentId: scribe,
   occupantAgentId: scribe,
   status: "active",
@@ -46,14 +62,15 @@ function apply(
 
 function acceptPact(
   agentId: string,
-  digest = pactDigest,
+  digest = PACT_DIGEST_B,
+  pactVersion = 2,
 ): Extract<LifecycleCommand, { type: "accept_pact" }> {
   return {
     type: "accept_pact",
     acceptanceId: crypto.randomUUID(),
     agentId,
     keyId: acceptanceKeyId,
-    pactVersion: 1,
+    pactVersion,
     pactDigest: digest,
     signature: "S".repeat(86),
     acceptedAt,
@@ -64,48 +81,122 @@ function boundParty(
   helperIds = [scout, scribe],
   slots = [scoutSlot, scribeSlot],
 ): LifecycleState {
-  let state = initialLifecycleState({
-    missionId: "mission-1",
-    requesterAgentId: requester,
-  });
-  state = apply(state, { type: "publish" });
-  for (const agentId of helperIds)
-    state = apply(state, { type: "apply", agentId });
-  state = apply(state, {
-    type: "form_party",
-    helperIds,
-    roleSlots: slots,
-    minimumNotMet: helperIds.length === 1,
-  });
-  state = apply(state, { type: "submit_proposal", pactVersion: 1, pactDigest });
+  let state = reservedParty(helperIds, slots);
+  state = apply(state, submitProposal(1, pactDigest, requester, slots));
+  for (const agentId of helperIds) {
+    state = apply(
+      state,
+      submitAssignmentProposal(
+        PACT_DIGEST_B,
+        agentId,
+        slots,
+        "matching-helper-plan",
+      ),
+    );
+  }
   for (const agentId of [requester, ...helperIds]) {
     state = apply(state, acceptPact(agentId));
   }
   return state;
 }
 
+function reservedParty(
+  helperIds = [scout, scribe],
+  slots = [scoutSlot, scribeSlot],
+): LifecycleState {
+  let state = initialLifecycleState({
+    missionId: MISSION_ID,
+    requesterAgentId: requester,
+  });
+  state = apply(state, { type: "publish" });
+  for (const agentId of helperIds)
+    state = apply(state, applyToMission(agentId));
+  state = apply(state, formParty(helperIds, slots, helperIds.length === 1));
+  for (const agentId of helperIds) {
+    state = apply(state, submitCapabilityBid(agentId));
+  }
+  return state;
+}
+
 describe("pure mission lifecycle", () => {
+  it("retains signed application evidence for the exact public mission version", () => {
+    let state = initialLifecycleState({
+      missionId: MISSION_ID,
+      requesterAgentId: requester,
+    });
+    state = apply(state, { type: "publish" });
+    const application = applyToMission(scout, {
+      relevantCapabilities: ["accessibility-audit", "typescript"],
+      proposedContribution: "Inspect the bounded public fixture.",
+      availability: {
+        availableFrom: "2026-08-26T15:15:00.000Z",
+        availableUntil: "2026-08-26T17:30:00.000Z",
+      },
+    });
+    state = apply(state, application);
+
+    expect(state.applications).toEqual([
+      {
+        agentId: scout,
+        keyId: application.keyId,
+        missionVersion: 1,
+        relevantCapabilities: ["accessibility-audit", "typescript"],
+        proposedContribution: "Inspect the bounded public fixture.",
+        availability: application.availability,
+        applicationEventSequence: 2,
+      },
+    ]);
+    expect(state.applications[0]!.relevantCapabilities).not.toBe(
+      application.relevantCapabilities,
+    );
+    expect(
+      transition(
+        state,
+        applyToMission(scribe, { missionVersion: state.missionVersion + 1 }),
+      ),
+    ).toMatchObject({ ok: false, code: "INVALID_APPLICATION" });
+  });
+
   it("executes the complete legal success path", () => {
     let state = initialLifecycleState({
-      missionId: "mission-1",
+      missionId: MISSION_ID,
       requesterAgentId: requester,
     });
     expect(deriveDisplayState(state)).toBe("Draft");
     state = apply(state, { type: "publish" });
-    state = apply(state, { type: "apply", agentId: scout });
-    state = apply(state, { type: "apply", agentId: scribe });
+    state = apply(state, applyToMission(scout));
+    state = apply(state, applyToMission(scribe));
     expect(deriveDisplayState(state)).toBe("Recruiting");
-    state = apply(state, {
-      type: "form_party",
-      helperIds: [scout, scribe],
-      roleSlots: [scoutSlot, scribeSlot],
+    state = apply(state, formParty([scout, scribe], [scoutSlot, scribeSlot]));
+    expect(state.selectionEvidence).toMatchObject({
+      selectedAgentIds: [scout, scribe],
+      targetHelperCount: 2,
+      minimumSatisfied: true,
+      oneHelperFallbackUsed: false,
+      canProceed: true,
+      evidence: [
+        { agentId: scout, selectionPosition: 1, selected: true },
+        { agentId: scribe, selectionPosition: 2, selected: true },
+      ],
     });
     expect(deriveDisplayState(state)).toBe("Negotiating");
-    state = apply(state, {
-      type: "submit_proposal",
-      pactVersion: 1,
-      pactDigest,
-    });
+    state = apply(state, submitCapabilityBid(scout));
+    state = apply(state, submitCapabilityBid(scribe));
+    state = apply(
+      state,
+      submitProposal(1, pactDigest, requester, [scoutSlot, scribeSlot]),
+    );
+    for (const agentId of [scout, scribe]) {
+      state = apply(
+        state,
+        submitAssignmentProposal(
+          PACT_DIGEST_B,
+          agentId,
+          [scoutSlot, scribeSlot],
+          "matching-helper-plan",
+        ),
+      );
+    }
     for (const agentId of [requester, scout, scribe]) {
       state = apply(state, acceptPact(agentId));
     }
@@ -130,26 +221,33 @@ describe("pure mission lifecycle", () => {
 
   it("allows the one-helper fallback even when two were preferred", () => {
     let state = initialLifecycleState({
-      missionId: "mission-1",
+      missionId: MISSION_ID,
       requesterAgentId: requester,
     });
     state = apply(state, { type: "publish" });
-    state = apply(state, { type: "apply", agentId: scout });
-    const formed = transition(state, {
-      type: "form_party",
-      helperIds: [scout],
-      roleSlots: [scoutSlot],
-      minimumNotMet: true,
-    });
+    state = apply(state, applyToMission(scout));
+    const formed = transition(state, formParty([scout], [scoutSlot], true));
     expect(formed.ok).toBe(true);
     if (!formed.ok) throw new Error(formed.code);
     expect(formed.events).toContain("party_minimum_not_met");
     state = formed.state;
-    state = apply(state, {
-      type: "submit_proposal",
-      pactVersion: 1,
-      pactDigest,
+    expect(state.selectionEvidence).toMatchObject({
+      selectedAgentIds: [scout],
+      minimumSatisfied: false,
+      oneHelperFallbackUsed: true,
+      canProceed: true,
     });
+    state = apply(state, submitCapabilityBid(scout));
+    state = apply(state, submitProposal(1, pactDigest, requester, [scoutSlot]));
+    state = apply(
+      state,
+      submitAssignmentProposal(
+        PACT_DIGEST_B,
+        scout,
+        [scoutSlot],
+        "solo-counter",
+      ),
+    );
     for (const agentId of [requester, scout]) {
       state = apply(state, acceptPact(agentId));
     }
@@ -157,23 +255,260 @@ describe("pure mission lifecycle", () => {
     expect(deriveDisplayState(state)).toBe("Bound");
   });
 
+  it("locks the exact full public Pact JSON behind the candidate digest", async () => {
+    let state = reservedParty([scout], [scoutSlot]);
+    const draft = submitProposal(1, PACT_DIGEST_A, requester, [scoutSlot]);
+    const exactDigest = await canonicalJsonDigest(draft.pact);
+    expect(
+      transition(state, {
+        ...draft,
+        pactDigest: exactDigest,
+        pact: { ...draft.pact, missionVersion: state.missionVersion + 1 },
+      }),
+    ).toMatchObject({ ok: false, code: "INVALID_PROPOSAL" });
+    state = apply(state, { ...draft, pactDigest: exactDigest });
+
+    expect(state.candidatePact).not.toBeNull();
+    expect(state.candidatePact!.pact).toEqual(draft.pact);
+    expect(state.candidatePact!.pact).not.toBe(draft.pact);
+    expect(await canonicalJsonDigest(state.candidatePact!.pact)).toBe(
+      state.candidatePact!.pactDigest,
+    );
+  });
+
+  it("keeps both immutable public Pact proposals visible and opens acceptance only after round two", () => {
+    let state = reservedParty();
+    const firstCommand = submitProposal(
+      1,
+      PACT_DIGEST_A,
+      requester,
+      [scoutSlot, scribeSlot],
+      "requester-plan",
+    );
+    state = apply(state, firstCommand);
+    expect(state.proposalHistory).toHaveLength(1);
+    expect(state.candidatePact).toEqual(state.proposalHistory[0]);
+    expect(state.proposalHistory[0]).toMatchObject({
+      proposerAgentId: requester,
+      proposalRound: 1,
+      pactDigest: PACT_DIGEST_A,
+      pact: {
+        missionId: MISSION_ID,
+        missionVersion: 1,
+        pactVersion: 1,
+        roleSlots: [
+          {
+            originalAgentId: scout,
+            dependencyRoleSlotIds: [],
+            pointAllocation: 50,
+            requiredOutputIds: [expect.any(String)],
+          },
+          {
+            originalAgentId: scribe,
+            dependencyRoleSlotIds: [scoutSlot.roleSlotId],
+            pointAllocation: 50,
+            requiredOutputIds: [expect.any(String)],
+          },
+        ],
+        reward: { totalPoints: 100 },
+        deliveryDeadline: "2026-08-26T17:00:00.000Z",
+        failureBehavior: { verificationCorrectionLimit: 1 },
+      },
+    });
+    expect(state.proposalHistory[0]!.pact).not.toBe(firstCommand.pact);
+    expect(state.proposalHistory[0]!.pact).toEqual(firstCommand.pact);
+    const firstSnapshot = structuredClone(state.proposalHistory[0]);
+
+    expect(
+      transition(state, acceptPact(requester, PACT_DIGEST_A, 1)),
+    ).toMatchObject({
+      ok: false,
+      code: "PACT_MISMATCH",
+    });
+    expect(state.acceptances).toEqual({});
+    state = apply(
+      state,
+      submitAssignmentProposal(
+        PACT_DIGEST_B,
+        scout,
+        [scoutSlot, scribeSlot],
+        "matching-helper-plan",
+      ),
+    );
+    state = apply(
+      state,
+      submitAssignmentProposal(
+        PACT_DIGEST_B,
+        scribe,
+        [scoutSlot, scribeSlot],
+        "matching-helper-plan",
+      ),
+    );
+
+    expect(state.acceptances).toEqual({});
+    expect(state.proposalHistory).toHaveLength(2);
+    expect(state.proposalHistory[0]).toEqual(firstSnapshot);
+    expect(state.proposalHistory[1]).toMatchObject({
+      proposerAgentId: scout,
+      proposalRound: 2,
+      pactDigest: PACT_DIGEST_B,
+      pact: { pactVersion: 2 },
+    });
+    expect(state.candidatePact).toEqual(state.proposalHistory[1]);
+    expect(state.capabilityBids).toHaveLength(2);
+    expect(state.assignmentProposals).toHaveLength(2);
+    expect(state.assignmentResolution).toEqual({
+      strategy: "matching",
+      selectedProposalAgentId: scout,
+      consideredProposalAgentIds: [scout, scribe],
+      consideredPactDigests: [PACT_DIGEST_B, PACT_DIGEST_B],
+    });
+
+    const thirdRound = transition(
+      state,
+      submitProposal(
+        3,
+        PACT_DIGEST_C,
+        scribe,
+        [scoutSlot, scribeSlot],
+        "forbidden-third-round",
+      ),
+    );
+    expect(thirdRound).toEqual({
+      ok: false,
+      state,
+      code: "NEGOTIATION_ROUNDS_EXHAUSTED",
+    });
+    expect(state.proposalHistory).toHaveLength(2);
+  });
+
+  it("requires the requester opening round and a selected helper counter-round", () => {
+    const reserved = reservedParty();
+    expect(
+      transition(
+        reserved,
+        submitProposal(1, PACT_DIGEST_A, scout, [scoutSlot, scribeSlot]),
+      ),
+    ).toMatchObject({ ok: false, code: "INVALID_PROPOSAL" });
+
+    const opened = apply(
+      reserved,
+      submitProposal(1, PACT_DIGEST_A, requester, [scoutSlot, scribeSlot]),
+    );
+    expect(
+      transition(
+        opened,
+        submitAssignmentProposal(
+          PACT_DIGEST_B,
+          requester,
+          [scoutSlot, scribeSlot],
+          "requester-cannot-submit-helper-proposal",
+        ),
+      ),
+    ).toMatchObject({ ok: false, code: "INVALID_PROPOSAL" });
+  });
+
+  it("resolves disagreeing helper proposals by frozen selection order", () => {
+    let state = reservedParty();
+    state = apply(
+      state,
+      submitProposal(1, PACT_DIGEST_A, requester, [scoutSlot, scribeSlot]),
+    );
+    state = apply(
+      state,
+      submitAssignmentProposal(
+        PACT_DIGEST_B,
+        scout,
+        [scoutSlot, scribeSlot],
+        "scout-work-map",
+      ),
+    );
+    expect(state.candidatePact?.proposalRound).toBe(1);
+    state = apply(
+      state,
+      submitAssignmentProposal(
+        PACT_DIGEST_C,
+        scribe,
+        [scoutSlot, scribeSlot],
+        "scribe-work-map",
+      ),
+    );
+
+    expect(state.candidatePact).toMatchObject({
+      proposerAgentId: scout,
+      proposalRound: 2,
+      pactDigest: PACT_DIGEST_B,
+    });
+    expect(state.assignmentResolution).toEqual({
+      strategy: "selection-order",
+      selectedProposalAgentId: scout,
+      consideredProposalAgentIds: [scout, scribe],
+      consideredPactDigests: [PACT_DIGEST_B, PACT_DIGEST_C],
+    });
+  });
+
+  it("becomes Bound only after requester and every selected helper accept one exact version and digest", () => {
+    let state = reservedParty();
+    state = apply(
+      state,
+      submitProposal(1, PACT_DIGEST_A, requester, [scoutSlot, scribeSlot]),
+    );
+    for (const agentId of [scout, scribe]) {
+      state = apply(
+        state,
+        submitAssignmentProposal(
+          PACT_DIGEST_B,
+          agentId,
+          [scoutSlot, scribeSlot],
+          "matching-helper-plan",
+        ),
+      );
+    }
+
+    expect(
+      transition(state, acceptPact(requester, PACT_DIGEST_A, 1)),
+    ).toMatchObject({ ok: false, code: "PACT_MISMATCH" });
+    expect(
+      transition(state, acceptPact(requester, PACT_DIGEST_A, 2)),
+    ).toMatchObject({ ok: false, code: "PACT_MISMATCH" });
+
+    state = apply(state, acceptPact(requester, PACT_DIGEST_B, 2));
+    expect(state.stage).toBe("COMMIT");
+    expect(deriveDisplayState(state)).toBe("Negotiating");
+    state = apply(state, acceptPact(scout, PACT_DIGEST_B, 2));
+    expect(state.stage).toBe("COMMIT");
+    state = apply(state, acceptPact(scribe, PACT_DIGEST_B, 2));
+    expect(state.stage).toBe("EXECUTE");
+    expect(deriveDisplayState(state)).toBe("Bound");
+    expect(Object.values(state.acceptances)).toHaveLength(3);
+    expect(
+      Object.values(state.acceptances).every(
+        (acceptance) =>
+          acceptance.pactVersion === 2 &&
+          acceptance.pactDigest === PACT_DIGEST_B,
+      ),
+    ).toBe(true);
+  });
+
   it("does not bind mixed pact digests or non-party signatures", () => {
     let state = initialLifecycleState({
-      missionId: "mission-1",
+      missionId: MISSION_ID,
       requesterAgentId: requester,
     });
     state = apply(state, { type: "publish" });
-    state = apply(state, { type: "apply", agentId: scout });
-    state = apply(state, {
-      type: "form_party",
-      helperIds: [scout],
-      roleSlots: [scoutSlot],
-    });
-    state = apply(state, {
-      type: "submit_proposal",
-      pactVersion: 1,
-      pactDigest,
-    });
+    state = apply(state, applyToMission(scout));
+    state = apply(state, formParty([scout], [scoutSlot]));
+    state = apply(state, submitCapabilityBid(scout));
+    state = apply(state, submitProposal(1, pactDigest, requester, [scoutSlot]));
+    state = apply(
+      state,
+      submitAssignmentProposal(
+        PACT_DIGEST_B,
+        scout,
+        [scoutSlot],
+        "helper-counter",
+      ),
+    );
 
     const mixed = transition(state, acceptPact(scout, "different-digest"));
     expect(mixed).toMatchObject({ ok: false, code: "PACT_MISMATCH" });
@@ -183,21 +518,23 @@ describe("pure mission lifecycle", () => {
 
   it("invalidates applications, reservations, and acceptances after a material pre-bind edit", () => {
     let state = initialLifecycleState({
-      missionId: "mission-1",
+      missionId: MISSION_ID,
       requesterAgentId: requester,
     });
     state = apply(state, { type: "publish" });
-    state = apply(state, { type: "apply", agentId: scout });
-    state = apply(state, {
-      type: "form_party",
-      helperIds: [scout],
-      roleSlots: [scoutSlot],
-    });
-    state = apply(state, {
-      type: "submit_proposal",
-      pactVersion: 1,
-      pactDigest,
-    });
+    state = apply(state, applyToMission(scout));
+    state = apply(state, formParty([scout], [scoutSlot]));
+    state = apply(state, submitCapabilityBid(scout));
+    state = apply(state, submitProposal(1, pactDigest, requester, [scoutSlot]));
+    state = apply(
+      state,
+      submitAssignmentProposal(
+        PACT_DIGEST_B,
+        scout,
+        [scoutSlot],
+        "helper-counter",
+      ),
+    );
     state = apply(state, acceptPact(requester));
     const priorVersion = state.missionVersion;
     state = apply(state, { type: "revise_mission" });
@@ -205,6 +542,7 @@ describe("pure mission lifecycle", () => {
       stage: "PREPARE",
       missionVersion: priorVersion + 1,
       applicationAgentIds: [],
+      applications: [],
       selectedHelperIds: [],
       candidatePact: null,
       acceptances: {},
@@ -213,20 +551,17 @@ describe("pure mission lifecycle", () => {
 
   it("releases reservations without penalty when a selected helper withdraws pre-bind", () => {
     let state = initialLifecycleState({
-      missionId: "mission-1",
+      missionId: MISSION_ID,
       requesterAgentId: requester,
     });
     state = apply(state, { type: "publish" });
-    state = apply(state, { type: "apply", agentId: scout });
-    state = apply(state, {
-      type: "form_party",
-      helperIds: [scout],
-      roleSlots: [scoutSlot],
-    });
+    state = apply(state, applyToMission(scout));
+    state = apply(state, formParty([scout], [scoutSlot]));
     state = apply(state, { type: "withdraw", agentId: scout });
     expect(state).toMatchObject({
       stage: "PREPARE",
       applicationAgentIds: [],
+      applications: [],
       selectedHelperIds: [],
       roleSlots: [],
       candidatePact: null,
@@ -260,7 +595,7 @@ describe("pure mission lifecycle", () => {
       roleSlotId: scribeSlot.roleSlotId,
       predecessorAgentId: scribe,
       replacementAgentId: warden,
-      pactDigest,
+      pactDigest: PACT_DIGEST_B,
     });
     expect(state.stage).toBe("EXECUTE");
     expect(state.roleSlots[1]).toMatchObject({
@@ -347,7 +682,7 @@ describe("pure mission lifecycle", () => {
 
   it("cancels an unbound mission when public content is redacted", () => {
     let state = initialLifecycleState({
-      missionId: "mission-1",
+      missionId: MISSION_ID,
       requesterAgentId: requester,
     });
     state = apply(state, { type: "publish" });
@@ -385,7 +720,7 @@ describe("pure mission lifecycle", () => {
 
   it("returns illegal transitions without mutating the original state", () => {
     const state = initialLifecycleState({
-      missionId: "mission-1",
+      missionId: MISSION_ID,
       requesterAgentId: requester,
     });
     const result = transition(state, { type: "verify" });

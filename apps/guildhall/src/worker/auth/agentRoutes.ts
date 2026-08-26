@@ -50,6 +50,7 @@ const CREDENTIAL_REVOKE_ROUTE =
 const AUTONOMY_ROUTE = /^\/api\/agents\/([^/]+)\/autonomy$/u;
 const DRAFT_ROUTE = /^\/api\/drafts\/([^/]+)$/u;
 const DRAFT_PUBLISH_ROUTE = /^\/api\/drafts\/([^/]+)\/publish$/u;
+const WEBMCP_DRAFT_PUBLISH_ROUTE = /^\/api\/webmcp\/drafts\/([^/]+)\/publish$/u;
 const REDACTION_ROUTE = /^\/api\/missions\/([^/]+)\/redactions$/u;
 const PAIRING_SCOPES = [
   "missions:read",
@@ -105,6 +106,15 @@ export async function handleAgentRoute(
       request,
       env,
       decodeURIComponent(publishMatch[1]!),
+    );
+  }
+  const webMcpPublishMatch = WEBMCP_DRAFT_PUBLISH_ROUTE.exec(url.pathname);
+  if (webMcpPublishMatch !== null && request.method === "POST") {
+    return publishPrivateDraft(
+      request,
+      env,
+      decodeURIComponent(webMcpPublishMatch[1]!),
+      "webmcp",
     );
   }
   const draftMatch = DRAFT_ROUTE.exec(url.pathname);
@@ -476,6 +486,7 @@ async function publishPrivateDraft(
   request: Request,
   env: GuildhallEnv,
   draftId: string,
+  trustedSource?: "webmcp",
 ): Promise<Response> {
   const bodyText = await request.text();
   const body = parseJsonRecord(bodyText);
@@ -532,41 +543,52 @@ async function publishPrivateDraft(
   ) {
     return invalid("mission payload");
   }
-  return publishMission(env, parsedMission.data, authorization);
+  const commandId =
+    trustedSource === "webmcp" ? uuidField(body, "commandId") : null;
+  if (trustedSource === "webmcp" && commandId === null) {
+    return invalid("WebMCP command identifier");
+  }
+  return publishMission(
+    env,
+    parsedMission.data,
+    authorization,
+    trustedSource,
+    commandId ?? undefined,
+  );
 }
 
 async function publishMission(
   env: GuildhallEnv,
   mission: Mission,
   authorization: Extract<AgentAuthorization, { ok: true }>,
+  trustedSource?: "webmcp",
+  commandId: string = crypto.randomUUID(),
 ): Promise<Response> {
   const coordinator = env.MISSIONS.getByName(mission.missionId);
-  await coordinator.initializeMission(
-    mission.missionId,
-    mission.requesterAgentId,
-  );
   const publicOwnerId =
     authorization.kind === "owner"
       ? (`github:${authorization.owner.principal.githubUserId}` as const)
       : authorization.credential.publicOwnerId;
-  const result = await coordinator.executeCommand({
-    commandId: crypto.randomUUID(),
+  const publicationCommand = {
+    commandId,
     expectedSequence: 0,
     actor: {
       agentId: mission.requesterAgentId,
       ownerId: publicOwnerId,
       keyId: authorization.keyId,
     },
-    source: authorization.kind === "owner" ? "http" : "mcp",
+    source: trustedSource ?? (authorization.kind === "owner" ? "http" : "mcp"),
     issuedAt: new Date().toISOString(),
     command: { type: "publish" },
-  });
+  } as const;
+  const result = await coordinator.publishMission(mission, publicationCommand);
   return result.ok
     ? noStoreJson(
         {
           missionId: mission.missionId,
           published: true,
-          source: authorization.kind === "owner" ? "http" : "mcp",
+          source:
+            trustedSource ?? (authorization.kind === "owner" ? "http" : "mcp"),
           resultingSequence: result.resultingSequence,
         },
         { status: 201 },
@@ -832,6 +854,19 @@ function stringField(
   return typeof candidate === "string" &&
     candidate.length >= minimum &&
     candidate.length <= maximum
+    ? candidate
+    : null;
+}
+
+function uuidField(
+  value: Record<string, unknown> | null,
+  field: string,
+): string | null {
+  const candidate = value?.[field];
+  return typeof candidate === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(
+      candidate,
+    )
     ? candidate
     : null;
 }

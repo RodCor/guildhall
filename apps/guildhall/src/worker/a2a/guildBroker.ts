@@ -5,13 +5,17 @@ import {
 } from "@guildhall/capability-manifest";
 import {
   PactAcceptanceSchema,
+  buildPact,
   canonicalJsonDigest,
   pactSigningBytes,
+  type AllocationAssignment,
+  type Mission,
   verifyRegisteredEd25519Proof,
 } from "@guildhall/contracts";
-import type {
-  LifecycleCommand,
-  LifecycleState,
+import {
+  deriveDisplayState,
+  type LifecycleCommand,
+  type LifecycleState,
 } from "@guildhall/mission-engine";
 import { scanPublicPayload } from "@guildhall/trust-engine";
 import {
@@ -37,6 +41,7 @@ import {
 } from "../auth/agentAuthorization.js";
 import { listAgentKeys } from "../repositories/index.js";
 import type { GuildhallEnv } from "../types.js";
+import { attemptAutomaticFormation } from "../formation.js";
 import { D1A2ATaskStore } from "./d1TaskStore.js";
 import { buildGuildBrokerCard } from "./guildCard.js";
 
@@ -225,6 +230,17 @@ class GuildBrokerExecutor implements A2ATaskExecutor {
         },
       );
     }
+    if (
+      action === "guild.apply_to_mission" &&
+      (snapshot.definition === null ||
+        snapshot.definition === undefined ||
+        Date.now() >= Date.parse(snapshot.definition.formationDeadline))
+    ) {
+      throw taskError(
+        "The Guild formation deadline has passed.",
+        "GUILD_FORMATION_CLOSED",
+      );
+    }
     const command = await lifecycleCommand(
       action,
       input,
@@ -233,6 +249,7 @@ class GuildBrokerExecutor implements A2ATaskExecutor {
         keyId: authorization.keyId,
         commitment: context.commitment,
       },
+      snapshot,
     );
     if (
       !isA2AMutationAuthorized(
@@ -279,19 +296,32 @@ class GuildBrokerExecutor implements A2ATaskExecutor {
         resultingSequence: result.resultingSequence,
       });
     }
+    const formation =
+      command.type === "apply"
+        ? await attemptAutomaticFormation(this.env, missionId)
+        : undefined;
+    const current = await this.snapshot(missionId);
     return jsonValue({
       ...result,
       missionId,
-      missionVersion: snapshot.snapshot.missionVersion,
-      displayState: snapshot.snapshot.stage,
+      missionVersion: current.snapshot.missionVersion,
+      displayState: displayState(current.snapshot),
+      candidatePact: current.snapshot.candidatePact,
+      ...(formation === undefined ? {} : { automaticFormation: formation }),
     });
   }
 
-  private async snapshot(missionId: string): Promise<MissionSnapshotPacket> {
+  private async snapshot(
+    missionId: string,
+  ): Promise<MissionSnapshotPacket & { readonly definition?: Mission | null }> {
     try {
       return await (
         this.env.MISSIONS.getByName(missionId) as unknown as {
-          getSnapshot(afterSequence?: number): Promise<MissionSnapshotPacket>;
+          getSnapshot(
+            afterSequence?: number,
+          ): Promise<
+            MissionSnapshotPacket & { readonly definition?: Mission | null }
+          >;
         }
       ).getSnapshot();
     } catch {
@@ -342,27 +372,23 @@ async function lifecycleCommand(
     readonly keyId: string;
     readonly commitment: Readonly<Record<string, JsonValue>>;
   },
+  snapshot: MissionSnapshotPacket & { readonly definition?: Mission | null },
 ): Promise<LifecycleCommand> {
   switch (action) {
     case "guild.apply_to_mission":
-      return { type: "apply", agentId };
+      return {
+        type: "apply",
+        agentId,
+        keyId: trusted.keyId,
+        missionVersion: positiveSequence(input, "missionVersion"),
+        relevantCapabilities: stringArray(input, "relevantCapabilities"),
+        proposedContribution: requiredString(input, "proposedContribution"),
+        availability: availability(input.availability),
+      };
     case "guild.withdraw_application":
       return { type: "withdraw", agentId };
     case "guild.propose_allocation":
-      return {
-        type: "submit_proposal",
-        pactVersion: requiredSequence(input, "pactVersion"),
-        pactDigest: await canonicalJsonDigest({
-          protocol: "commitment/v1",
-          kind: "allocation-proposal",
-          missionId: requiredString(input, "missionId"),
-          pactVersion: requiredSequence(input, "pactVersion"),
-          assignments: input.assignments,
-          deliveryDeadline: input.deliveryDeadline,
-          verificationCriterionIds: input.verificationCriterionIds,
-          failureBehavior: input.failureBehavior,
-        }),
-      };
+      return negotiationCommand(input, agentId, trusted.keyId, snapshot);
     case "guild.accept_pact":
       return {
         type: "accept_pact",
@@ -387,6 +413,138 @@ async function lifecycleCommand(
         "GUILD_ACTION_UNSUPPORTED",
       );
   }
+}
+
+async function negotiationCommand(
+  input: Readonly<Record<string, JsonValue>>,
+  proposerAgentId: string,
+  keyId: string,
+  snapshot: MissionSnapshotPacket & { readonly definition?: Mission | null },
+): Promise<LifecycleCommand> {
+  const negotiationStep = requiredString(input, "negotiationStep");
+  if (negotiationStep === "capability-bid") {
+    return {
+      type: "submit_capability_bid",
+      agentId: proposerAgentId,
+      keyId,
+      relevantCapabilities: stringArray(input, "relevantCapabilities"),
+      proposedContribution: requiredString(input, "proposedContribution"),
+    };
+  }
+  const mission = snapshot.definition;
+  if (mission === null || mission === undefined) {
+    throw taskError(
+      "The immutable mission definition is unavailable.",
+      "GUILD_MISSION_DEFINITION_MISSING",
+    );
+  }
+  const deliveryDeadline = requiredString(input, "deliveryDeadline");
+  const criterionIds = stringArray(input, "verificationCriterionIds");
+  const failureBehavior = jsonRecord(input.failureBehavior, "failureBehavior");
+  if (
+    deliveryDeadline !== mission.deliveryDeadline ||
+    !sameStrings(
+      criterionIds,
+      mission.verificationCriteria.map((criterion) => criterion.criterionId),
+    ) ||
+    (await canonicalJsonDigest(failureBehavior)) !==
+      (await canonicalJsonDigest(mission.failureBehavior))
+  ) {
+    throw taskError(
+      "A proposal cannot alter immutable mission terms.",
+      "GUILD_MISSION_TERMS_CHANGED",
+    );
+  }
+  const proposalRound = positiveSequence(input, "pactVersion");
+  const pact = await buildPact({
+    mission,
+    selectedHelperIds: snapshot.snapshot.selectedHelperIds,
+    pactVersion: proposalRound,
+    assignments: allocationAssignments(input.assignments),
+    createdAt:
+      proposalRound === 2 && snapshot.snapshot.candidatePact !== null
+        ? snapshot.snapshot.candidatePact.pact.createdAt
+        : new Date().toISOString(),
+  });
+  const pactDigest = await canonicalJsonDigest(pact);
+  if (negotiationStep === "requester-proposal") {
+    return {
+      type: "submit_proposal",
+      proposerAgentId,
+      proposalRound,
+      pactDigest,
+      pact,
+    };
+  }
+  if (negotiationStep === "assignment-proposal") {
+    return {
+      type: "submit_assignment_proposal",
+      proposerAgentId,
+      keyId,
+      pactDigest,
+      pact,
+    };
+  }
+  throw taskError(
+    "The negotiation step is unsupported.",
+    "GUILD_INPUT_INVALID",
+  );
+}
+
+function allocationAssignments(
+  value: JsonValue | undefined,
+): AllocationAssignment[] {
+  if (!Array.isArray(value)) {
+    throw taskError("Guild assignments are required.", "GUILD_INPUT_INVALID");
+  }
+  return value.map((candidate) => {
+    const assignment = jsonRecord(candidate, "assignment");
+    const pointAllocation = assignment.pointAllocation;
+    if (
+      typeof pointAllocation !== "number" ||
+      !Number.isSafeInteger(pointAllocation) ||
+      pointAllocation < 1
+    ) {
+      throw taskError(
+        "Guild assignment points are invalid.",
+        "GUILD_INPUT_INVALID",
+      );
+    }
+    return {
+      roleSlotId: requiredString(assignment, "roleSlotId"),
+      agentId: requiredString(assignment, "agentId"),
+      responsibilities: stringArray(assignment, "responsibilities"),
+      requiredCapabilities: stringArray(assignment, "requiredCapabilities"),
+      dependencyRoleSlotIds: stringArray(
+        assignment,
+        "dependencyRoleSlotIds",
+        true,
+      ),
+      outputIds: stringArray(assignment, "outputIds"),
+      verificationCriterionIds: stringArray(
+        assignment,
+        "verificationCriterionIds",
+      ),
+      pointAllocation,
+    };
+  });
+}
+
+function availability(value: JsonValue | undefined): {
+  readonly availableFrom: string;
+  readonly availableUntil: string;
+} {
+  const parsed = jsonRecord(value, "availability");
+  const availableFrom = requiredString(parsed, "availableFrom");
+  const availableUntil = requiredString(parsed, "availableUntil");
+  if (
+    !Number.isFinite(Date.parse(availableFrom)) ||
+    !Number.isFinite(Date.parse(availableUntil)) ||
+    Date.parse(availableFrom) >= Date.parse(availableUntil)
+  ) {
+    throw taskError("Guild availability is invalid.", "GUILD_INPUT_INVALID");
+  }
+  return { availableFrom, availableUntil };
 }
 
 async function verifyPactAcceptance(
@@ -445,7 +603,17 @@ function isA2AMutationAuthorized(
       return command.agentId === authenticatedAgentId;
     case "submit_proposal":
       return (
-        authenticatedAgentId === state.requesterAgentId ||
+        command.proposerAgentId === authenticatedAgentId &&
+        authenticatedAgentId === state.requesterAgentId
+      );
+    case "submit_capability_bid":
+      return (
+        command.agentId === authenticatedAgentId &&
+        state.selectedHelperIds.includes(authenticatedAgentId)
+      );
+    case "submit_assignment_proposal":
+      return (
+        command.proposerAgentId === authenticatedAgentId &&
         state.selectedHelperIds.includes(authenticatedAgentId)
       );
     case "accept_pact":
@@ -546,6 +714,59 @@ function requiredSequence(
     throw taskError(`Guild field ${field} is invalid.`, "GUILD_INPUT_INVALID");
   }
   return value;
+}
+
+function positiveSequence(
+  input: Readonly<Record<string, JsonValue>>,
+  field: string,
+): number {
+  const value = requiredSequence(input, field);
+  if (value < 1) {
+    throw taskError(`Guild field ${field} is invalid.`, "GUILD_INPUT_INVALID");
+  }
+  return value;
+}
+
+function stringArray(
+  input: Readonly<Record<string, JsonValue>>,
+  field: string,
+  allowEmpty = false,
+): string[] {
+  const value = input[field];
+  if (
+    !Array.isArray(value) ||
+    (!allowEmpty && value.length === 0) ||
+    value.some((entry) => typeof entry !== "string" || entry.length === 0)
+  ) {
+    throw taskError(`Guild field ${field} is invalid.`, "GUILD_INPUT_INVALID");
+  }
+  return value as string[];
+}
+
+function jsonRecord(
+  value: JsonValue | undefined,
+  field: string,
+): Record<string, JsonValue> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw taskError(`Guild field ${field} is invalid.`, "GUILD_INPUT_INVALID");
+  }
+  return { ...(value as JsonObject) };
+}
+
+function sameStrings(
+  left: readonly string[],
+  right: readonly string[],
+): boolean {
+  const leftSet = new Set(left);
+  const rightSet = new Set(right);
+  return (
+    leftSet.size === rightSet.size &&
+    [...leftSet].every((value) => rightSet.has(value))
+  );
+}
+
+function displayState(state: LifecycleState): string {
+  return deriveDisplayState(state);
 }
 
 function stableCommandId(

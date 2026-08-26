@@ -60,7 +60,7 @@ export function App() {
             <div>
               <p className="status-label">Current build checkpoint</p>
               <p className="status-value">
-                Guildhall shell is ready. Protocol core is not yet bound.
+                Live protocol core online: WebMCP → A2A → signed pact.
               </p>
             </div>
           </div>
@@ -89,12 +89,14 @@ export function App() {
             ))}
           </ul>
         </section>
+
+        <TechnicalMission />
       </main>
 
       <footer>
         <p>
-          PactBridge protocol evidence will appear here as the mission core
-          comes online.
+          PactBridge exposes the exact mission, pact, signatures, and ordered
+          protocol evidence above.
         </p>
         <p className="footer-note">
           No model-provider credentials. No money. Public work only.
@@ -104,5 +106,6 @@ export function App() {
   );
 }
 import { OwnerGateway } from "./auth/OwnerGateway";
+import { TechnicalMission } from "./mission/TechnicalMission";
 import { GuildhallWebMcp } from "./webmcp/GuildhallWebMcp";
 import { useState } from "react";

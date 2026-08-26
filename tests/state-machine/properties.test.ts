@@ -7,13 +7,31 @@ import {
   type LifecycleCommand,
   type LifecycleState,
 } from "../../packages/mission-engine/src/index.js";
+import {
+  applyToMission,
+  formParty,
+  submitAssignmentProposal,
+  submitCapabilityBid,
+  submitProposal,
+} from "./fixtures.js";
+
+const probeSlot = {
+  roleSlotId: "slot",
+  originalAgentId: "agent",
+  occupantAgentId: "agent",
+  status: "active" as const,
+  artifactRequired: true,
+  artifactDelivered: false,
+};
 
 const probeCommands: readonly LifecycleCommand[] = [
   { type: "publish" },
-  { type: "apply", agentId: "agent" },
+  applyToMission("agent"),
   { type: "withdraw", agentId: "agent" },
-  { type: "form_party", helperIds: [], roleSlots: [] },
-  { type: "submit_proposal", pactVersion: 1, pactDigest: "digest" },
+  formParty([], []),
+  submitCapabilityBid("agent"),
+  submitProposal(1, "digest", "agent", [probeSlot]),
+  submitAssignmentProposal("digest", "agent", [probeSlot]),
   { type: "negotiation_timeout" },
   {
     type: "accept_pact",
@@ -159,14 +177,10 @@ describe("mission state properties", () => {
       }));
       let recruiting = published.state;
       for (const agentId of helperIds) {
-        const applied = transition(recruiting, { type: "apply", agentId });
+        const applied = transition(recruiting, applyToMission(agentId));
         if (applied.ok) recruiting = applied.state;
       }
-      const result = transition(recruiting, {
-        type: "form_party",
-        helperIds,
-        roleSlots,
-      });
+      const result = transition(recruiting, formParty(helperIds, roleSlots));
       if (result.ok) {
         expect(
           result.state.roleSlots.filter((slot) => slot.status === "active")

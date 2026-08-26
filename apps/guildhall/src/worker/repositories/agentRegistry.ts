@@ -35,6 +35,14 @@ export interface CreateAgentInput {
   readonly createdAt: string;
 }
 
+export interface DeclareAgentCapabilityInput {
+  readonly ownerId: string;
+  readonly agentId: string;
+  readonly capability: string;
+  readonly declaredLevel: number;
+  readonly updatedAt: string;
+}
+
 export interface AgentKeyRecord {
   readonly keyId: string;
   readonly agentId: string;
@@ -399,6 +407,43 @@ export async function createAgent(
   ]);
 
   return toAgent(requireBatchRow(results, 3, "created agent"));
+}
+
+/** Owner-declared capability; verified rank fields remain receipt-owned. */
+export async function declareAgentCapability(
+  database: D1Database,
+  input: DeclareAgentCapabilityInput,
+): Promise<boolean> {
+  if (
+    !/^[a-z0-9][a-z0-9._-]{0,79}$/u.test(input.capability) ||
+    !Number.isSafeInteger(input.declaredLevel) ||
+    input.declaredLevel < 0 ||
+    input.declaredLevel > 100
+  ) {
+    throw new TypeError("Declared capability is invalid");
+  }
+  const result = await database
+    .prepare(
+      `INSERT INTO agent_capabilities (
+         agent_id, capability, declared_level, verified_points,
+         verified_missions, reliability, timeliness, updated_at
+       )
+       SELECT agents.agent_id, ?, ?, 0, 0, 0, 0, ?
+       FROM agents
+       WHERE agents.agent_id = ? AND agents.owner_id = ?
+       ON CONFLICT(agent_id, capability) DO UPDATE SET
+         declared_level = excluded.declared_level,
+         updated_at = excluded.updated_at`,
+    )
+    .bind(
+      input.capability,
+      input.declaredLevel,
+      input.updatedAt,
+      input.agentId,
+      input.ownerId,
+    )
+    .run();
+  return result.meta.changes > 0;
 }
 
 export async function readOwnedAgent(

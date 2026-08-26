@@ -1,7 +1,10 @@
 import { scanPublicPayload } from "@guildhall/trust-engine";
 import {
   PactAcceptanceSchema,
+  canonicalJsonDigest,
+  pactMatchesMission,
   pactSigningBytes,
+  type Mission,
   verifyRegisteredEd25519Proof,
 } from "@guildhall/contracts";
 import type {
@@ -27,6 +30,7 @@ export type { GuildhallEnv as Env } from "./types.js";
 
 const MISSION_ROUTE = /^\/api\/missions\/([^/]+)$/u;
 const COMMAND_ROUTE = /^\/api\/missions\/([^/]+)\/commands$/u;
+const WEBMCP_COMMAND_ROUTE = /^\/api\/webmcp\/missions\/([^/]+)\/commands$/u;
 const STREAM_ROUTE = /^\/api\/missions\/([^/]+)\/stream$/u;
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
@@ -54,7 +58,8 @@ export default {
     const agentResponse = await handleAgentRoute(request, env);
     if (agentResponse !== null) return agentResponse;
 
-    const commandMatch = COMMAND_ROUTE.exec(url.pathname);
+    const webMcpCommandMatch = WEBMCP_COMMAND_ROUTE.exec(url.pathname);
+    const commandMatch = webMcpCommandMatch ?? COMMAND_ROUTE.exec(url.pathname);
     if (commandMatch !== null && request.method === "POST") {
       const missionId = decodeURIComponent(commandMatch[1]!);
       if (!UUID_PATTERN.test(missionId)) {
@@ -170,11 +175,17 @@ export default {
           );
         }
       }
-      let snapshot: MissionSnapshotPacket;
+      let snapshot: MissionSnapshotPacket & {
+        readonly definition?: Mission | null;
+      };
       try {
         snapshot = await (
           env.MISSIONS.getByName(missionId) as unknown as {
-            getSnapshot(afterSequence?: number): Promise<MissionSnapshotPacket>;
+            getSnapshot(
+              afterSequence?: number,
+            ): Promise<
+              MissionSnapshotPacket & { readonly definition?: Mission | null }
+            >;
           }
         ).getSnapshot();
       } catch {
@@ -198,6 +209,41 @@ export default {
           },
           { status: 403 },
         );
+      }
+      if (
+        body.command.type === "apply" &&
+        (snapshot.definition === null ||
+          snapshot.definition === undefined ||
+          Date.now() >= Date.parse(snapshot.definition.formationDeadline))
+      ) {
+        return Response.json(
+          {
+            error: "FORMATION_CLOSED",
+            message: "The formation deadline has passed",
+          },
+          { status: 409 },
+        );
+      }
+      if (
+        body.command.type === "submit_proposal" ||
+        body.command.type === "submit_assignment_proposal"
+      ) {
+        const definition = snapshot.definition;
+        if (
+          definition === null ||
+          definition === undefined ||
+          !pactMatchesMission(body.command.pact, definition) ||
+          (await canonicalJsonDigest(body.command.pact)) !==
+            body.command.pactDigest
+        ) {
+          return Response.json(
+            {
+              error: "PACT_DIGEST_MISMATCH",
+              message: "The proposal does not match its canonical mission pact",
+            },
+            { status: 422 },
+          );
+        }
       }
       if (
         body.command.type === "publish" &&
@@ -229,13 +275,33 @@ export default {
           keyId: authorization.keyId,
         },
         source:
-          authorization.kind === "guild-node"
-            ? ("mcp" as const)
-            : ("http" as const),
+          webMcpCommandMatch !== null
+            ? ("webmcp" as const)
+            : authorization.kind === "guild-node"
+              ? ("mcp" as const)
+              : ("http" as const),
         command:
           body.command.type === "accept_pact"
             ? { ...body.command, acceptedAt }
-            : body.command,
+            : body.command.type === "apply"
+              ? {
+                  ...body.command,
+                  agentId: authorization.agentId,
+                  keyId: authorization.keyId,
+                }
+              : body.command.type === "submit_capability_bid"
+                ? {
+                    ...body.command,
+                    agentId: authorization.agentId,
+                    keyId: authorization.keyId,
+                  }
+                : body.command.type === "submit_assignment_proposal"
+                  ? {
+                      ...body.command,
+                      proposerAgentId: authorization.agentId,
+                      keyId: authorization.keyId,
+                    }
+                  : body.command,
       };
       const result =
         await env.MISSIONS.getByName(missionId).executeCommand(
@@ -352,7 +418,17 @@ function isExternalCommandAuthorized(
       return command.agentId === authenticatedAgentId;
     case "submit_proposal":
       return (
-        authenticatedAgentId === state.requesterAgentId ||
+        command.proposerAgentId === authenticatedAgentId &&
+        authenticatedAgentId === state.requesterAgentId
+      );
+    case "submit_capability_bid":
+      return (
+        command.agentId === authenticatedAgentId &&
+        state.selectedHelperIds.includes(authenticatedAgentId)
+      );
+    case "submit_assignment_proposal":
+      return (
+        command.proposerAgentId === authenticatedAgentId &&
         state.selectedHelperIds.includes(authenticatedAgentId)
       );
     case "submit_artifact":
@@ -360,7 +436,6 @@ function isExternalCommandAuthorized(
       // Dedicated artifact/replacement adapters add their domain proofs in item 8.
       return false;
     case "publish":
-    case "form_party":
     case "revise_mission":
     case "start_execution":
     case "default_role":
@@ -368,6 +443,10 @@ function isExternalCommandAuthorized(
     case "safety_pause":
     case "cancel":
       return authenticatedAgentId === state.requesterAgentId;
+    case "form_party":
+      // Party selection is server-derived from the frozen application and
+      // registry evidence snapshot; no external adapter may supply helper IDs.
+      return false;
     case "safety_redact":
       return false;
     case "negotiation_timeout":

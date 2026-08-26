@@ -4,6 +4,7 @@ export * from "./commitment-v1.js";
 export * from "./common.js";
 export * from "./events.js";
 export * from "./mission.js";
+export * from "./pact-builder.js";
 export * from "./receipts.js";
 export * from "./schemas.js";
 export * from "./signatures.js";

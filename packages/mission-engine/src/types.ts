@@ -1,12 +1,33 @@
-import type { DisplayState, MissionStage } from "@guildhall/contracts";
+import type { DisplayState, MissionStage, Pact } from "@guildhall/contracts";
+
+import type { HelperSelectionResult } from "./selection.js";
 
 export type LifecycleStage = MissionStage | "DRAFT";
 export type TerminalOutcome = "completed" | "failed" | "canceled" | "expired";
 export type SafetyState = "none" | "paused" | "rejected";
 
 export interface CandidatePact {
-  readonly pactVersion: number;
+  readonly proposerAgentId: string;
+  readonly proposalRound: number;
   readonly pactDigest: string;
+  /** Exact public Pact JSON whose canonical bytes produce pactDigest. */
+  readonly pact: Pact;
+}
+
+export interface ApplicationAvailability {
+  readonly availableFrom: string;
+  readonly availableUntil: string;
+}
+
+export interface MissionApplicationRecord {
+  readonly agentId: string;
+  readonly keyId: string;
+  readonly missionVersion: number;
+  readonly relevantCapabilities: readonly string[];
+  readonly proposedContribution: string;
+  readonly availability: ApplicationAvailability;
+  /** Sequence of the application_submitted event assigned by this transition. */
+  readonly applicationEventSequence: number;
 }
 
 export interface PactAcceptanceRecord {
@@ -17,6 +38,26 @@ export interface PactAcceptanceRecord {
   readonly pactDigest: string;
   readonly signature: string;
   readonly acceptedAt: string;
+}
+
+export interface CapabilityBidRecord {
+  readonly agentId: string;
+  readonly keyId: string;
+  readonly relevantCapabilities: readonly string[];
+  readonly proposedContribution: string;
+  readonly bidEventSequence: number;
+}
+
+export interface AssignmentProposalRecord extends CandidatePact {
+  readonly keyId: string;
+  readonly proposalEventSequence: number;
+}
+
+export interface AssignmentResolution {
+  readonly strategy: "matching" | "selection-order";
+  readonly selectedProposalAgentId: string;
+  readonly consideredProposalAgentIds: readonly string[];
+  readonly consideredPactDigests: readonly string[];
 }
 
 export interface RuntimeRoleSlot {
@@ -35,8 +76,16 @@ export interface LifecycleState {
   readonly missionVersion: number;
   readonly requesterAgentId: string;
   readonly applicationAgentIds: readonly string[];
+  readonly applications: readonly MissionApplicationRecord[];
   readonly selectedHelperIds: readonly string[];
+  /** Frozen deterministic selection result shown on the public mission. */
+  readonly selectionEvidence: HelperSelectionResult | null;
   readonly candidatePact: CandidatePact | null;
+  /** Append-only within the active, at-most-two-round negotiation. */
+  readonly proposalHistory: readonly CandidatePact[];
+  readonly capabilityBids: readonly CapabilityBidRecord[];
+  readonly assignmentProposals: readonly AssignmentProposalRecord[];
+  readonly assignmentResolution: AssignmentResolution | null;
   readonly acceptances: Readonly<Record<string, PactAcceptanceRecord>>;
   readonly roleSlots: readonly RuntimeRoleSlot[];
   readonly correctionCount: 0 | 1;
@@ -51,18 +100,43 @@ export interface LifecycleState {
 
 export type LifecycleCommand =
   | { readonly type: "publish" }
-  | { readonly type: "apply"; readonly agentId: string }
+  | {
+      readonly type: "apply";
+      readonly agentId: string;
+      readonly keyId: string;
+      readonly missionVersion: number;
+      readonly relevantCapabilities: readonly string[];
+      readonly proposedContribution: string;
+      readonly availability: ApplicationAvailability;
+    }
   | { readonly type: "withdraw"; readonly agentId: string }
   | {
       readonly type: "form_party";
       readonly helperIds: readonly string[];
       readonly roleSlots: readonly RuntimeRoleSlot[];
+      readonly selectionEvidence: HelperSelectionResult;
       readonly minimumNotMet?: boolean;
     }
   | {
+      readonly type: "submit_capability_bid";
+      readonly agentId: string;
+      readonly keyId: string;
+      readonly relevantCapabilities: readonly string[];
+      readonly proposedContribution: string;
+    }
+  | {
       readonly type: "submit_proposal";
-      readonly pactVersion: number;
+      readonly proposerAgentId: string;
+      readonly proposalRound: number;
       readonly pactDigest: string;
+      readonly pact: Pact;
+    }
+  | {
+      readonly type: "submit_assignment_proposal";
+      readonly proposerAgentId: string;
+      readonly keyId: string;
+      readonly pactDigest: string;
+      readonly pact: Pact;
     }
   | { readonly type: "negotiation_timeout" }
   | {
@@ -104,9 +178,11 @@ export type LifecycleCommand =
 export type TransitionFailureCode =
   | "ILLEGAL_TRANSITION"
   | "INVALID_PARTY"
+  | "INVALID_APPLICATION"
   | "APPLICATION_DUPLICATE"
   | "APPLICATION_NOT_FOUND"
   | "PACT_MISMATCH"
+  | "INVALID_PROPOSAL"
   | "NEGOTIATION_ROUNDS_EXHAUSTED"
   | "SIGNER_NOT_REQUIRED"
   | "DUPLICATE_ACCEPTANCE"

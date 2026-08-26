@@ -205,7 +205,12 @@ describe("Guild Broker A2A binding", () => {
     const missionId = crypto.randomUUID();
     const requesterAgentId = crypto.randomUUID();
     const coordinator = env.MISSIONS.getByName(missionId);
-    await coordinator.initializeMission(missionId, requesterAgentId);
+    const now = Date.now();
+    await coordinator.initializeMission(
+      missionId,
+      requesterAgentId,
+      brokerMission(missionId, requesterAgentId, now),
+    );
     const published = await coordinator.executeCommand({
       commandId: crypto.randomUUID(),
       expectedSequence: 0,
@@ -226,8 +231,8 @@ describe("Guild Broker A2A binding", () => {
         relevantCapabilities: ["accessibility-audit"],
         proposedContribution: "Inspect the bounded public fixture.",
         availability: {
-          availableFrom: "2026-08-26T12:00:00.000Z",
-          availableUntil: "2026-08-26T16:00:00.000Z",
+          availableFrom: new Date(now - 60_000).toISOString(),
+          availableUntil: new Date(now + 4 * 60 * 60_000).toISOString(),
         },
       },
       { agentId: identity.agentId },
@@ -274,7 +279,111 @@ describe("Guild Broker A2A binding", () => {
       },
     });
   });
+
+  it("rejects a signed application after the immutable formation deadline", async () => {
+    const identity = await seedGuildNode(9_910_002);
+    const missionId = crypto.randomUUID();
+    const requesterAgentId = crypto.randomUUID();
+    const now = Date.now();
+    const coordinator = env.MISSIONS.getByName(missionId);
+    await coordinator.initializeMission(missionId, requesterAgentId, {
+      ...brokerMission(missionId, requesterAgentId, now),
+      formationDeadline: new Date(now - 60_000).toISOString(),
+      deliveryDeadline: new Date(now + 60 * 60_000).toISOString(),
+      publishedAt: new Date(now - 2 * 60_000).toISOString(),
+    });
+    await coordinator.executeCommand({
+      commandId: crypto.randomUUID(),
+      expectedSequence: 0,
+      actor: null,
+      source: "system",
+      issuedAt: new Date(now - 2 * 60_000).toISOString(),
+      command: { type: "publish" },
+    });
+
+    const body = a2aBody(
+      "guild.apply_to_mission",
+      missionId,
+      {
+        missionId,
+        expectedSequence: 1,
+        missionVersion: 1,
+        relevantCapabilities: ["accessibility-audit"],
+        proposedContribution: "This application arrived too late.",
+        availability: {
+          availableFrom: new Date(now - 60_000).toISOString(),
+          availableUntil: new Date(now + 2 * 60 * 60_000).toISOString(),
+        },
+      },
+      { agentId: identity.agentId },
+      crypto.randomUUID(),
+    );
+    const response = await worker.fetch(await signedA2ARequest(body, identity));
+    expect(response.status).toBe(200);
+    expect(await json(response)).toMatchObject({
+      task: {
+        status: { state: "TASK_STATE_FAILED" },
+        metadata: { executionErrorCode: "GUILD_FORMATION_CLOSED" },
+      },
+    });
+  });
 });
+
+function brokerMission(
+  missionId: string,
+  requesterAgentId: string,
+  now: number,
+) {
+  return {
+    protocol: "commitment/v1" as const,
+    kind: "mission" as const,
+    missionId,
+    missionVersion: 1,
+    requesterAgentId,
+    title: "Signed A2A application mission",
+    goal: "Inspect a bounded public fixture.",
+    publicInputs: [
+      {
+        inputId: crypto.randomUUID(),
+        type: "url" as const,
+        location: "https://guildhall.test/fixtures/accessibility-dungeon-v1",
+        mediaType: "text/html",
+      },
+    ],
+    requiredCapabilities: ["accessibility-audit"],
+    minimumPartySize: 1,
+    preferredPartySize: 1,
+    maximumPartySize: 2,
+    formationDeadline: new Date(now + 60 * 60_000).toISOString(),
+    deliveryDeadline: new Date(now + 3 * 60 * 60_000).toISOString(),
+    requiredOutputs: [
+      {
+        outputId: crypto.randomUUID(),
+        type: "accessibility-findings" as const,
+        description: "Deterministic public findings.",
+        mediaType: "application/json" as const,
+        publicLocation: "mission-artifact" as const,
+      },
+    ],
+    verificationCriteria: [
+      {
+        criterionId: crypto.randomUUID(),
+        description: "The findings validate deterministically.",
+        required: true as const,
+        method: "deterministic" as const,
+      },
+    ],
+    difficulty: "adept" as const,
+    pointReward: 50,
+    failureBehavior: {
+      negotiationTimeout: "reopen-recruitment" as const,
+      participantDefault: "recruit-exact-slot-replacement" as const,
+      replacementAuthorized: true as const,
+      verificationCorrectionLimit: 1 as const,
+    },
+    publishedAt: new Date(now).toISOString(),
+  };
+}
 
 function a2aRequest(
   action: string,
@@ -332,7 +441,7 @@ async function json<T = Record<string, unknown>>(
   return (await response.json()) as T;
 }
 
-async function seedGuildNode(): Promise<{
+async function seedGuildNode(githubUserId = 9_910_001): Promise<{
   readonly agentId: string;
   readonly credential: string;
   readonly keyId: string;
@@ -343,8 +452,8 @@ async function seedGuildNode(): Promise<{
   const agentId = crypto.randomUUID();
   await upsertGithubOwnerAndSession(env.GUILD_DB, {
     proposedOwnerId: ownerId,
-    githubUserId: 9_910_001,
-    githubLogin: "broker-a2a-test",
+    githubUserId,
+    githubLogin: `broker-a2a-test-${githubUserId}`,
     githubAvatarUrl: null,
     sessionHash: randomBase64UrlToken(),
     csrfHash: randomBase64UrlToken(),

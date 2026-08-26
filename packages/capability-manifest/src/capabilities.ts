@@ -115,4 +115,62 @@ function assertSemanticInput(
       );
     }
   }
+  if (name === "guild.propose_allocation") {
+    const step = input.negotiationStep;
+    if (step === "capability-bid") {
+      requireNegotiationFields(input, [
+        "relevantCapabilities",
+        "proposedContribution",
+      ]);
+      forbidNegotiationFields(input, [
+        "pactVersion",
+        "assignments",
+        "deliveryDeadline",
+        "verificationCriterionIds",
+        "failureBehavior",
+      ]);
+      return;
+    }
+    requireNegotiationFields(input, [
+      "pactVersion",
+      "assignments",
+      "deliveryDeadline",
+      "verificationCriterionIds",
+      "failureBehavior",
+    ]);
+    if (
+      (step === "requester-proposal" && input.pactVersion !== 1) ||
+      (step === "assignment-proposal" && input.pactVersion !== 2)
+    ) {
+      throw new TypeError(
+        "guild.propose_allocation pactVersion does not match negotiationStep.",
+      );
+    }
+    forbidNegotiationFields(input, [
+      "relevantCapabilities",
+      "proposedContribution",
+    ]);
+  }
+}
+
+function requireNegotiationFields(
+  input: Readonly<Record<string, unknown>>,
+  fields: readonly string[],
+): void {
+  if (fields.some((field) => input[field] === undefined)) {
+    throw new TypeError(
+      "guild.propose_allocation is missing fields for its negotiationStep.",
+    );
+  }
+}
+
+function forbidNegotiationFields(
+  input: Readonly<Record<string, unknown>>,
+  fields: readonly string[],
+): void {
+  if (fields.some((field) => input[field] !== undefined)) {
+    throw new TypeError(
+      "guild.propose_allocation contains fields from another negotiationStep.",
+    );
+  }
 }

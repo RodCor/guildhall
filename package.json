@@ -20,6 +20,7 @@
     "test:mcp": "pnpm --filter @guildhall/node test && pnpm --filter @guildhall/node typecheck",
     "test:a2a": "vitest run tests/a2a && vitest run --config tests/a2a/vitest.durable.config.ts && pnpm --filter @guildhall/demo-agent typecheck",
     "test:a2a-conformance": "vitest run tests/a2a-conformance && pnpm --filter @guildhall/a2a-worker typecheck",
+    "test:formation-e2e": "tsc --noEmit -p tests/protocol-core/tsconfig.json && vitest run --config tests/protocol-core/vitest.config.ts tests/protocol-core/formation-e2e.test.ts",
     "test:state-machine": "vitest run tests/state-machine --exclude tests/state-machine/properties.test.ts",
     "test:state-properties": "vitest run tests/state-machine/properties.test.ts",
     "test:protocol-core": "tsc --noEmit -p tests/protocol-core/tsconfig.json && vitest run --config tests/protocol-core/vitest.config.ts",

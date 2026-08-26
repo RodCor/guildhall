@@ -1,5 +1,7 @@
 import {
   MissionEventSchema,
+  MissionSchema,
+  type Mission,
   type MissionEvent,
   type MissionStage,
 } from "@guildhall/contracts";
@@ -21,6 +23,7 @@ import {
   projectMissionCatalog,
   type MissionCatalogProjection,
 } from "../repositories/index.js";
+import { derivePartyFormation } from "../formation.js";
 import type { GuildhallEnv } from "../types.js";
 import type {
   CoordinatorCommand,
@@ -37,6 +40,17 @@ interface MissionStateRow {
   mission_id: string;
   state_json: string;
 }
+
+interface MissionDefinitionRow {
+  [key: string]: SqlStorageValue;
+  mission_id: string;
+  definition_json: string;
+  definition_digest: string;
+}
+
+export type MissionSnapshotWithDefinition = MissionSnapshotPacket & {
+  readonly definition: Mission | null;
+};
 
 interface EventRow {
   [key: string]: SqlStorageValue;
@@ -140,9 +154,23 @@ export class MissionCoordinator extends DurableObject<GuildhallEnv> {
   async initializeMission(
     missionId: string,
     requesterAgentId: string,
+    definition?: Mission,
   ): Promise<LifecycleState> {
     if (missionId.length === 0 || requesterAgentId.length === 0) {
       throw new TypeError("missionId and requesterAgentId are required");
+    }
+
+    const validatedDefinition =
+      definition === undefined ? null : MissionSchema.parse(definition);
+    if (
+      validatedDefinition !== null &&
+      (validatedDefinition.missionId !== missionId ||
+        validatedDefinition.requesterAgentId !== requesterAgentId ||
+        validatedDefinition.missionVersion !== 1)
+    ) {
+      throw new TypeError(
+        "Mission definition identity must match initialization at version 1",
+      );
     }
 
     const now = new Date().toISOString();
@@ -155,10 +183,14 @@ export class MissionCoordinator extends DurableObject<GuildhallEnv> {
         ) {
           throw new Error("MissionCoordinator is already initialized");
         }
+        this.assertOrAttachDefinition(existing, validatedDefinition, now);
         return existing;
       }
 
       const initial = initialLifecycleState({ missionId, requesterAgentId });
+      if (validatedDefinition !== null) {
+        this.persistDefinition(validatedDefinition, now);
+      }
       this.persistState(initial, now);
       this.enqueueProjection(initial, now);
       return initial;
@@ -167,6 +199,62 @@ export class MissionCoordinator extends DurableObject<GuildhallEnv> {
     await this.flushProjectionOutbox();
     await this.scheduleNextAlarm();
     return state;
+  }
+
+  /** Atomically fixes the immutable Mission and appends mission_published. */
+  async publishMission(
+    definition: Mission,
+    input: CoordinatorCommand,
+  ): Promise<CoordinatorCommandResult> {
+    const mission = MissionSchema.parse(definition);
+    if (
+      input.command.type !== "publish" ||
+      input.actor?.agentId !== mission.requesterAgentId
+    ) {
+      throw new TypeError(
+        "Publication command must match the mission requester",
+      );
+    }
+    const now = new Date().toISOString();
+    const requestHash = canonicalDigestSync(input);
+    const result = this.ctx.storage.transactionSync(() => {
+      const existing = this.readState();
+      if (existing === null) {
+        const initial = initialLifecycleState({
+          missionId: mission.missionId,
+          requesterAgentId: mission.requesterAgentId,
+        });
+        this.persistDefinition(mission, now);
+        this.persistState(initial, now);
+      } else {
+        if (
+          existing.missionId !== mission.missionId ||
+          existing.requesterAgentId !== mission.requesterAgentId
+        ) {
+          throw new Error("MissionCoordinator is already initialized");
+        }
+        this.assertOrAttachDefinition(existing, mission, now);
+      }
+      const response = this.executeCommandInOpenTransaction(
+        input,
+        requestHash,
+        now,
+      );
+      if (response.ok) {
+        this.ctx.storage.sql.exec(
+          `INSERT OR IGNORE INTO deadlines(deadline_type, due_at, handled_at)
+           VALUES ('formation', ?, NULL)`,
+          Date.parse(mission.formationDeadline),
+        );
+      }
+      return response;
+    });
+    if (result.ok) {
+      await this.flushEffectOutbox();
+      await this.flushProjectionOutbox();
+    }
+    await this.scheduleNextAlarm();
+    return result;
   }
 
   async executeCommand(
@@ -311,7 +399,7 @@ export class MissionCoordinator extends DurableObject<GuildhallEnv> {
     return outcome;
   }
 
-  getSnapshot(afterSequence = 0): MissionSnapshotPacket {
+  getSnapshot(afterSequence = 0): MissionSnapshotWithDefinition {
     if (!Number.isSafeInteger(afterSequence) || afterSequence < 0) {
       throw new RangeError("afterSequence must be a non-negative safe integer");
     }
@@ -322,6 +410,7 @@ export class MissionCoordinator extends DurableObject<GuildhallEnv> {
 
     return {
       missionId: snapshot.missionId,
+      definition: this.readDefinition(),
       snapshot,
       events: this.readEvents(afterSequence),
       afterSequence,
@@ -405,15 +494,19 @@ export class MissionCoordinator extends DurableObject<GuildhallEnv> {
       .toArray();
 
     for (const deadline of deadlines) {
-      this.ctx.storage.sql.exec(
-        `UPDATE deadlines SET handled_at = ?
-         WHERE deadline_type = ? AND handled_at IS NULL`,
-        new Date().toISOString(),
-        deadline.deadline_type,
-      );
-      const command = this.deadlineCommand(deadline);
+      const command = await this.deadlineCommand(deadline);
+      let handled = command === null;
       if (command !== null && this.readState() !== null) {
-        await this.executeCommand(command);
+        const result = await this.executeCommand(command);
+        handled = result.ok;
+      }
+      if (handled) {
+        this.ctx.storage.sql.exec(
+          `UPDATE deadlines SET handled_at = ?
+           WHERE deadline_type = ? AND handled_at IS NULL`,
+          new Date().toISOString(),
+          deadline.deadline_type,
+        );
       }
     }
 
@@ -769,7 +862,7 @@ export class MissionCoordinator extends DurableObject<GuildhallEnv> {
         `INSERT OR IGNORE INTO pact_versions(
            pact_version, pact_digest, sequence, created_at
          ) VALUES (?, ?, ?, ?)`,
-        state.candidatePact.pactVersion,
+        state.candidatePact.pact.pactVersion,
         state.candidatePact.pactDigest,
         state.sequence,
         now,
@@ -871,7 +964,7 @@ export class MissionCoordinator extends DurableObject<GuildhallEnv> {
   }
 
   private enqueueProjection(state: LifecycleState, now: string): void {
-    const projection = toCatalogProjection(state, now);
+    const projection = toCatalogProjection(state, this.readDefinition(), now);
     this.ctx.storage.sql.exec(
       `INSERT INTO projection_outbox(
          projection_type, payload_json, source_sequence, status, attempts,
@@ -1021,11 +1114,32 @@ export class MissionCoordinator extends DurableObject<GuildhallEnv> {
     await this.ctx.storage.setAlarm(row.due_at);
   }
 
-  private deadlineCommand(deadline: DeadlineRow): CoordinatorCommand | null {
+  private async deadlineCommand(
+    deadline: DeadlineRow,
+  ): Promise<CoordinatorCommand | null> {
     const state = this.readState();
     if (state === null) return null;
     let command: LifecycleCommand | null = null;
-    if (deadline.deadline_type === "formation") command = { type: "expire" };
+    if (deadline.deadline_type === "formation") {
+      if (state.stage !== "PREPARE") return null;
+      const mission = this.readDefinition();
+      const derived =
+        mission === null
+          ? null
+          : await derivePartyFormation(this.env.GUILD_DB, mission, state, true);
+      command =
+        derived === null
+          ? { type: "expire" }
+          : {
+              type: "form_party",
+              helperIds: derived.selection.selectedAgentIds,
+              roleSlots: derived.roleSlots,
+              selectionEvidence: derived.selection,
+              ...(derived.selection.oneHelperFallbackUsed
+                ? { minimumNotMet: true }
+                : {}),
+            };
+    }
     if (deadline.deadline_type === "negotiation") {
       command = { type: "negotiation_timeout" };
     }
@@ -1085,10 +1199,63 @@ export class MissionCoordinator extends DurableObject<GuildhallEnv> {
         .toArray()[0]?.count ?? 0
     );
   }
+
+  private readDefinition(): Mission | null {
+    const row = this.ctx.storage.sql
+      .exec<MissionDefinitionRow>(
+        `SELECT mission_id, definition_json, definition_digest
+         FROM mission_definition LIMIT 1`,
+      )
+      .toArray()[0];
+    if (row === undefined) return null;
+    const definition = MissionSchema.parse(JSON.parse(row.definition_json));
+    if (
+      definition.missionId !== row.mission_id ||
+      canonicalDigestSync(definition) !== row.definition_digest
+    ) {
+      throw new Error("Stored mission definition failed integrity validation");
+    }
+    return definition;
+  }
+
+  private persistDefinition(definition: Mission, now: string): void {
+    this.ctx.storage.sql.exec(
+      `INSERT INTO mission_definition(
+         mission_id, definition_json, definition_digest, created_at
+       ) VALUES (?, ?, ?, ?)`,
+      definition.missionId,
+      JSON.stringify(definition),
+      canonicalDigestSync(definition),
+      now,
+    );
+  }
+
+  private assertOrAttachDefinition(
+    state: LifecycleState,
+    definition: Mission | null,
+    now: string,
+  ): void {
+    if (definition === null) return;
+    const existing = this.readDefinition();
+    if (existing !== null) {
+      if (canonicalDigestSync(existing) !== canonicalDigestSync(definition)) {
+        throw new Error("Mission definition is immutable");
+      }
+      return;
+    }
+    if (state.sequence !== 0 || state.stage !== "DRAFT") {
+      throw new Error(
+        "Mission definition cannot be attached after publication",
+      );
+    }
+    this.persistDefinition(definition, now);
+    this.enqueueProjection(state, now);
+  }
 }
 
 function toCatalogProjection(
   state: LifecycleState,
+  definition: Mission | null,
   projectedAt: string,
 ): MissionCatalogProjection {
   return {
@@ -1097,13 +1264,24 @@ function toCatalogProjection(
     requesterAgentId: state.requesterAgentId,
     lifecycleState: state.stage,
     displayState: deriveDisplayState(state),
+    title: definition?.title ?? null,
+    summary: definition?.goal ?? null,
+    difficulty: definition?.difficulty ?? null,
+    pointReward: definition?.pointReward ?? null,
+    minimumPartySize: definition?.minimumPartySize ?? null,
+    preferredPartySize: definition?.preferredPartySize ?? null,
+    maximumPartySize: definition?.maximumPartySize ?? null,
+    requiredCapabilities: definition?.requiredCapabilities ?? [],
     participantAgentIds: [
       state.requesterAgentId,
       ...state.roleSlots.map((slot) => slot.occupantAgentId),
     ],
     pactDigest: state.candidatePact?.pactDigest ?? null,
+    formationDeadline: definition?.formationDeadline ?? null,
+    deliveryDeadline: definition?.deliveryDeadline ?? null,
+    publishedAt: definition?.publishedAt ?? null,
     terminalAt: state.terminalOutcome === null ? null : projectedAt,
-    projection: state,
+    projection: { ...state, definition },
     lastSequence: state.sequence,
     projectedAt,
   };

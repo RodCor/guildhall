@@ -439,6 +439,214 @@ footer {
   font-size: 0.78rem;
 }
 
+.mission-console {
+  padding: 72px 0 104px;
+  border-top: 1px solid var(--line);
+}
+
+.mission-console-heading {
+  align-items: flex-end;
+}
+
+.mission-picker {
+  min-width: min(360px, 100%);
+  display: grid;
+  gap: 7px;
+  color: var(--ink-muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.mission-picker select {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 11px 38px 11px 12px;
+  color: var(--ink);
+  background: var(--forest-raised);
+  font: inherit;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.console-empty,
+.console-error {
+  color: var(--ink-muted);
+  line-height: 1.65;
+}
+
+.console-error {
+  color: #ffb096;
+}
+
+.mission-vitals {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin: 0 0 18px;
+  border: 1px solid var(--line);
+  background: rgba(23, 33, 29, 0.78);
+}
+
+.vital {
+  min-width: 0;
+  padding: 16px 18px;
+  border-right: 1px solid var(--line);
+}
+
+.vital:last-child {
+  border-right: 0;
+}
+
+.vital dt,
+.ledger-label {
+  margin-bottom: 5px;
+  color: var(--ink-muted);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.vital dd {
+  overflow: hidden;
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.88rem;
+  text-overflow: ellipsis;
+}
+
+.vital-accent dd {
+  color: var(--moss);
+}
+
+.ledger-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.ledger-card,
+.event-ledger {
+  min-width: 0;
+  padding: 22px;
+  border: 1px solid var(--line);
+  background: linear-gradient(
+    145deg,
+    rgba(23, 33, 29, 0.94),
+    rgba(17, 25, 22, 0.94)
+  );
+}
+
+.ledger-card h3,
+.event-ledger h3 {
+  margin-bottom: 14px;
+  font-size: 1.08rem;
+}
+
+.ledger-span {
+  grid-column: 1 / -1;
+}
+
+.digest-value {
+  display: block;
+  overflow-wrap: anywhere;
+  color: var(--gold-bright);
+  font-size: clamp(0.74rem, 2vw, 0.9rem);
+}
+
+.ledger-card pre {
+  max-height: 430px;
+  overflow: auto;
+  margin: 0;
+  color: #d6ddcf;
+  font-size: 0.72rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.role-grid,
+.signature-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.role-card,
+.signature-card {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+  padding: 16px;
+  border: 1px solid rgba(226, 202, 137, 0.16);
+  background: rgba(14, 21, 19, 0.72);
+}
+
+.role-card span,
+.role-card small,
+.signature-card span {
+  color: var(--ink-muted);
+}
+
+.role-card span,
+.role-card small,
+.signature-card code,
+.signature-card span {
+  overflow-wrap: anywhere;
+  font-size: 0.72rem;
+}
+
+.event-ledger {
+  margin-top: 16px;
+}
+
+.event-ledger-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.event-ledger-heading span {
+  color: var(--ink-muted);
+  font-size: 0.72rem;
+}
+
+.event-ledger ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.event-ledger li {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 0;
+  border-top: 1px solid rgba(226, 202, 137, 0.12);
+}
+
+.event-ledger li div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.event-ledger li div span,
+.event-ledger li code,
+.event-sequence {
+  color: var(--ink-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.69rem;
+}
+
+.event-sequence {
+  color: var(--gold);
+}
+
 footer p {
   margin-bottom: 0;
 }
@@ -468,6 +676,38 @@ footer p {
 
   .surface-card {
     min-height: 168px;
+  }
+
+  .mission-console-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .mission-vitals {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .vital {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .ledger-grid,
+  .role-grid,
+  .signature-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ledger-span {
+    grid-column: 1;
+  }
+
+  .event-ledger li {
+    grid-template-columns: 48px minmax(0, 1fr);
+  }
+
+  .event-ledger li > code {
+    grid-column: 2;
   }
 
   footer {

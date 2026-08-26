@@ -3,7 +3,7 @@ import type {
   LifecycleState,
   TransitionFailureCode,
 } from "@guildhall/mission-engine";
-import type { MissionEvent } from "@guildhall/contracts";
+import { PactSchema, type MissionEvent } from "@guildhall/contracts";
 
 export type ProvenanceSource = "webmcp" | "mcp" | "a2a" | "http" | "system";
 
@@ -157,8 +157,47 @@ function isLifecycleCommand(value: unknown): value is LifecycleCommand {
         nonEmpty(value.redactedEventId)
       );
     case "apply":
+      return (
+        hasOnlyKeys(value, [
+          "type",
+          "agentId",
+          "keyId",
+          "missionVersion",
+          "relevantCapabilities",
+          "proposedContribution",
+          "availability",
+        ]) &&
+        nonEmpty(value.agentId) &&
+        uuid(value.keyId) &&
+        positiveInteger(value.missionVersion) &&
+        Array.isArray(value.relevantCapabilities) &&
+        stringArray(value.relevantCapabilities) &&
+        value.relevantCapabilities.length >= 1 &&
+        value.relevantCapabilities.length <= 16 &&
+        nonEmpty(value.proposedContribution) &&
+        value.proposedContribution.length <= 2_000 &&
+        isAvailability(value.availability)
+      );
     case "withdraw":
       return hasOnlyKeys(value, ["type", "agentId"]) && nonEmpty(value.agentId);
+    case "submit_capability_bid":
+      return (
+        hasOnlyKeys(value, [
+          "type",
+          "agentId",
+          "keyId",
+          "relevantCapabilities",
+          "proposedContribution",
+        ]) &&
+        nonEmpty(value.agentId) &&
+        uuid(value.keyId) &&
+        Array.isArray(value.relevantCapabilities) &&
+        stringArray(value.relevantCapabilities) &&
+        value.relevantCapabilities.length >= 1 &&
+        value.relevantCapabilities.length <= 16 &&
+        nonEmpty(value.proposedContribution) &&
+        value.proposedContribution.length <= 2_000
+      );
     case "accept_pact":
       return (
         hasOnlyKeys(value, [
@@ -182,9 +221,32 @@ function isLifecycleCommand(value: unknown): value is LifecycleCommand {
       );
     case "submit_proposal":
       return (
-        hasOnlyKeys(value, ["type", "pactVersion", "pactDigest"]) &&
-        positiveInteger(value.pactVersion) &&
-        nonEmpty(value.pactDigest)
+        hasOnlyKeys(value, [
+          "type",
+          "proposerAgentId",
+          "proposalRound",
+          "pactDigest",
+          "pact",
+        ]) &&
+        nonEmpty(value.proposerAgentId) &&
+        value.proposalRound === 1 &&
+        /^[A-Za-z0-9_-]{43}$/u.test(String(value.pactDigest)) &&
+        PactSchema.safeParse(value.pact).success
+      );
+    case "submit_assignment_proposal":
+      return (
+        hasOnlyKeys(value, [
+          "type",
+          "proposerAgentId",
+          "keyId",
+          "pactDigest",
+          "pact",
+        ]) &&
+        nonEmpty(value.proposerAgentId) &&
+        uuid(value.keyId) &&
+        /^[A-Za-z0-9_-]{43}$/u.test(String(value.pactDigest)) &&
+        PactSchema.safeParse(value.pact).success &&
+        (value.pact as { pactVersion?: unknown }).pactVersion === 2
       );
     case "form_party":
       return (
@@ -192,11 +254,13 @@ function isLifecycleCommand(value: unknown): value is LifecycleCommand {
           "type",
           "helperIds",
           "roleSlots",
+          "selectionEvidence",
           "minimumNotMet",
         ]) &&
         stringArray(value.helperIds) &&
         Array.isArray(value.roleSlots) &&
         value.roleSlots.every(isRuntimeRoleSlot) &&
+        isSelectionEvidence(value.selectionEvidence) &&
         (value.minimumNotMet === undefined ||
           typeof value.minimumNotMet === "boolean")
       );
@@ -250,6 +314,53 @@ function isRuntimeRoleSlot(value: unknown): boolean {
       value.status === "released") &&
     typeof value.artifactRequired === "boolean" &&
     typeof value.artifactDelivered === "boolean"
+  );
+}
+
+function isAvailability(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    hasOnlyKeys(value, ["availableFrom", "availableUntil"]) &&
+    typeof value.availableFrom === "string" &&
+    typeof value.availableUntil === "string" &&
+    Number.isFinite(Date.parse(value.availableFrom)) &&
+    Number.isFinite(Date.parse(value.availableUntil)) &&
+    Date.parse(value.availableFrom) < Date.parse(value.availableUntil)
+  );
+}
+
+function isSelectionEvidence(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    hasOnlyKeys(value, [
+      "selectedAgentIds",
+      "evidence",
+      "targetHelperCount",
+      "minimumSatisfied",
+      "oneHelperFallbackUsed",
+      "canProceed",
+    ]) &&
+    stringArray(value.selectedAgentIds) &&
+    Array.isArray(value.evidence) &&
+    value.evidence.every(isSelectionEvidenceRow) &&
+    typeof value.targetHelperCount === "number" &&
+    Number.isSafeInteger(value.targetHelperCount) &&
+    typeof value.minimumSatisfied === "boolean" &&
+    typeof value.oneHelperFallbackUsed === "boolean" &&
+    typeof value.canProceed === "boolean"
+  );
+}
+
+function isSelectionEvidenceRow(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.agentId === "string" &&
+    Array.isArray(value.matchedSkills) &&
+    value.matchedSkills.every(nonEmpty) &&
+    typeof value.applicationEventSequence === "number" &&
+    Number.isSafeInteger(value.applicationEventSequence) &&
+    typeof value.eligible === "boolean" &&
+    typeof value.selected === "boolean"
   );
 }
 

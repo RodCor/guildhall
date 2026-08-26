@@ -1,7 +1,10 @@
 import {
   artifactSigningBytes,
+  buildPact,
   canonicalJsonDigest,
+  MissionSchema,
   pactSigningBytes,
+  type AllocationAssignment,
 } from "@guildhall/contracts";
 import type { GuildCapabilityName } from "@guildhall/capability-manifest";
 
@@ -80,12 +83,25 @@ export class GuildClient {
         );
       case "guild.publish_mission":
         return this.#publish(input, signal);
-      case "guild.apply_to_mission":
+      case "guild.apply_to_mission": {
+        const config = await this.#paired();
         return this.#command(
           input,
-          { type: "apply", agentId: await this.#agentId() },
+          {
+            type: "apply",
+            agentId: config.agentId,
+            keyId: config.keyId,
+            missionVersion: requiredInteger(input, "missionVersion"),
+            relevantCapabilities: requiredStringArray(
+              input,
+              "relevantCapabilities",
+            ),
+            proposedContribution: requiredString(input, "proposedContribution"),
+            availability: requiredRecord(input, "availability"),
+          },
           signal,
         );
+      }
       case "guild.withdraw_application":
         return this.#command(
           input,
@@ -93,26 +109,7 @@ export class GuildClient {
           signal,
         );
       case "guild.propose_allocation":
-        return this.#command(
-          input,
-          {
-            type: "submit_proposal",
-            pactVersion: requiredInteger(input, "pactVersion"),
-            pactDigest: await canonicalJsonDigest({
-              protocol: "commitment/v1",
-              kind: "allocation-proposal",
-              ...copyFields(input, [
-                "missionId",
-                "pactVersion",
-                "assignments",
-                "deliveryDeadline",
-                "verificationCriterionIds",
-                "failureBehavior",
-              ]),
-            }),
-          },
-          signal,
-        );
+        return this.#proposeAllocation(input, signal);
       case "guild.accept_pact":
         return this.#acceptPact(input, signal);
       case "guild.report_progress":
@@ -193,12 +190,13 @@ export class GuildClient {
       signal,
     );
     const draftId = requiredString(draft, "draftId");
-    return this.#signedJson(
+    const result = await this.#signedJson(
       "POST",
       `/api/drafts/${segment(draftId)}/publish`,
       { requesterAgentId: config.agentId },
       signal,
     );
+    return this.#normalizeMutationResult(mission.missionId, result, signal);
   }
 
   async #command(
@@ -207,7 +205,7 @@ export class GuildClient {
     signal?: AbortSignal,
   ): Promise<Record<string, unknown>> {
     const missionId = requiredString(input, "missionId");
-    return this.#signedJson(
+    const result = await this.#signedJson(
       "POST",
       `/api/missions/${segment(missionId)}/commands`,
       {
@@ -220,6 +218,96 @@ export class GuildClient {
       },
       signal,
     );
+    return this.#normalizeMutationResult(missionId, result, signal);
+  }
+
+  async #proposeAllocation(
+    input: Record<string, unknown>,
+    signal?: AbortSignal,
+  ): Promise<Record<string, unknown>> {
+    const config = await this.#paired();
+    const negotiationStep = requiredString(input, "negotiationStep");
+    if (negotiationStep === "capability-bid") {
+      return this.#command(
+        input,
+        {
+          type: "submit_capability_bid",
+          agentId: config.agentId,
+          keyId: config.keyId,
+          relevantCapabilities: requiredStringArray(
+            input,
+            "relevantCapabilities",
+          ),
+          proposedContribution: requiredString(input, "proposedContribution"),
+        },
+        signal,
+      );
+    }
+    const missionId = requiredString(input, "missionId");
+    const packet = await this.#publicGet(
+      `/api/missions/${segment(missionId)}`,
+      signal,
+    );
+    const mission = MissionSchema.parse(packet.definition);
+    const snapshot = requiredRecord(packet, "snapshot");
+    const proposalRound = requiredInteger(input, "pactVersion");
+    const currentCandidate = recordField(snapshot, "candidatePact");
+    const currentPact =
+      currentCandidate === null ? null : recordField(currentCandidate, "pact");
+    const pact = await buildPact({
+      mission,
+      selectedHelperIds: requiredStringArray(snapshot, "selectedHelperIds"),
+      pactVersion: proposalRound,
+      assignments: allocationAssignments(input.assignments),
+      createdAt:
+        proposalRound === 2 && currentPact !== null
+          ? requiredString(currentPact, "createdAt")
+          : new Date().toISOString(),
+    });
+    const proposal = {
+      proposerAgentId: config.agentId,
+      pactDigest: await canonicalJsonDigest(pact),
+      pact,
+    };
+    return this.#command(
+      input,
+      negotiationStep === "requester-proposal"
+        ? { type: "submit_proposal", proposalRound, ...proposal }
+        : {
+            type: "submit_assignment_proposal",
+            keyId: config.keyId,
+            ...proposal,
+          },
+      signal,
+    );
+  }
+
+  async #normalizeMutationResult(
+    missionId: string,
+    result: Record<string, unknown>,
+    signal?: AbortSignal,
+  ): Promise<Record<string, unknown>> {
+    const packet = await this.#publicGet(
+      `/api/missions/${segment(missionId)}`,
+      signal,
+    );
+    const snapshot = requiredRecord(packet, "snapshot");
+    const events = Array.isArray(packet.events) ? packet.events : [];
+    const lastEvent = events.at(-1);
+    const event = isRecord(lastEvent) ? lastEvent : {};
+    const candidate = recordField(snapshot, "candidatePact");
+    const pact = candidate === null ? null : recordField(candidate, "pact");
+    return {
+      missionId,
+      sequence: requiredInteger(packet, "latestSequence"),
+      missionVersion: requiredInteger(snapshot, "missionVersion"),
+      pactVersion: pact === null ? null : requiredInteger(pact, "pactVersion"),
+      displayState: requiredString(event, "displayState"),
+      event,
+      result,
+      replayed: false,
+      catalogPending: false,
+    };
   }
 
   async #acceptPact(
@@ -438,6 +526,52 @@ function requiredRecord(
   const value = recordField(input, key);
   if (value === null) throw new TypeError(`${key} must be an object`);
   return value;
+}
+
+function requiredStringArray(
+  input: Readonly<Record<string, unknown>>,
+  key: string,
+  allowEmpty = false,
+): string[] {
+  const value = input[key];
+  if (
+    !Array.isArray(value) ||
+    (!allowEmpty && value.length === 0) ||
+    value.some((item) => typeof item !== "string" || item.length === 0)
+  ) {
+    throw new TypeError(`${key} must be a string array`);
+  }
+  return value as string[];
+}
+
+function allocationAssignments(value: unknown): AllocationAssignment[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new TypeError("assignments must be a non-empty array");
+  }
+  return value.map((candidate) => {
+    if (!isRecord(candidate))
+      throw new TypeError("assignment must be an object");
+    return {
+      roleSlotId: requiredString(candidate, "roleSlotId"),
+      agentId: requiredString(candidate, "agentId"),
+      responsibilities: requiredStringArray(candidate, "responsibilities"),
+      requiredCapabilities: requiredStringArray(
+        candidate,
+        "requiredCapabilities",
+      ),
+      dependencyRoleSlotIds: requiredStringArray(
+        candidate,
+        "dependencyRoleSlotIds",
+        true,
+      ),
+      outputIds: requiredStringArray(candidate, "outputIds"),
+      verificationCriterionIds: requiredStringArray(
+        candidate,
+        "verificationCriterionIds",
+      ),
+      pointAllocation: requiredInteger(candidate, "pointAllocation"),
+    };
+  });
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

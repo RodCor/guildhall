@@ -259,61 +259,23 @@ const LIST_DATA = objectSchema(
   ["missions", "nextCursor"],
 );
 
-const EVENT_ENVELOPE = objectSchema(
-  {
-    sequence: SEQUENCE,
-    type: schema({ type: "string", minLength: 1, maxLength: 80 }),
-    occurredAt: TIMESTAMP,
-    source: enumSchema(["webmcp", "mcp", "a2a", "http", "alarm"]),
-    contentDigest: DIGEST,
-    previousEventHash: nullable(DIGEST),
-    eventHash: DIGEST,
-    payload: schema({ type: "object" }),
-  },
-  [
-    "sequence",
-    "type",
-    "occurredAt",
-    "source",
-    "contentDigest",
-    "previousEventHash",
-    "eventHash",
-    "payload",
-  ],
-);
-
 const INSPECT_DATA = objectSchema(
   {
-    snapshot: objectSchema(
-      {
-        mission: MISSION_CARD,
-        lifecycleStage: enumSchema([
-          "DRAFT",
-          "PREPARE",
-          "RESERVE",
-          "COMMIT",
-          "EXECUTE",
-          "DELIVER",
-          "VERIFY",
-          "COMPENSATE",
-          "RECEIPT",
-        ]),
-        latestSequence: SEQUENCE,
-        selectedHelperIds: arraySchema(IDENTIFIER, 0, 2, true),
-        pactDigest: nullable(DIGEST),
-      },
-      [
-        "mission",
-        "lifecycleStage",
-        "latestSequence",
-        "selectedHelperIds",
-        "pactDigest",
-      ],
-    ),
-    events: arraySchema(EVENT_ENVELOPE, 0, 500, false),
+    missionId: IDENTIFIER,
+    definition: nullable(schema({ type: "object" })),
+    snapshot: schema({ type: "object" }),
+    events: arraySchema(schema({ type: "object" }), 0, 500, false),
+    afterSequence: SEQUENCE,
     latestSequence: SEQUENCE,
   },
-  ["snapshot", "events", "latestSequence"],
+  [
+    "missionId",
+    "definition",
+    "snapshot",
+    "events",
+    "afterSequence",
+    "latestSequence",
+  ],
 );
 
 const RECEIPT_DATA = objectSchema(
@@ -521,6 +483,17 @@ export const guildCapabilityManifest = deepFreeze([
     inputSchema: objectSchema(
       {
         ...MISSION_COMMAND_INPUT,
+        negotiationStep: enumSchema([
+          "capability-bid",
+          "requester-proposal",
+          "assignment-proposal",
+        ]),
+        relevantCapabilities: arraySchema(CAPABILITY_NAME, 1, 16, true),
+        proposedContribution: schema({
+          type: "string",
+          minLength: 1,
+          maxLength: 2_000,
+        }),
         pactVersion: schema({ type: "integer", minimum: 1, maximum: 2 }),
         assignments: arraySchema(
           objectSchema(
@@ -528,8 +501,10 @@ export const guildCapabilityManifest = deepFreeze([
               roleSlotId: IDENTIFIER,
               agentId: IDENTIFIER,
               responsibilities: arraySchema(SHORT_TEXT, 1, 8, true),
+              requiredCapabilities: arraySchema(CAPABILITY_NAME, 1, 16, true),
               dependencyRoleSlotIds: arraySchema(IDENTIFIER, 0, 2, true),
               outputIds: arraySchema(IDENTIFIER, 1, 8, true),
+              verificationCriterionIds: arraySchema(IDENTIFIER, 1, 16, true),
               pointAllocation: schema({
                 type: "integer",
                 minimum: 0,
@@ -540,8 +515,10 @@ export const guildCapabilityManifest = deepFreeze([
               "roleSlotId",
               "agentId",
               "responsibilities",
+              "requiredCapabilities",
               "dependencyRoleSlotIds",
               "outputIds",
+              "verificationCriterionIds",
               "pointAllocation",
             ],
           ),
@@ -553,15 +530,7 @@ export const guildCapabilityManifest = deepFreeze([
         verificationCriterionIds: arraySchema(IDENTIFIER, 1, 16, true),
         failureBehavior: FAILURE_BEHAVIOR,
       },
-      [
-        "missionId",
-        "expectedSequence",
-        "pactVersion",
-        "assignments",
-        "deliveryDeadline",
-        "verificationCriterionIds",
-        "failureBehavior",
-      ],
+      ["missionId", "expectedSequence", "negotiationStep"],
     ),
     dataSchema: COMMAND_RESULT,
     readOnly: false,

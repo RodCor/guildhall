@@ -21,10 +21,15 @@ import {
   remediationArtifactContent,
 } from "./fixtures";
 import { artifactIdForContent, parseHostedPrivateJwk } from "./identity";
+import { autonomouslyJoinGuildMission } from "./guild-client";
 
 export interface HostedAgentEnv {
   /** A per-Worker Ed25519 private JWK installed with `wrangler secret put`. */
   readonly HOSTED_AGENT_PRIVATE_JWK?: string;
+  /** Public Guildhall origin plus the canonical A2A broker path. */
+  readonly GUILD_BROKER_URL?: string;
+  /** A scoped GuildNode credential installed as a Worker secret. */
+  readonly GUILD_AGENT_CREDENTIAL?: string;
   /** Durable task/idempotency atom. Bound in every deployed hosted agent. */
   readonly HOSTED_AGENT_TASKS?: {
     getByName(name: string): HostedAgentTaskStoreRpc;
@@ -33,10 +38,16 @@ export interface HostedAgentEnv {
 
 export interface HostedAgentWorkerOptions {
   readonly now?: () => Date;
+  readonly fetch?: typeof globalThis.fetch;
 }
 
 export interface HostedAgentWorker {
   fetch(request: Request, env: HostedAgentEnv): Promise<Response>;
+  scheduled(
+    controller: ScheduledController,
+    env: HostedAgentEnv,
+    ctx: ExecutionContext,
+  ): void;
 }
 
 export function createAgentWorker(
@@ -124,8 +135,58 @@ export function createAgentWorker(
         );
       }
     },
+    scheduled(_controller, env, ctx): void {
+      ctx.waitUntil(runAutonomousRecruitment(kind, env, options));
+    },
   } satisfies ExportedHandler<HostedAgentEnv>;
   return handler;
+}
+
+async function runAutonomousRecruitment(
+  kind: HostedAgentKind,
+  env: HostedAgentEnv,
+  options: HostedAgentWorkerOptions,
+): Promise<void> {
+  if (
+    env.GUILD_BROKER_URL === undefined ||
+    env.GUILD_AGENT_CREDENTIAL === undefined ||
+    env.HOSTED_AGENT_PRIVATE_JWK === undefined
+  ) {
+    console.info(
+      JSON.stringify({
+        agent: kind,
+        message: "autonomous Guild recruitment is not configured",
+      }),
+    );
+    return;
+  }
+  try {
+    const result = await autonomouslyJoinGuildMission(kind, {
+      brokerBaseUrl: env.GUILD_BROKER_URL,
+      credential: env.GUILD_AGENT_CREDENTIAL,
+      privateJwk: env.HOSTED_AGENT_PRIVATE_JWK,
+      fetch: options.fetch ?? globalThis.fetch,
+      ...(options.now === undefined ? {} : { now: options.now }),
+    });
+    console.info(
+      JSON.stringify({
+        agent: kind,
+        joined: result.joined,
+        missionId: result.missionId,
+        action: result.action,
+        reason: result.reason,
+        message: "autonomous Guild recruitment completed",
+      }),
+    );
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        agent: kind,
+        errorName: error instanceof Error ? error.name : "UnknownError",
+        message: "autonomous Guild recruitment failed",
+      }),
+    );
+  }
 }
 
 function requireSigningSecret(env: HostedAgentEnv): string {

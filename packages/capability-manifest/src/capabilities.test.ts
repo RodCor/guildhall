@@ -33,6 +33,31 @@ describe("canonical capability validation", () => {
     }
   });
 
+  it("separates capability bids from versioned assignment proposals", () => {
+    const capability = getCapabilityDefinition("guild.propose_allocation");
+    const base = {
+      missionId: "00000000-0000-4000-8000-000000000001",
+      expectedSequence: 5,
+    };
+    expect(() =>
+      assertCapabilityInput(capability, {
+        ...base,
+        negotiationStep: "capability-bid",
+        relevantCapabilities: ["accessibility-audit"],
+        proposedContribution: "Inspect the public fixture.",
+      }),
+    ).not.toThrow();
+    expect(() =>
+      assertCapabilityInput(capability, {
+        ...base,
+        negotiationStep: "capability-bid",
+        relevantCapabilities: ["accessibility-audit"],
+        proposedContribution: "Inspect the public fixture.",
+        pactVersion: 2,
+      }),
+    ).toThrow("fields from another negotiationStep");
+  });
+
   it("validates domain output before assigning trusted provenance", () => {
     const capability = getCapabilityDefinition("guild.list_missions");
 

@@ -16,6 +16,25 @@ CREATE TABLE IF NOT EXISTS mission_state (
   updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS mission_definition (
+  mission_id TEXT PRIMARY KEY,
+  definition_json TEXT NOT NULL,
+  definition_digest TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE TRIGGER IF NOT EXISTS mission_definition_immutable_update
+BEFORE UPDATE ON mission_definition
+BEGIN
+  SELECT RAISE(ABORT, 'mission definition is immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS mission_definition_immutable_delete
+BEFORE DELETE ON mission_definition
+BEGIN
+  SELECT RAISE(ABORT, 'mission definition is immutable');
+END;
+
 CREATE TABLE IF NOT EXISTS mission_versions (
   mission_id TEXT NOT NULL,
   mission_version INTEGER NOT NULL,
@@ -140,4 +159,7 @@ CREATE TABLE IF NOT EXISTS deadlines (
 
 INSERT OR IGNORE INTO schema_migrations(version, applied_at)
 VALUES (1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+
+INSERT OR IGNORE INTO schema_migrations(version, applied_at)
+VALUES (2, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
 `;
