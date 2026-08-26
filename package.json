@@ -1,0 +1,24 @@
+{
+  "name": "guildhall-workspace",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.33.4",
+  "scripts": {
+    "build": "pnpm -r --if-present build",
+    "build:smoke": "pnpm --filter @guildhall/web build && pnpm --filter @guildhall/demo-agent build",
+    "check": "pnpm check:workspace && pnpm test",
+    "check:workspace": "pnpm -r --if-present typecheck && prettier --check .",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "pnpm -r --if-present typecheck"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20260826.1",
+    "prettier": "3.9.6",
+    "typescript": "7.0.2",
+    "vitest": "4.1.11",
+    "wrangler": "4.126.0"
+  }
+}

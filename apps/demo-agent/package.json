@@ -1,0 +1,22 @@
+{
+  "name": "@guildhall/demo-agent",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "pnpm run typecheck && pnpm run bundle",
+    "bundle": "pnpm run bundle:scout && pnpm run bundle:scribe && pnpm run bundle:warden",
+    "bundle:scout": "wrangler deploy --dry-run --config wrangler.scout.jsonc --outdir dist/scout",
+    "bundle:scribe": "wrangler deploy --dry-run --config wrangler.scribe.jsonc --outdir dist/scribe",
+    "bundle:warden": "wrangler deploy --dry-run --config wrangler.warden.jsonc --outdir dist/warden",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@a2a-js/sdk": "1.0.1"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20260826.1",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.126.0"
+  }
+}
