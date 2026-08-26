@@ -39,7 +39,7 @@ Status: **Locked**
       Acceptance: Selection uses skill coverage, verified rank, reliability, then application event sequence; one helper may proceed when two were preferred; mixed pact digests cannot bind; a material pre-bind edit invalidates prior applications/acceptances; post-bind changed scope cannot masquerade as replacement; safety rejection does not consume the one verification correction.
       Verify: Run `pnpm test:state-machine` and `pnpm test:state-properties`; inspect generated transition coverage to confirm every PRD display state is reachable or intentionally derived.
 
-- [ ] **4. Persist one authoritative mission with recoverable projections**
+- [x] **4. Persist one authoritative mission with recoverable projections**
       Spec ref: `spec.md > Architecture > Authority and consistency`, `spec.md > Protocol Integrity Deep Dive > Durable Object tables`, and `D1 tables`
       What to build: Terra High implements `MissionCoordinator` with SQLite migrations, synchronous command transactions, event hash chain, command-result idempotency, effect/projection outboxes, one earliest-deadline alarm, hibernatable read-only WebSockets, and RPC methods. A separate Terra packet owns D1 migrations and sequence-gated repositories; Luna High owns concurrency, duplicate-command, stale-projection, alarm, and reconnect fixtures. Wire the minimal canonical command API but no polished UI.
       Acceptance: Concurrent applications and final acceptances serialize; same command ID/same request hash replays one result; reused ID/different hash conflicts; local mission truth survives a failed D1 write; stale projection cannot overwrite a newer one; snapshot plus event sequence restores after reconnect.
@@ -47,25 +47,25 @@ Status: **Locked**
 
   **Verification pause A — protocol core:** Stop and show Rodrigo the contract examples, a bound pact digest/signatures, legal/illegal transition results, the canonical event stream, and a forced D1 projection retry. Do not continue until this checkpoint is acknowledged.
 
-- [ ] **5. Implement GitHub ownership, agent identities, pairing, policies, and safety**
+- [x] **5. Implement GitHub ownership, agent identities, pairing, policies, and safety**
       Spec ref: `spec.md > Interoperability And Security Deep Dive > Owner, transport, and signing identities` through `Public-content safety boundary`
       What to build: Terra High implements GitHub authorization-code + PKCE/state endpoints, hashed `__Host-` sessions, CSRF/origin checks, owner/agent authorization, browser-key registration, scoped Guild Node credentials, one-time possession-proven pairing, key revocation, autonomy-policy enable/revoke, private drafts, dual local/server safety scanning, and emergency redaction commands. Luna High owns seeded secret/PII/safe-content fixtures and mocked GitHub-flow tests.
       Acceptance: GitHub is the only required account; no provider credential appears in UI/schema/logs; signout/revocation blocks new protected actions; autonomous publication is disabled by default and revokes immediately; unsafe content never reaches the public mission object and errors do not echo the match; historical proofs survive key revocation.
       Verify: Run `pnpm test:auth` and `pnpm test:safety`; complete local mocked login, pairing challenge, signed command, revocation, and redaction flows; grep built assets/log fixtures for prohibited provider-credential fields.
 
-- [ ] **6. Generate equivalent WebMCP and MCP capabilities**
+- [x] **6. Generate equivalent WebMCP and MCP capabilities**
       Spec ref: `spec.md > Interoperability And Security Deep Dive > Shared capability manifest` through `MCP adapter`
       What to build: Terra High implements the canonical capability manifest and browser WebMCP adapter with secure-context feature detection, `document.modelContext.registerTool()`, abort-driven unregister/reconciliation, browser signing key, correct read-only/untrusted annotations, and trusted provenance. In a non-overlapping packet, Terra High implements Guild Node MCP v2 stdio, pairing/status commands, signed Guild client, inbox cursor, and the full canonical tool set. Luna High owns adapter parity snapshots, stdio protocol tests, and Codex/Claude/Cursor/Pi configuration examples.
       Acceptance: Browser and harness surfaces expose equivalent profile, mission, application, negotiation, monitoring, artifact, and receipt actions; all actions hit one public timeline; public outputs are marked untrusted; stdout contains only MCP protocol bytes; no harness credentials are requested.
       Verify: Run `pnpm test:capability-parity`, `pnpm test:webmcp`, and `pnpm test:mcp`; connect a real local MCP client and execute `guild.list_missions` against the development Worker.
 
-- [ ] **7. Expose the Guild Broker and three independent A2A agents**
+- [x] **7. Expose the Guild Broker and three independent A2A agents**
       Spec ref: `spec.md > Architecture > Guild Broker`, `Hosted reference agents`, and `Interoperability And Security Deep Dive > A2A mapping`
       What to build: Terra High implements the Workers-native A2A 1.0 HTTP+JSON endpoints, Agent Card builder, version/extension/error validation, bounded client, Task store, and Guild Broker translation to canonical commands. Separate Terra ownership implements Scout's parser/executor; Luna High implements deterministic Scribe/Warden templates, failure fixture, and Agent Card fixtures. Deploy configuration produces three distinct origins and identities. Use the official SDK client/types where the item-1 spike proved safe.
       Acceptance: Guild Broker, Scout, Scribe, and Warden expose valid public Agent Cards; each declares honest capabilities; `A2A-Version: 1.0` and `commitment/v1` metadata are enforced; A2A Task completion remains distinct from mission verification; artifacts contain structured data and signatures.
       Verify: Run `pnpm test:a2a` and `pnpm test:a2a-conformance`; call each `/.well-known/agent-card.json` and `POST /message:send` locally; verify unsupported versions, malformed parts, and missing required extension paths return structured A2A errors.
 
-- [ ] **8. Complete the live WebMCP→party formation→A2A pact slice**
+- [x] **8. Complete the live WebMCP→party formation→A2A pact slice**
       Spec ref: `spec.md > Data Flow > One action through three surfaces` through `Negotiation and binding`
       What to build: Sol High reviews cross-protocol identity/version integrity; Terra High integrates browser publication, public catalog projection, A2A applications, evidence-ranked party selection, two negotiation rounds, visible assignment proposal events, requester/helper signatures, and final identical-digest binding. Luna High owns the constrained mission seed and browser/A2A integration fixtures. Add a minimal technical mission page sufficient to inspect provenance, versions, role slots, and signatures.
       Acceptance: A real browser agent publishes a public-safe mission through WebMCP; Scout and Scribe apply over A2A; no more than two helpers reserve slots; the work split is visible; every signer accepts one digest; the mission reaches Bound without any simulated event or manually edited database row.

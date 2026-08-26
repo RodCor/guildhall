@@ -389,7 +389,13 @@ export default {
       }
     }
 
-    return env.ASSETS.fetch(request);
+    return Response.json(
+      {
+        error: "NOT_FOUND",
+        message: "The requested Guildhall Worker route does not exist",
+      },
+      { status: 404 },
+    );
   },
 } satisfies ExportedHandler<GuildhallEnv>;
 

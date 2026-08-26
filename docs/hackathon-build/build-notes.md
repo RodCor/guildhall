@@ -247,3 +247,62 @@
 - `pnpm test:state-machine` passed 48 table-driven selection, negotiation, replacement, lifecycle, and idempotency tests.
 - `pnpm test:state-properties` passed 4 generated/invariant tests: rejected-command immutability, terminal absorption, complete display coverage, and the active-helper ceiling.
 - `pnpm test:contracts` remained green at 8 tests after the nullable pre-bind receipt correction.
+
+## 2026-08-26 — Pause B correction: GitHub login routing
+
+### Reported failure
+
+- During participant-owned browser verification, GitHub login exposed `Cannot read properties of undefined (reading 'fetch')` at the Worker SPA fallback.
+- The failure remained inside verification pause B; checklist item 9 did not begin.
+
+### Root cause and correction
+
+- `GuildhallEnv` and the fallback handler assumed an `ASSETS` binding, but `wrangler.jsonc` did not declare that optional binding.
+- The Worker now returns a structured `404` for an unmatched dynamic route and lets the Cloudflare asset router own the SPA shell.
+- Static-asset routing now explicitly runs `/api/*`, `/a2a/*`, and `/.well-known/*` through the Worker first, including GitHub OAuth start/callback navigations.
+- Added a Workers-runtime regression test for the exact unmatched-route fall-through.
+
+### Verification
+
+- `pnpm test:auth` passed 17 tests across crypto and OAuth/identity integration.
+- `pnpm test:protocol-core` passed 8 files / 29 tests, including the new routing regression.
+- The Guildhall production build and Wrangler dry-run passed with the expected D1 and Durable Object bindings.
+- A real Vite development server returned `200` for the SPA and health endpoint, structured `404` for the regression route, and a GitHub `302` plus flow cookie for OAuth start.
+
+## 2026-08-26 — Autonomous build items 4–8 and verification pause B
+
+### Item 4: authoritative mission persistence
+
+- Implemented one SQLite-backed `MissionCoordinator` Durable Object per mission with transactional snapshots, ordered event envelopes, command-result idempotency, effect/projection outboxes, alarm recovery, and resumable read-only event streams.
+- Added sequence-gated D1 mission projections so stale catalog writes cannot replace newer mission truth.
+- Added Workers-runtime coverage for concurrency, replay/conflict behavior, projection retry, event-chain verification, and reconnect recovery.
+
+### Item 5: ownership, identity, and safety
+
+- Implemented complete GitHub OAuth authorization-code + PKCE/state flow, hashed sessions, CSRF/origin enforcement, owner and agent authorization, pairing, Ed25519 key registration/revocation, and autonomous-publication policy controls.
+- Added private drafts, bounded request/artifact scanning, and emergency safety-redaction behavior without collecting model-provider credentials.
+- Added mocked OAuth, identity, pairing, proof, revocation, and seeded safe/unsafe-content tests.
+
+### Item 6: equivalent WebMCP and MCP capabilities
+
+- Expanded the canonical capability manifest and generated equivalent browser WebMCP and local Guild Node MCP actions from it.
+- Added abort-aware WebMCP lifecycle/reconciliation, public-output trust hints, the signed Guild Node client, pairing/configuration commands, and Codex/Claude/Cursor/Pi examples.
+- Added capability-parity snapshots plus WebMCP and stdio MCP protocol coverage.
+
+### Item 7: Guild Broker and independent A2A agents
+
+- Implemented the Workers-native A2A 1.0 HTTP+JSON binding, Guild Broker translation, Agent Cards, bounded client, durable Task stores, `commitment/v1` validation, and structured errors.
+- Implemented separately configured Scout, Scribe, and Warden agents with independent identities and deterministic artifacts.
+- Added A2A binding/conformance, Durable Object Task-store, Agent Card, and Guild Broker integration tests.
+
+### Item 8: live cross-protocol party formation
+
+- Integrated WebMCP mission publication, public projection, A2A applications, evidence-ranked selection, two-round work-allocation negotiation, candidate pact creation, requester/helper signatures, and identical-digest binding.
+- Added the technical mission view for provenance, role slots, versions, events, signatures, and the visible party work split.
+- `pnpm test:formation-e2e` completed the real Workers-runtime formation path with 16 persisted events and no manually inserted mission transitions.
+
+### Pause B acceptance
+
+- The complete automated suite passed (`pnpm check`: 18 Vitest files / 165 tests plus 8 Workers-runtime files / 29 tests), along with the Guildhall production build and Wrangler dry-run.
+- After the Worker/static-asset routing correction, Rodrigo repeated the participant-owned GitHub browser flow and confirmed: "Now it work fine!"
+- Verification pause B is accepted. Checklist item 9 is the next build item; no item-9 implementation began during the pause.
