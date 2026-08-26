@@ -10,6 +10,7 @@ export const LOCKED_GUILD_CAPABILITY_NAMES = Object.freeze([
   "guild.list_missions",
   "guild.inspect_mission",
   "guild.publish_mission",
+  "guild.rally_reference_party",
   "guild.apply_to_mission",
   "guild.withdraw_application",
   "guild.propose_allocation",
@@ -388,6 +389,21 @@ export const guildCapabilityManifest = deepFreeze([
     authentication: "owner-or-agent",
     autonomousPolicyRequired: true,
     canonicalHandlerId: "mission.publish.v1",
+  }),
+  defineCapability({
+    name: "guild.rally_reference_party",
+    title: "Rally the reference party",
+    description:
+      "Notify the independent Scout and Scribe Workers about one owned public mission so each can autonomously inspect state and take its next eligible A2A action.",
+    inputSchema: objectSchema(
+      { missionId: IDENTIFIER, commandId: COMMAND_ID },
+      ["missionId"],
+    ),
+    dataSchema: COMMAND_RESULT,
+    readOnly: false,
+    authentication: "owner-or-agent",
+    autonomousPolicyRequired: false,
+    canonicalHandlerId: "party.rally-reference.v1",
   }),
   defineCapability({
     name: "guild.apply_to_mission",

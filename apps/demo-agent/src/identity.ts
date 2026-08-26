@@ -11,6 +11,8 @@ import type { HostedAgentKind } from "./agent-card";
 
 export const REPLACEMENT_PROOF_METADATA_KEY =
   "https://guildhall.example/extensions/commitment/v1/replacement-proof";
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
 export interface HostedAgentIdentity {
   readonly agentId: string;
@@ -48,13 +50,32 @@ const identities: Readonly<Record<HostedAgentKind, HostedAgentIdentity>> = {
   },
 };
 
-export function hostedIdentity(kind: HostedAgentKind): HostedAgentIdentity {
-  return identities[kind];
+export function hostedIdentity(
+  kind: HostedAgentKind,
+  publicKeyX?: string,
+  keyId?: string,
+): HostedAgentIdentity {
+  const identity = identities[kind];
+  if (publicKeyX === undefined && keyId === undefined) return identity;
+  if (publicKeyX !== undefined) assertEd25519PublicKeyX(publicKeyX);
+  if (keyId !== undefined && !UUID_PATTERN.test(keyId)) {
+    throw new TypeError("The hosted signing key ID must be a UUID.");
+  }
+  return {
+    ...identity,
+    ...(keyId === undefined ? {} : { keyId }),
+    publicJwk:
+      publicKeyX === undefined
+        ? identity.publicJwk
+        : { ...identity.publicJwk, x: publicKeyX },
+  };
 }
 
 export function parseHostedPrivateJwk(
   kind: HostedAgentKind,
   serialized: string,
+  publicKeyX?: string,
+  keyId?: string,
 ): JsonWebKey {
   let value: unknown;
   try {
@@ -65,7 +86,7 @@ export function parseHostedPrivateJwk(
   if (!isRecord(value)) {
     throw new TypeError("The hosted signing secret must be a JWK object.");
   }
-  const identity = hostedIdentity(kind);
+  const identity = hostedIdentity(kind, publicKeyX, keyId);
   if (
     value.kty !== "OKP" ||
     value.crv !== "Ed25519" ||
@@ -85,9 +106,38 @@ export function parseHostedPrivateJwk(
   };
 }
 
+function assertEd25519PublicKeyX(value: string): void {
+  if (!/^[A-Za-z0-9_-]{43}$/u.test(value)) {
+    throw new TypeError(
+      "The hosted public signing key must be a canonical Ed25519 x value.",
+    );
+  }
+  const padded = value.replaceAll("-", "+").replaceAll("_", "/") + "=";
+  let binary: string;
+  try {
+    binary = atob(padded);
+  } catch {
+    throw new TypeError(
+      "The hosted public signing key must be a canonical Ed25519 x value.",
+    );
+  }
+  if (
+    binary.length !== 32 ||
+    encodeBase64Url(
+      Uint8Array.from(binary, (character) => character.charCodeAt(0)),
+    ) !== value
+  ) {
+    throw new TypeError(
+      "The hosted public signing key must be a canonical Ed25519 x value.",
+    );
+  }
+}
+
 export async function createSignedArtifact(input: {
   readonly kind: HostedAgentKind;
   readonly privateJwk: JsonWebKey;
+  readonly publicKeyX?: string;
+  readonly keyId?: string;
   readonly origin: string;
   readonly completedAt: string;
   readonly missionId: string;
@@ -97,7 +147,7 @@ export async function createSignedArtifact(input: {
   readonly artifactType: "accessibility-findings" | "remediation-plan";
   readonly content: JsonObject;
 }): Promise<A2AArtifact> {
-  const identity = hostedIdentity(input.kind);
+  const identity = hostedIdentity(input.kind, input.publicKeyX, input.keyId);
   const contentDigest = await canonicalJsonDigest(input.content);
   const artifactId = await artifactIdForContent(input.content);
   const privateKey = await crypto.subtle.importKey(
@@ -154,13 +204,15 @@ export async function createSignedArtifact(input: {
 
 export async function createSignedReplacementProof(input: {
   readonly privateJwk: JsonWebKey;
+  readonly publicKeyX?: string;
+  readonly keyId?: string;
   readonly acceptedAt: string;
   readonly missionId: string;
   readonly pactDigest: string;
   readonly roleSlotId: string;
   readonly predecessorAgentId: string;
 }): Promise<JsonObject> {
-  const identity = hostedIdentity("warden");
+  const identity = hostedIdentity("warden", input.publicKeyX, input.keyId);
   const replacementId = await deterministicUuid(
     await canonicalJsonDigest({
       kind: "replacement",

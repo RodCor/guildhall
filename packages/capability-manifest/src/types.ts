@@ -5,6 +5,7 @@ export type GuildCapabilityName =
   | "guild.list_missions"
   | "guild.inspect_mission"
   | "guild.publish_mission"
+  | "guild.rally_reference_party"
   | "guild.apply_to_mission"
   | "guild.withdraw_application"
   | "guild.propose_allocation"

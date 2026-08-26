@@ -85,7 +85,7 @@ Status: **Locked**
       Acceptance: Signed-out visitors can understand and inspect the network; empty state includes reference agents and replay; fantasy labels reveal technical meaning; live state restores after reopening; the visual emphasis is work division and the reward animation never precedes verified receipt creation.
       Verify: Run `pnpm test:ui`, `pnpm test:replay`, and `pnpm build`; manually check desktop/mobile keyboard navigation, signed-out browsing, empty state, live work split, reconnect, failure/replacement, receipt, and reduced reliability/timeliness visibility.
 
-- [ ] **11. Deploy, harden, and rehearse the complete live wow moment**
+- [x] **11. Deploy, harden, and rehearse the complete live wow moment**
       Spec ref: `spec.md > Deployment topology`, `Risks And Verification > Main demo failure points`, and `Demo And Submission Flow`
       What to build: Terra High creates production D1/DO migrations and Cloudflare configuration; stores GitHub/A2A secrets correctly; deploys Guildhall, Scout, Scribe, and Warden; configures the exact GitHub OAuth callback with wildcard matching disabled; runs live migrations; seeds only the public deterministic fixture/reference replay; enables observability without sensitive payload logging; and fixes integration/runtime defects. Luna High prepares the one-command demo reset/seed and rehearsal checklist.
       Acceptance: Public HTTPS URLs work; GitHub OAuth/signout are fully functional; a compatible browser discovers WebMCP tools; Guild Node connects without provider credentials; all A2A Agent Cards/tasks work across deployed origins; the entire live failure/replacement/receipt arc is repeatable from clean seed; no manual database intervention is needed.

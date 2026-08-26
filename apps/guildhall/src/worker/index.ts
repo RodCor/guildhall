@@ -22,6 +22,7 @@ import { handlePublicApiRoute } from "./publicApi.js";
 import { handleGuildBrokerRoute } from "./a2a/guildBroker.js";
 import type { GuildhallEnv } from "./types.js";
 import { executeBoundDemoMission } from "./executionOrchestrator.js";
+import { handleDemoRallyRoute } from "./demoRally.js";
 
 export { MissionCoordinator } from "./durable/MissionCoordinator.js";
 export type { GuildhallEnv as Env } from "./types.js";
@@ -44,6 +45,13 @@ export default {
         protocolCore: "commitment/v1",
       });
     }
+
+    if (url.pathname === "/api/ready") {
+      return readinessResponse(env);
+    }
+
+    const demoRallyResponse = await handleDemoRallyRoute(request, env);
+    if (demoRallyResponse !== null) return demoRallyResponse;
 
     const oauthResponse = await handleOAuthRoute(request, env);
     if (oauthResponse !== null) return oauthResponse;
@@ -400,6 +408,65 @@ function parseJson(value: string): unknown {
     return JSON.parse(value) as unknown;
   } catch {
     return null;
+  }
+}
+
+async function readinessResponse(env: GuildhallEnv): Promise<Response> {
+  try {
+    const origin = new URL(env.PUBLIC_ORIGIN);
+    if (
+      origin.protocol !== "https:" ||
+      origin.origin !== env.PUBLIC_ORIGIN ||
+      env.GITHUB_CLIENT_ID.length < 12 ||
+      env.GITHUB_CLIENT_SECRET.length < 20 ||
+      env.AUTH_COOKIE_SECRET.length < 32 ||
+      env.GUILD_ISSUER_KEY_ID === undefined ||
+      !UUID_PATTERN.test(env.GUILD_ISSUER_KEY_ID) ||
+      env.GUILD_ISSUER_PRIVATE_JWK === undefined
+    ) {
+      throw new TypeError("required binding is invalid");
+    }
+    const issuer: unknown = JSON.parse(env.GUILD_ISSUER_PRIVATE_JWK);
+    if (
+      !isRecord(issuer) ||
+      issuer.kty !== "OKP" ||
+      issuer.crv !== "Ed25519" ||
+      typeof issuer.d !== "string" ||
+      typeof issuer.x !== "string"
+    ) {
+      throw new TypeError("issuer key is invalid");
+    }
+    const database = await env.GUILD_DB.prepare("SELECT 1 AS ok").first<{
+      ok: number;
+    }>();
+    if (database?.ok !== 1) throw new TypeError("database is unavailable");
+    const complete =
+      env.GUILD_DEMO_RALLY_SECRET !== undefined &&
+      env.GUILD_DEMO_RALLY_SECRET.length >= 32 &&
+      [env.SCOUT_A2A_URL, env.SCRIBE_A2A_URL, env.WARDEN_A2A_URL].every(
+        (value) => {
+          if (value === undefined) return false;
+          const endpoint = new URL(value);
+          return (
+            endpoint.protocol === "https:" && endpoint.pathname === "/a2a/v1"
+          );
+        },
+      );
+    return Response.json(
+      {
+        service: "guildhall",
+        status: "ok",
+        protocolCore: "commitment/v1",
+        phase: complete ? "complete" : "guildhall",
+        database: "reachable",
+      },
+      { headers: { "Cache-Control": "no-store" } },
+    );
+  } catch {
+    return Response.json(
+      { service: "guildhall", status: "not-ready" },
+      { status: 503, headers: { "Cache-Control": "no-store" } },
+    );
   }
 }
 

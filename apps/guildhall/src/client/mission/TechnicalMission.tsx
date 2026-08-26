@@ -13,6 +13,10 @@ import {
   type MissionPacket,
   type PublicAgent,
 } from "./types";
+import {
+  runReferenceDemo,
+  type ReferenceDemoProgress,
+} from "../webmcp/GuildhallWebMcp";
 
 interface MissionListResponse {
   readonly missions: readonly MissionCard[];
@@ -55,7 +59,11 @@ const referencePreviewEvents = [
   emittedAt: "",
 }));
 
-export function TechnicalMission() {
+export function TechnicalMission({
+  activeAgentId,
+}: {
+  readonly activeAgentId: string | null;
+}) {
   const query = useMemo(() => new URLSearchParams(window.location.search), []);
   const [missions, setMissions] = useState<readonly MissionCard[]>([]);
   const [agents, setAgents] = useState<readonly PublicAgent[]>([]);
@@ -72,6 +80,10 @@ export function TechnicalMission() {
   const [playing, setPlaying] = useState(false);
   const [streamState, setStreamState] = useState<StreamState>("connecting");
   const [error, setError] = useState<string | null>(null);
+  const [rallying, setRallying] = useState(false);
+  const [demoRunning, setDemoRunning] = useState(false);
+  const [demoProgress, setDemoProgress] =
+    useState<ReferenceDemoProgress | null>(null);
 
   useEffect(() => {
     const lifetime = new AbortController();
@@ -237,6 +249,82 @@ export function TechnicalMission() {
     syncQuery({ event: null });
   }
 
+  async function rallyReferenceParty() {
+    if (activeAgentId === null || missionId === "" || rallying) return;
+    setRallying(true);
+    setError(null);
+    try {
+      const csrf = readCookie("__Host-guild_csrf");
+      const response = await fetch("/api/demo/rally", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          ...(csrf === null ? {} : { "X-Guild-CSRF": csrf }),
+        },
+        body: JSON.stringify({
+          missionId,
+          requesterAgentId: activeAgentId,
+          commandId: crypto.randomUUID(),
+        }),
+        redirect: "error",
+      });
+      if (!response.ok) {
+        throw new Error(`Party rally returned ${String(response.status)}`);
+      }
+      const next = await loadMission(missionId, AbortSignal.timeout(15_000));
+      setPacket(next);
+      setFollowLive(true);
+      setReplayIndex(next.events.length);
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setRallying(false);
+    }
+  }
+
+  async function runLiveQuest() {
+    if (activeAgentId === null || demoRunning) return;
+    const lifetime = new AbortController();
+    setDemoRunning(true);
+    setDemoProgress(null);
+    setError(null);
+    try {
+      const resumeMissionId = await findResumableReferenceMission(
+        missions,
+        activeAgentId,
+        lifetime.signal,
+      );
+      const result = await runReferenceDemo(
+        activeAgentId,
+        (progress) => {
+          setDemoProgress(progress);
+          if (progress.missionId !== undefined) {
+            setMissionId(progress.missionId);
+            syncQuery({ mission: progress.missionId, event: null });
+          }
+        },
+        lifetime.signal,
+        resumeMissionId,
+      );
+      const [next, catalog] = await Promise.all([
+        loadMission(result.missionId, AbortSignal.timeout(15_000)),
+        loadMissionList(AbortSignal.timeout(15_000)),
+      ]);
+      setMissions(catalog.missions);
+      setMissionId(result.missionId);
+      setPacket(next);
+      setFollowLive(true);
+      setReplayIndex(next.events.length);
+      syncQuery({ mission: result.missionId, event: null });
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      lifetime.abort("demo-finished");
+      setDemoRunning(false);
+    }
+  }
+
   return (
     <>
       <GuildBoard missions={missions} selectedMissionId={missionId} />
@@ -252,6 +340,39 @@ export function TechnicalMission() {
             <h2 id="mission-console-title">Watch the party divide the work.</h2>
           </div>
           <div className="mission-toolbar">
+            <button
+              className="primary-action"
+              type="button"
+              disabled={activeAgentId === null || demoRunning || rallying}
+              onClick={() => void runLiveQuest()}
+              title={
+                activeAgentId === null
+                  ? "Register a browser-owned adventurer first."
+                  : "Publish and run the complete signed reference quest."
+              }
+            >
+              {demoRunning ? "Quest Running…" : "Run Live Quest"}
+            </button>
+            <button
+              className="quiet-action"
+              type="button"
+              disabled={
+                activeAgentId === null ||
+                missionId === "" ||
+                rallying ||
+                demoRunning
+              }
+              onClick={() => void rallyReferenceParty()}
+              title={
+                activeAgentId === null
+                  ? "Sign in and select your requester agent first."
+                  : missionId === ""
+                    ? "Publish or select a live mission first."
+                    : "Wake the independent reference agents for this mission."
+              }
+            >
+              {rallying ? "Rallying…" : "Rally Reference Party"}
+            </button>
             <span className={`stream-chip stream-${streamState}`} role="status">
               <span aria-hidden="true" />
               {streamState === "live"
@@ -275,6 +396,11 @@ export function TechnicalMission() {
                 ))}
               </select>
             </label>
+            {demoProgress !== null ? (
+              <span className="demo-progress" role="status" aria-live="polite">
+                {demoProgress.label}
+              </span>
+            ) : null}
           </div>
         </div>
 
@@ -1093,6 +1219,36 @@ function eventTargetsSlot(
   return command?.roleSlotId === roleSlotId;
 }
 
+async function findResumableReferenceMission(
+  missions: readonly MissionCard[],
+  activeAgentId: string,
+  signal: AbortSignal,
+): Promise<string | undefined> {
+  for (const mission of missions) {
+    if (
+      mission.title !== "Map and remediate the accessibility dungeon" ||
+      ["Completed", "Expired", "Failed"].includes(mission.displayState)
+    ) {
+      continue;
+    }
+    try {
+      const packet = await loadMission(mission.missionId, signal);
+      const definition = record(packet.definition);
+      const snapshot = record(packet.snapshot);
+      if (
+        packet.receipt === null &&
+        definition?.requesterAgentId === activeAgentId &&
+        snapshot?.stage !== "RECEIPT"
+      ) {
+        return mission.missionId;
+      }
+    } catch (error) {
+      if (signal.aborted) throw error;
+    }
+  }
+  return undefined;
+}
+
 async function loadMissionList(
   signal: AbortSignal,
 ): Promise<MissionListResponse> {
@@ -1250,4 +1406,12 @@ function errorMessage(cause: unknown): string {
   return cause instanceof Error
     ? cause.message
     : "The public ledger is unavailable";
+}
+
+function readCookie(name: string): string | null {
+  for (const item of document.cookie.split(";")) {
+    const [rawName, ...rawValue] = item.trim().split("=");
+    if (rawName === name) return decodeURIComponent(rawValue.join("="));
+  }
+  return null;
 }

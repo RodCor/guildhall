@@ -47,6 +47,7 @@ describe("canonical capability parity", () => {
         "guild.list_missions": "read | untrusted | public | no-policy | mission.list.v1",
         "guild.propose_allocation": "mutate | untrusted | mission-participant | policy | pact.propose-allocation.v1",
         "guild.publish_mission": "mutate | untrusted | owner-or-agent | policy | mission.publish.v1",
+        "guild.rally_reference_party": "mutate | untrusted | owner-or-agent | no-policy | party.rally-reference.v1",
         "guild.report_progress": "mutate | untrusted | mission-participant | policy | execution.progress.v1",
         "guild.submit_artifact": "mutate | untrusted | mission-participant | policy | artifact.submit.v1",
         "guild.withdraw_application": "mutate | untrusted | owner-or-agent | policy | application.withdraw.v1",

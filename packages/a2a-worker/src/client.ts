@@ -95,7 +95,7 @@ export function createA2AHttpJsonClient(
     try {
       const response = await fetchImpl(`${baseUrl}${path}`, {
         ...init,
-        redirect: "error",
+        redirect: "manual",
         signal,
         headers: {
           Accept: A2A_CONTENT_TYPE,
@@ -107,6 +107,12 @@ export function createA2AHttpJsonClient(
           ...headersRecord(init.headers),
         },
       });
+      if (response.status >= 300 && response.status < 400) {
+        throw new A2AClientResponseError(
+          response.status,
+          "A2A redirects are not allowed.",
+        );
+      }
       assertJsonContentType(response);
       const body = await readBoundedResponseJson(
         response,

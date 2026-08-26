@@ -353,3 +353,28 @@
 - The complete `pnpm check` gate passed 23 standard files / 196 tests and 9 Workers-runtime files / 36 tests, with all workspace typechecks and formatting checks green.
 - `pnpm build` completed all Guildhall and independent Scout/Scribe/Warden production bundles.
 - Chrome renders were inspected at 1440 px and an emulated 390 px touch viewport. The hero, empty quest board, reference party, chronicle, owner gate, navigation, and live chamber remained readable without horizontal clipping.
+
+## 2026-08-26 — Build item 11: deployed live wow moment
+
+### Production hardening
+
+- Deployed Guildhall, Scout, Scribe, and Warden as independent Cloudflare Workers with production-only Ed25519 identities, scoped Guild Node credentials, D1 projections, Durable Object state, and Worker service bindings for same-zone traffic.
+- Completed the exact GitHub OAuth callback flow and restored the authenticated browser-agent session without collecting model-provider credentials. The exposed OAuth secret found during local diagnostics was rotated before the accepted production run.
+- Added safe, stage-specific autonomous-agent diagnostics; bounded same-zone A2A transport; explicit redirect rejection; repeat-safe rallying; and state-driven browser resume so a refresh continues an unfinished mission instead of publishing a duplicate.
+- Added guarded production bootstrap, deployment doctor/preflight, deployed smoke test, environment template, and deployment runbook. Production private keys and OAuth credentials remain in Worker secrets or ignored local environment files.
+
+### Live production proof
+
+- Rodrigo launched the authenticated browser-agent flow for mission `53c86271-abe8-4352-a9f5-530927cc5aed` at `https://guildhall.kimetsu-dev.workers.dev/?mission=53c86271-abe8-4352-a9f5-530927cc5aed`.
+- Scout and Scribe independently discovered the Guild Broker, applied over A2A, submitted capability bids, negotiated a two-round allocation, and signed the identical immutable pact digest `RchXRgWhZTq7az-ejYqjRR8cuaDLIsCLEU9yiKnnm0g` with the requester.
+- Scout delivered the signed deterministic accessibility findings. Scribe then executed the planned post-bind default; Warden supplied a signed exact-slot replacement proof and completed the inherited remediation role without changing the pact digest or Scout's accepted artifact.
+- Both verification criteria passed. Guildhall issued receipt `b895c8b6-1fd7-4ce9-9a10-26f65e96c849`, awarding 100 base points plus the 10-point recovery bonus. The receipt commits to the 27-event chain head and both signed artifact digests.
+- The same completed chamber, technical ledger, artifacts, verification, replacement proof, and receipt are readable without authentication, supplying the signed-out spectator replay of the authenticated live run.
+
+### Final gate
+
+- `pnpm check` passed every workspace typecheck and formatting check, 25 standard test files / 201 tests, and 9 Workers-runtime protocol files / 36 tests.
+- `pnpm build` produced the Guildhall client/Worker and all three independent agent bundles; every Wrangler dry-run included the expected D1, Durable Object, and Worker service bindings.
+- `pnpm deploy:check` reported no pending production migrations and passed preflight for all four Workers.
+- The deployed `pnpm demo:smoke` passed the public Guildhall shell/readiness, immutable fixture digest, issuer key, exact GitHub OAuth redirect, all three Agent Cards/readiness endpoints, and the provider-credential-free Guild Node MCP mission listing.
+- Verification pause C awaits Rodrigo's explicit visual acceptance before the commit is tagged as the demo candidate.

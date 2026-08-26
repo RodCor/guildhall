@@ -9,6 +9,7 @@ import {
 } from "../../apps/demo-agent/src/worker";
 import { derivePartyFormation } from "../../apps/guildhall/src/worker/formation";
 import { executeBoundDemoMission } from "../../apps/guildhall/src/worker/executionOrchestrator";
+import { handleDemoRallyRoute } from "../../apps/guildhall/src/worker/demoRally";
 import type { MissionCoordinator } from "../../apps/guildhall/src/worker/durable/MissionCoordinator";
 import type { GuildhallEnv } from "../../apps/guildhall/src/worker/types";
 import {
@@ -56,6 +57,7 @@ const PLAN_ID = "cccccccc-cccc-4ccc-8ccc-ccccccccccc2";
 const FINDINGS_CRITERION = "dddddddd-dddd-4ddd-8ddd-ddddddddddd1";
 const PLAN_CRITERION = "dddddddd-dddd-4ddd-8ddd-ddddddddddd2";
 const FIXTURE_DIGEST = "geKBB1Pr83xZU8RzZaoC-YcNy6MO2jw3lB_lupUQQ58";
+const RALLY_SECRET = "test-rally-secret-with-at-least-thirty-two-characters";
 const worker = (exports as unknown as { default: Fetcher }).default;
 
 describe("live WebMCP to A2A party formation", () => {
@@ -78,7 +80,10 @@ describe("live WebMCP to A2A party formation", () => {
         },
       },
       secureContext: true,
-      handler: browserHandler(owner),
+      handler: browserHandler(owner, {
+        scout: scout.env,
+        scribe: scribe.env,
+      }),
     });
     expect(webMcp).toMatchObject({ status: "registered" });
 
@@ -171,11 +176,29 @@ describe("live WebMCP to A2A party formation", () => {
       missionId,
     );
 
-    await runHostedAgentSchedule("scout", scout.env);
+    const rallyStartedAt = performance.now();
+    const formationRally = await executeTool(
+      tools,
+      "guild.rally_reference_party",
+      { missionId },
+    );
+    expect(formationRally).toMatchObject({
+      provenance: {
+        transport: "webmcp",
+        trusted: true,
+        actionName: "guild.rally_reference_party",
+      },
+      data: {
+        result: { coordination: "independent-signed-a2a" },
+      },
+    });
     let recruiting = await missionPacket(missionId);
     expect(recruiting.snapshot).toMatchObject({
-      stage: "PREPARE",
-      applicationAgentIds: [hostedIdentity("scout").agentId],
+      stage: "RESERVE",
+      applicationAgentIds: [
+        hostedIdentity("scout").agentId,
+        hostedIdentity("scribe").agentId,
+      ],
     });
     expect(
       await derivePartyFormation(
@@ -188,10 +211,12 @@ describe("live WebMCP to A2A party formation", () => {
       selection: {
         minimumSatisfied: true,
         oneHelperFallbackUsed: false,
-        selectedAgentIds: [hostedIdentity("scout").agentId],
+        selectedAgentIds: [
+          hostedIdentity("scout").agentId,
+          hostedIdentity("scribe").agentId,
+        ],
       },
     });
-    await runHostedAgentSchedule("scribe", scribe.env);
 
     let packet = await missionPacket(missionId);
     expect(packet.snapshot).toMatchObject({
@@ -208,11 +233,6 @@ describe("live WebMCP to A2A party formation", () => {
         canProceed: true,
       },
     });
-    await runHostedAgentSchedule("scout", scout.env);
-    packet = await missionPacket(missionId);
-    expect(packet.snapshot.capabilityBids).toHaveLength(1);
-    await runHostedAgentSchedule("scribe", scribe.env);
-    packet = await missionPacket(missionId);
     expect(packet.snapshot.capabilityBids).toHaveLength(2);
     const roundOne = allocationInput(
       packet,
@@ -231,11 +251,7 @@ describe("live WebMCP to A2A party formation", () => {
       data: { pactVersion: 1, displayState: "Negotiating" },
     });
 
-    packet = await missionPacket(missionId);
-    await runHostedAgentSchedule("scout", scout.env);
-    packet = await missionPacket(missionId);
-    expect(packet.snapshot.assignmentProposals).toHaveLength(1);
-    await runHostedAgentSchedule("scribe", scribe.env);
+    await executeTool(tools, "guild.rally_reference_party", { missionId });
     packet = await missionPacket(missionId);
 
     const candidate = requiredRecord(packet.snapshot, "candidatePact");
@@ -252,6 +268,12 @@ describe("live WebMCP to A2A party formation", () => {
       },
     });
     expect(packet.snapshot.assignmentProposals).toHaveLength(2);
+    expect(Object.keys(requiredRecord(packet.snapshot, "acceptances"))).toEqual(
+      expect.arrayContaining([
+        hostedIdentity("scout").agentId,
+        hostedIdentity("scribe").agentId,
+      ]),
+    );
     expect(await canonicalJsonDigest(pact)).toBe(pactDigest);
     expect(packet.snapshot.proposalHistory).toHaveLength(2);
 
@@ -266,21 +288,7 @@ describe("live WebMCP to A2A party formation", () => {
       provenance: { transport: "webmcp", trusted: true },
     });
     packet = await missionPacket(missionId);
-    await runHostedAgentSchedule("scout", scout.env);
-    packet = await missionPacket(missionId);
-    expect(requiredRecord(packet.snapshot, "acceptances")).toHaveProperty(
-      hostedIdentity("scout").agentId,
-    );
-    expect(requiredRecord(packet.snapshot, "acceptances")).not.toHaveProperty(
-      hostedIdentity("scribe").agentId,
-    );
-    const sequenceAfterScoutAcceptance = packet.latestSequence;
-    await runHostedAgentSchedule("scout", scout.env);
-    packet = await missionPacket(missionId);
-    expect(packet.latestSequence).toBe(sequenceAfterScoutAcceptance);
-    await runHostedAgentSchedule("scribe", scribe.env);
-
-    packet = await missionPacket(missionId);
+    expect(performance.now() - rallyStartedAt).toBeLessThan(90_000);
     const acceptances = Object.values(
       requiredRecord(packet.snapshot, "acceptances"),
     ) as Array<Record<string, unknown>>;
@@ -544,7 +552,13 @@ interface BrowserOwner {
   readonly privateKey: CryptoKey;
 }
 
-function browserHandler(owner: BrowserOwner) {
+function browserHandler(
+  owner: BrowserOwner,
+  rallyAgents?: Readonly<{
+    scout: HostedAgentEnv;
+    scribe: HostedAgentEnv;
+  }>,
+) {
   return async (
     input: Readonly<Record<string, unknown>>,
     context: CapabilityInvocationContext,
@@ -573,6 +587,42 @@ function browserHandler(owner: BrowserOwner) {
         },
       );
       return normalizeMutation(mission.missionId, result);
+    }
+    if (context.actionName === "guild.rally_reference_party") {
+      if (rallyAgents === undefined) {
+        throw new TypeError("The browser fixture has no reference party");
+      }
+      const response = await handleDemoRallyRoute(
+        new Request(`${ORIGIN}/api/demo/rally`, {
+          method: "POST",
+          headers: { ...owner.headers, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            missionId: requiredString(input, "missionId"),
+            requesterAgentId: REQUESTER_ID,
+            commandId: context.commandId,
+          }),
+        }),
+        {
+          GUILD_DB: env.GUILD_DB,
+          MISSIONS: env.MISSIONS,
+          PUBLIC_ORIGIN: ORIGIN,
+          GITHUB_CLIENT_ID: "test-client-id",
+          GITHUB_CLIENT_SECRET: "test-only-placeholder-value",
+          AUTH_COOKIE_SECRET:
+            "test-only-cookie-secret-with-at-least-thirty-two-characters",
+          SCOUT_A2A_URL: "https://scout.guildhall.test/a2a/v1",
+          SCRIBE_A2A_URL: "https://scribe.guildhall.test/a2a/v1",
+          WARDEN_A2A_URL: "https://warden.guildhall.test/a2a/v1",
+          GUILD_DEMO_RALLY_SECRET: RALLY_SECRET,
+        },
+        referenceRallyFetch(rallyAgents),
+      );
+      if (response === null || !response.ok) {
+        throw new Error(
+          `Reference rally failed with ${response?.status ?? 404}`,
+        );
+      }
+      return requiredRecord({ value: await response.json() }, "value");
     }
     if (context.actionName === "guild.propose_allocation") {
       if (requiredString(input, "negotiationStep") !== "requester-proposal") {
@@ -768,7 +818,27 @@ async function seedHostedAgent(
       GUILD_BROKER_URL: `${ORIGIN}/a2a/guild/v1`,
       GUILD_AGENT_CREDENTIAL: credential,
       HOSTED_AGENT_PRIVATE_JWK: JSON.stringify(TEST_PRIVATE_JWKS[kind]),
+      HOSTED_AGENT_PUBLIC_KEY_X: String(identity.publicJwk.x),
+      HOSTED_AGENT_KEY_ID: identity.keyId,
+      GUILD_DEMO_RALLY_SECRET: RALLY_SECRET,
     },
+  };
+}
+
+function referenceRallyFetch(
+  agents: Readonly<{ scout: HostedAgentEnv; scribe: HostedAgentEnv }>,
+): typeof globalThis.fetch {
+  const workers = {
+    scout: createAgentWorker("scout", { fetch: localWorkerFetch }),
+    scribe: createAgentWorker("scribe", { fetch: localWorkerFetch }),
+  } as const;
+  return async (input, init) => {
+    const request = new Request(input, { ...init, redirect: "manual" });
+    const kind = new URL(request.url).hostname.split(".")[0];
+    if (kind !== "scout" && kind !== "scribe") {
+      return Response.json({ error: "NOT_FOUND" }, { status: 404 });
+    }
+    return workers[kind].fetch(request, agents[kind]);
   };
 }
 

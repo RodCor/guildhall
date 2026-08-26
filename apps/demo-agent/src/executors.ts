@@ -31,6 +31,8 @@ const DIGEST_PATTERN = /^[A-Za-z0-9_-]{43}$/u;
 
 export interface HostedExecutorOptions {
   readonly privateJwk: JsonWebKey;
+  readonly publicKeyX?: string;
+  readonly keyId?: string;
   readonly origin: string;
   readonly now?: () => Date;
 }
@@ -68,6 +70,7 @@ async function executeScout(
   const artifact = await createSignedArtifact({
     kind: "scout",
     privateJwk: options.privateJwk,
+    ...identityOverrides(options),
     origin: options.origin,
     completedAt: now().toISOString(),
     missionId: context.contextId,
@@ -108,6 +111,7 @@ async function executeScribe(
   const artifact = await createSignedArtifact({
     kind: "scribe",
     privateJwk: options.privateJwk,
+    ...identityOverrides(options),
     origin: options.origin,
     completedAt: now().toISOString(),
     missionId: context.contextId,
@@ -173,6 +177,7 @@ async function executeWarden(
   const completedAt = now().toISOString();
   const replacementProof = await createSignedReplacementProof({
     privateJwk: options.privateJwk,
+    ...identityOverrides(options),
     acceptedAt: completedAt,
     missionId: context.contextId,
     pactDigest: proof.pactDigest,
@@ -204,6 +209,7 @@ async function executeWarden(
   const signedArtifact = await createSignedArtifact({
     kind: "warden",
     privateJwk: options.privateJwk,
+    ...identityOverrides(options),
     origin: options.origin,
     completedAt,
     missionId: context.contextId,
@@ -241,6 +247,18 @@ function completedResult(
       guildMissionVerification: "pending",
       primaryArtifactId: artifactId,
     },
+  };
+}
+
+function identityOverrides(options: HostedExecutorOptions): {
+  readonly publicKeyX?: string;
+  readonly keyId?: string;
+} {
+  return {
+    ...(options.publicKeyX === undefined
+      ? {}
+      : { publicKeyX: options.publicKeyX }),
+    ...(options.keyId === undefined ? {} : { keyId: options.keyId }),
   };
 }
 

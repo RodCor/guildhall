@@ -18,9 +18,13 @@ export interface GuildConnection {
   readonly brokerBaseUrl: string;
   readonly credential: string;
   readonly privateJwk: string;
+  readonly publicKeyX?: string;
+  readonly keyId?: string;
   readonly fetch?: typeof globalThis.fetch;
   readonly allowInsecureHttp?: boolean;
   readonly now?: () => Date;
+  /** Restricts an on-demand rally to one explicitly requested public mission. */
+  readonly targetMissionId?: string;
 }
 
 export interface GuildApplication {
@@ -44,6 +48,18 @@ export interface AutonomousRecruitmentResult {
     | "assignment-proposal"
     | "pact-acceptance";
   readonly reason?: "no-matching-mission" | "already-applied";
+}
+
+class GuildRecruitmentStageError extends Error {
+  readonly recruitmentErrorCode: string;
+
+  constructor(recruitmentErrorCode: string, cause: unknown) {
+    super("Autonomous Guild recruitment failed at a bounded protocol stage.", {
+      cause,
+    });
+    this.name = "GuildRecruitmentStageError";
+    this.recruitmentErrorCode = recruitmentErrorCode;
+  }
 }
 
 const INTERESTS: Readonly<Record<HostedAgentKind, readonly string[]>> = {
@@ -78,6 +94,12 @@ export async function autonomouslyJoinGuildMission(
     for (const cardValue of missions) {
       const card = record(cardValue);
       if (card === null || typeof card.missionId !== "string") continue;
+      if (
+        connection.targetMissionId !== undefined &&
+        card.missionId !== connection.targetMissionId
+      ) {
+        continue;
+      }
       const packet = await publicRecord(
         fetchImpl,
         new URL(
@@ -87,7 +109,11 @@ export async function autonomouslyJoinGuildMission(
       );
       const snapshot = record(packet.snapshot);
       const definition = record(packet.definition);
-      const identity = hostedIdentity(kind);
+      const identity = hostedIdentity(
+        kind,
+        connection.publicKeyX,
+        connection.keyId,
+      );
       if (snapshot === null || definition === null) continue;
       const applications = Array.isArray(snapshot.applicationAgentIds)
         ? snapshot.applicationAgentIds
@@ -158,13 +184,23 @@ async function advanceNegotiatingMission(
     for (const cardValue of missions) {
       const card = record(cardValue);
       if (card === null || typeof card.missionId !== "string") continue;
+      if (
+        connection.targetMissionId !== undefined &&
+        card.missionId !== connection.targetMissionId
+      ) {
+        continue;
+      }
       const packet = await publicRecord(
         fetchImpl,
         new URL(`/api/missions/${encodeURIComponent(card.missionId)}`, origin),
       );
       const snapshot = record(packet.snapshot);
       const definition = record(packet.definition);
-      const identity = hostedIdentity(kind);
+      const identity = hostedIdentity(
+        kind,
+        connection.publicKeyX,
+        connection.keyId,
+      );
       if (snapshot === null || definition === null) continue;
       const selectedHelperIds = stringValues(snapshot.selectedHelperIds);
       if (!selectedHelperIds.includes(identity.agentId)) continue;
@@ -513,7 +549,12 @@ export async function acceptGuildPact(
     readonly pactDigest: string;
   },
 ): Promise<A2ASendMessageResponse> {
-  const privateJwk = parseHostedPrivateJwk(kind, connection.privateJwk);
+  const privateJwk = parseHostedPrivateJwk(
+    kind,
+    connection.privateJwk,
+    connection.publicKeyX,
+    connection.keyId,
+  );
   const acceptedAt = (connection.now?.() ?? new Date()).toISOString();
   return sendGuildAction(kind, connection, {
     action: "guild.accept_pact",
@@ -537,41 +578,62 @@ export async function sendGuildAction(
     readonly commitment?: JsonObject;
   },
 ): Promise<A2ASendMessageResponse> {
-  const identity = hostedIdentity(kind);
-  const privateJwk = parseHostedPrivateJwk(kind, connection.privateJwk);
+  let identity: ReturnType<typeof hostedIdentity>;
+  let privateJwk: JsonWebKey;
+  try {
+    identity = hostedIdentity(kind, connection.publicKeyX, connection.keyId);
+    privateJwk = parseHostedPrivateJwk(
+      kind,
+      connection.privateJwk,
+      connection.publicKeyX,
+      connection.keyId,
+    );
+  } catch (error) {
+    throw new GuildRecruitmentStageError("IDENTITY_MATERIAL", error);
+  }
   const messageId = crypto.randomUUID();
   const input = { ...request.input, commandId: messageId };
-  const client = createA2AHttpJsonClient({
-    baseUrl: connection.brokerBaseUrl,
-    ...(connection.allowInsecureHttp === undefined
-      ? {}
-      : { allowInsecureHttp: connection.allowInsecureHttp }),
-    fetch: signedGuildFetch({
-      credential: connection.credential,
-      keyId: identity.keyId,
-      privateJwk,
-      fetch: connection.fetch ?? globalThis.fetch,
-      ...(connection.now === undefined ? {} : { now: connection.now }),
-    }),
-  });
-  return client.sendMessage({
-    message: {
-      messageId,
-      contextId: request.missionId,
-      role: "ROLE_USER",
-      parts: [{ data: input, mediaType: "application/json" }],
-      metadata: {
-        [COMMITMENT_V1_EXTENSION_URI]: {
-          protocol: "commitment/v1",
-          action: request.action,
-          missionId: request.missionId,
-          agentId: identity.agentId,
-          ...(request.commitment ?? {}),
+  let client: ReturnType<typeof createA2AHttpJsonClient>;
+  try {
+    client = createA2AHttpJsonClient({
+      baseUrl: connection.brokerBaseUrl,
+      ...(connection.allowInsecureHttp === undefined
+        ? {}
+        : { allowInsecureHttp: connection.allowInsecureHttp }),
+      fetch: signedGuildFetch({
+        credential: connection.credential,
+        keyId: identity.keyId,
+        privateJwk,
+        fetch: connection.fetch ?? globalThis.fetch,
+        ...(connection.now === undefined ? {} : { now: connection.now }),
+      }),
+    });
+  } catch (error) {
+    throw new GuildRecruitmentStageError("A2A_CLIENT_SETUP", error);
+  }
+  try {
+    return await client.sendMessage({
+      message: {
+        messageId,
+        contextId: request.missionId,
+        role: "ROLE_USER",
+        parts: [{ data: input, mediaType: "application/json" }],
+        metadata: {
+          [COMMITMENT_V1_EXTENSION_URI]: {
+            protocol: "commitment/v1",
+            action: request.action,
+            missionId: request.missionId,
+            agentId: identity.agentId,
+            ...(request.commitment ?? {}),
+          },
         },
+        extensions: [COMMITMENT_V1_EXTENSION_URI],
       },
-      extensions: [COMMITMENT_V1_EXTENSION_URI],
-    },
-  });
+    });
+  } catch (error) {
+    if (isRecruitmentStageError(error) || hasHttpStatus(error)) throw error;
+    throw new GuildRecruitmentStageError("A2A_REQUEST_VALIDATE", error);
+  }
 }
 
 function signedGuildFetch(input: {
@@ -582,33 +644,71 @@ function signedGuildFetch(input: {
   readonly now?: () => Date;
 }): typeof globalThis.fetch {
   return async (resource, init) => {
-    const url = new URL(
-      typeof resource === "string" || resource instanceof URL
-        ? resource.toString()
-        : resource.url,
-    );
-    const method = init?.method ?? "GET";
-    const bodyText = typeof init?.body === "string" ? init.body : "";
-    const issuedAt = (input.now?.() ?? new Date()).toISOString();
-    const nonce = randomNonce();
-    const message = new TextEncoder().encode(
-      createAgentRequestSignatureMessage({
-        method,
-        requestTarget: `${url.pathname}${url.search}`,
-        bodyText,
-        issuedAt,
-        nonce,
-      }),
-    );
-    const signature = await sign(input.privateJwk, message);
-    const headers = new Headers(init?.headers);
-    headers.set("Authorization", `GuildNode ${input.credential}`);
-    headers.set("X-Guild-Key-Id", input.keyId);
-    headers.set("X-Guild-Issued-At", issuedAt);
-    headers.set("X-Guild-Nonce", nonce);
-    headers.set("X-Guild-Signature", signature);
-    return input.fetch(resource, { ...init, headers });
+    let url: URL;
+    let issuedAt: string;
+    let nonce: string;
+    let message: Uint8Array;
+    try {
+      url = new URL(
+        typeof resource === "string" || resource instanceof URL
+          ? resource.toString()
+          : resource.url,
+      );
+      const method = init?.method ?? "GET";
+      const bodyText = typeof init?.body === "string" ? init.body : "";
+      issuedAt = (input.now?.() ?? new Date()).toISOString();
+      nonce = randomNonce();
+      message = new TextEncoder().encode(
+        createAgentRequestSignatureMessage({
+          method,
+          requestTarget: `${url.pathname}${url.search}`,
+          bodyText,
+          issuedAt,
+          nonce,
+        }),
+      );
+    } catch (error) {
+      throw new GuildRecruitmentStageError("A2A_REQUEST_BUILD", error);
+    }
+    let signature: string;
+    try {
+      signature = await sign(input.privateJwk, message);
+    } catch (error) {
+      throw new GuildRecruitmentStageError("SIGNATURE_CREATE", error);
+    }
+    let headers: Headers;
+    try {
+      headers = new Headers(init?.headers);
+      headers.set("Authorization", `GuildNode ${input.credential}`);
+      headers.set("X-Guild-Key-Id", input.keyId);
+      headers.set("X-Guild-Issued-At", issuedAt);
+      headers.set("X-Guild-Nonce", nonce);
+      headers.set("X-Guild-Signature", signature);
+    } catch (error) {
+      throw new GuildRecruitmentStageError("A2A_REQUEST_HEADERS", error);
+    }
+    try {
+      return await input.fetch(resource, { ...init, headers });
+    } catch (error) {
+      throw new GuildRecruitmentStageError("A2A_TRANSPORT", error);
+    }
   };
+}
+
+function isRecruitmentStageError(
+  error: unknown,
+): error is GuildRecruitmentStageError {
+  return error instanceof GuildRecruitmentStageError;
+}
+
+function hasHttpStatus(
+  error: unknown,
+): error is { readonly httpStatus: number } {
+  return (
+    error !== null &&
+    typeof error === "object" &&
+    typeof (error as { readonly httpStatus?: unknown }).httpStatus === "number"
+  );
 }
 
 async function sign(

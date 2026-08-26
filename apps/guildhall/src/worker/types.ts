@@ -14,4 +14,5 @@ export interface GuildhallEnv {
   SCOUT_A2A_URL?: string;
   SCRIBE_A2A_URL?: string;
   WARDEN_A2A_URL?: string;
+  GUILD_DEMO_RALLY_SECRET?: string;
 }

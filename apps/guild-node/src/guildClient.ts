@@ -84,6 +84,19 @@ export class GuildClient {
         );
       case "guild.publish_mission":
         return this.#publish(input, signal);
+      case "guild.rally_reference_party": {
+        const config = await this.#paired();
+        return this.#signedJson(
+          "POST",
+          "/api/demo/rally",
+          {
+            missionId: requiredString(input, "missionId"),
+            requesterAgentId: config.agentId,
+            commandId: commandId(input),
+          },
+          signal,
+        );
+      }
       case "guild.apply_to_mission": {
         const config = await this.#paired();
         return this.#command(

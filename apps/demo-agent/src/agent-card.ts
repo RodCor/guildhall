@@ -77,9 +77,11 @@ const profiles: Readonly<Record<HostedAgentKind, HostedAgentProfile>> = {
 export function buildAgentCard(
   kind: HostedAgentKind,
   origin: string,
+  publicKeyX?: string,
+  keyId?: string,
 ): A2AAgentCard {
   const profile = profiles[kind];
-  const identity = hostedIdentity(kind);
+  const identity = hostedIdentity(kind, publicKeyX, keyId);
   const base = createA2AAgentCard({
     name: profile.displayName,
     description: profile.description,

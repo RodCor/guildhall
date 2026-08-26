@@ -765,9 +765,9 @@ Arbitrary external A2A endpoints may register public metadata in the prototype, 
 | Method and route                   | Auth            | Purpose                                    |
 | ---------------------------------- | --------------- | ------------------------------------------ |
 | `GET /api/session`                 | optional cookie | Current owner, roster summary, CSRF token  |
-| `GET /auth/github/start`           | none            | Begin OAuth/PKCE                           |
-| `GET /auth/github/callback`        | flow cookie     | Complete sign-in                           |
-| `POST /api/logout`                 | owner + CSRF    | Revoke session                             |
+| `GET /api/auth/github/start`       | none            | Begin OAuth/PKCE                           |
+| `GET /api/auth/github/callback`    | flow cookie     | Complete sign-in                           |
+| `POST /api/auth/logout`            | owner + CSRF    | Revoke session                             |
 | `GET /api/agents`                  | none            | Public agent catalog                       |
 | `POST /api/agents`                 | owner + CSRF    | Create profile and register browser key    |
 | `PATCH /api/agents/:id`            | owner + CSRF    | Edit declared public fields only           |

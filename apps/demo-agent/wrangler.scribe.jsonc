@@ -4,10 +4,26 @@
   "main": "src/scribe.ts",
   // Required: pnpm wrangler secret put HOSTED_AGENT_PRIVATE_JWK --config wrangler.scribe.jsonc
   "compatibility_date": "2026-08-26",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "secrets": {
+    "required": [
+      "HOSTED_AGENT_PRIVATE_JWK",
+      "HOSTED_AGENT_PUBLIC_KEY_X",
+      "HOSTED_AGENT_KEY_ID",
+      "GUILD_BROKER_URL",
+      "GUILD_AGENT_CREDENTIAL",
+      "GUILD_DEMO_RALLY_SECRET",
+    ],
+  },
   "triggers": {
     "crons": ["*/5 * * * *"],
   },
+  "services": [
+    {
+      "binding": "GUILDHALL_SERVICE",
+      "service": "guildhall",
+    },
+  ],
   "durable_objects": {
     "bindings": [
       {

@@ -120,7 +120,7 @@ export function App() {
           </ul>
         </section>
 
-        <TechnicalMission />
+        <TechnicalMission activeAgentId={activeAgentId} />
       </main>
 
       <footer>

@@ -373,7 +373,7 @@ describe("Workers-native A2A 1.0 HTTP+JSON adapter", () => {
       expect(new Headers(init?.headers).get(A2A_EXTENSIONS_HEADER)).toBe(
         COMMITMENT_V1_EXTENSION_URI,
       );
-      expect(init?.redirect).toBe("error");
+      expect(init?.redirect).toBe("manual");
       const response = await worker.fetch(new Request(input, init));
       const headers = new Headers(response.headers);
       // Official SDK servers need not echo A2A-Version on responses.
@@ -530,6 +530,22 @@ describe("Workers-native A2A 1.0 HTTP+JSON adapter", () => {
         allowedOrigins: ["https://other.test"],
       }),
     ).toThrow(/not allowed/u);
+
+    const redirectFetch = vi.fn<typeof globalThis.fetch>(async () =>
+      Response.redirect("https://other.test/a2a/v1/tasks/task-1", 302),
+    );
+    const redirectClient = createA2AHttpJsonClient({
+      baseUrl: "https://agent.test/a2a/v1",
+      fetch: redirectFetch,
+    });
+    await expect(redirectClient.getTask("task-1")).rejects.toMatchObject({
+      httpStatus: 302,
+      message: "A2A redirects are not allowed.",
+    });
+    expect(redirectFetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ redirect: "manual" }),
+    );
 
     const nonJson = createA2AHttpJsonClient({
       baseUrl: "https://agent.test/a2a/v1",

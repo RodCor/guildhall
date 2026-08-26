@@ -874,6 +874,13 @@ footer {
   gap: 10px;
 }
 
+.demo-progress {
+  max-width: 34rem;
+  color: var(--gold-bright);
+  font-size: 0.75rem;
+  text-align: right;
+}
+
 .stream-chip {
   display: inline-flex;
   align-items: center;
@@ -1744,6 +1751,10 @@ footer p {
 
   .stream-chip {
     justify-self: start;
+  }
+
+  .demo-progress {
+    text-align: left;
   }
 
   .replay-controls,

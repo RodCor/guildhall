@@ -7,6 +7,7 @@ interface OwnerSession {
     readonly login: string;
     readonly avatarUrl: string | null;
   };
+  readonly agents: readonly AgentSummary[];
 }
 
 interface AgentSummary {
@@ -30,9 +31,15 @@ export function OwnerGateway({
     void fetch("/api/session", { credentials: "same-origin" })
       .then(async (response) => {
         if (!active) return;
-        setSession(
-          response.ok ? ((await response.json()) as OwnerSession) : null,
-        );
+        if (!response.ok) {
+          setSession(null);
+          return;
+        }
+        const restored = (await response.json()) as OwnerSession;
+        setSession(restored);
+        const browserAgent = restored.agents[0] ?? null;
+        setAgent(browserAgent);
+        onAgentChange(browserAgent?.agentId ?? null);
       })
       .catch(() => {
         if (active) setSession(null);
@@ -43,7 +50,7 @@ export function OwnerGateway({
     return () => {
       active = false;
     };
-  }, []);
+  }, [onAgentChange]);
 
   async function signOut() {
     setBusy(true);

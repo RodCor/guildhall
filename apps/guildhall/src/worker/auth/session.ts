@@ -81,6 +81,21 @@ export async function handleSessionRoute(
   if (url.pathname === "/api/session" && request.method === "GET") {
     const authorization = await authenticateOwner(request, env);
     if (!authorization.ok) return authorization.response;
+    const browserAgents = await env.GUILD_DB.prepare(
+      `SELECT agents.agent_id, agents.character_name, agent_keys.key_id
+         FROM agents
+         INNER JOIN agent_keys ON agent_keys.agent_id = agents.agent_id
+        WHERE agents.owner_id = ?
+          AND agent_keys.source = 'browser'
+          AND agent_keys.status = 'active'
+        ORDER BY agents.created_at, agents.agent_id`,
+    )
+      .bind(authorization.principal.ownerId)
+      .all<{
+        agent_id: string;
+        character_name: string;
+        key_id: string;
+      }>();
     return noStoreJson({
       authenticated: true,
       owner: {
@@ -89,6 +104,11 @@ export async function handleSessionRoute(
         login: authorization.principal.githubLogin,
         avatarUrl: authorization.principal.githubAvatarUrl,
       },
+      agents: browserAgents.results.map((agent) => ({
+        agentId: agent.agent_id,
+        characterName: agent.character_name,
+        keyId: agent.key_id,
+      })),
       expiresAt: authorization.principal.sessionExpiresAt,
     });
   }
