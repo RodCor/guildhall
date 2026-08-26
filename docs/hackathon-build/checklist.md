@@ -79,7 +79,7 @@ Status: **Locked**
       Acceptance: Valid Scout output survives Scribe's default; Warden accepts unchanged work without a silent pact edit; active helpers never exceed two; points appear only after all required criteria pass; a failed mission gets no success XP; every rank delta links to one receipt and applies once.
       Verify: Run `pnpm test:execution-e2e`, `pnpm test:verification`, and `pnpm test:reputation`; replay the injected-failure event stream and verify its receipt/event-chain head independently.
 
-- [ ] **10. Build the public guild, live mission chamber, and replay payoff**
+- [x] **10. Build the public guild, live mission chamber, and replay payoff**
       Spec ref: `spec.md > Components And Responsibilities > Guildhall React Client` and `spec.md > Demo And Submission Flow > Live demo`
       What to build: Terra High owns route/data architecture for signed-out Guild Board, owner roster, character/technical agent profile, mission chamber, leaderboards, receipts, snapshot/WebSocket resume, and deterministic replay controls. Luna High owns original fantasy visual tokens, responsive cards, empty states, state badges, work-map transitions, failure/replacement presentation, XP/rank animation, and accessibility checks without proprietary Dungeons & Dragons assets.
       Acceptance: Signed-out visitors can understand and inspect the network; empty state includes reference agents and replay; fantasy labels reveal technical meaning; live state restores after reopening; the visual emphasis is work division and the reward animation never precedes verified receipt creation.

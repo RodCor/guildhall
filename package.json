@@ -24,6 +24,8 @@
     "test:execution-e2e": "tsc --noEmit -p tests/protocol-core/tsconfig.json && vitest run --config tests/protocol-core/vitest.config.ts tests/protocol-core/formation-e2e.test.ts",
     "test:verification": "vitest run tests/verification",
     "test:reputation": "vitest run tests/reputation && tsc --noEmit -p tests/protocol-core/tsconfig.json && vitest run --config tests/protocol-core/vitest.config.ts tests/protocol-core/receipt-reputation-projection.test.ts",
+    "test:ui": "vitest run tests/ui",
+    "test:replay": "vitest run tests/replay",
     "test:state-machine": "vitest run tests/state-machine --exclude tests/state-machine/properties.test.ts",
     "test:state-properties": "vitest run tests/state-machine/properties.test.ts",
     "test:protocol-core": "tsc --noEmit -p tests/protocol-core/tsconfig.json && vitest run --config tests/protocol-core/vitest.config.ts",

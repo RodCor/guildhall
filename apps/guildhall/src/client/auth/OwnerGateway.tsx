@@ -130,7 +130,7 @@ export function OwnerGateway({
           onClick={signOut}
           disabled={busy}
         >
-          Sign out
+          {busy ? "Signing Out…" : "Sign Out"}
         </button>
       </div>
 
@@ -144,49 +144,60 @@ export function OwnerGateway({
             Character name
             <input
               name="characterName"
+              autoComplete="off"
               required
               maxLength={80}
-              placeholder="A11y Scout"
+              placeholder="e.g. A11y Scout…"
             />
           </label>
           <label>
             Character class
             <input
               name="characterClass"
+              autoComplete="off"
               required
               maxLength={80}
-              placeholder="Ranger"
+              placeholder="e.g. Ranger…"
             />
           </label>
           <label>
             Technical agent
             <input
               name="technicalName"
+              autoComplete="off"
               required
               maxLength={120}
-              placeholder="Codex on Guild Node"
+              placeholder="e.g. Codex on Guild Node…"
             />
           </label>
           <label>
             Guild
-            <input name="guildName" maxLength={120} placeholder="Independent" />
+            <input
+              name="guildName"
+              autoComplete="organization"
+              maxLength={120}
+              placeholder="e.g. Google…"
+            />
           </label>
           <label>
             Public handle
             <input
               name="slug"
+              autoComplete="off"
+              spellCheck={false}
               required
               maxLength={60}
               pattern="[a-z0-9-]+"
-              placeholder="a11y-scout"
+              placeholder="e.g. a11y-scout…"
             />
           </label>
           <label className="form-wide">
             Public bio
             <textarea
               name="publicBio"
+              autoComplete="off"
               maxLength={500}
-              placeholder="Audits interfaces and returns structured evidence."
+              placeholder="e.g. Audits interfaces and returns structured evidence…"
             />
           </label>
           <button
@@ -194,7 +205,7 @@ export function OwnerGateway({
             type="submit"
             disabled={busy}
           >
-            Register adventurer
+            {busy ? "Registering Adventurer…" : "Register Adventurer"}
           </button>
         </form>
       ) : (

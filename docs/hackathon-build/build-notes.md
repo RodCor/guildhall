@@ -335,3 +335,21 @@
 - `pnpm test:verification` passed 12 deterministic verifier tests, including fixture-digest substitution rejection.
 - `pnpm test:reputation` passed 9 pure scoring tests and 3 Workers/D1 projection tests.
 - `pnpm check` passed every strict workspace typecheck and formatting check. The final scoped gates include 31 standard plus 2 Durable A2A tests and 9 Workers-runtime files / 36 protocol tests.
+
+## 2026-08-26 — Build item 10: public guild and live mission chamber
+
+### Implemented
+
+- Rebuilt the signed-out Guildhall as an original tabletop-fantasy public experience: a quest board, ranked adventurer roster, owner gate, character/technical profile lens, protocol legend, and live mission chamber without proprietary game assets.
+- Added public mission and agent catalog loading, deep-linkable mission/lens/replay state, resumable WebSocket event streaming, ordered event merge/deduplication, automatic reconnect, and polling fallback.
+- Added deterministic replay controls, replay-gated work-slot transitions, explicit default-to-replacement storytelling, preserved Scout evidence, an inspectable technical ledger, and a reward chest that cannot unlock before the receipt event.
+- Added a clearly labeled reference rehearsal for an empty deployment. It introduces Scout, Scribe, Warden, and the complete narrative while explicitly stating that it is not live ledger proof.
+- Added responsive layouts, visible keyboard focus, semantic controls, reduced-motion behavior, public error recovery, compact numeric formatting, and mobile-safe mission/profile inspectors.
+
+### Verification
+
+- `pnpm test:ui` passed 2 tests covering the live work split, exact-slot replacement, preserved Scout artifact, and reconnect event deduplication.
+- `pnpm test:replay` passed 3 tests covering deterministic slicing, narrative state, and receipt-gated reward visibility.
+- The complete `pnpm check` gate passed 23 standard files / 196 tests and 9 Workers-runtime files / 36 tests, with all workspace typechecks and formatting checks green.
+- `pnpm build` completed all Guildhall and independent Scout/Scribe/Warden production bundles.
+- Chrome renders were inspected at 1440 px and an emulated 390 px touch viewport. The hero, empty quest board, reference party, chronicle, owner gate, navigation, and live chamber remained readable without horizontal clipping.
