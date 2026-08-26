@@ -9,6 +9,9 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@guildhall/contracts": "workspace:*",
+    "@guildhall/mission-engine": "workspace:*",
+    "@guildhall/trust-engine": "workspace:*",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },

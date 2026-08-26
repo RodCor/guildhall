@@ -1,1 +1,3 @@
-export const trustEngineStatus = "bootstrap" as const;
+export * from "./eventHashChain.js";
+
+export const trustEngineStatus = "event-chain" as const;

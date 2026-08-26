@@ -7,6 +7,28 @@
   "observability": {
     "enabled": true,
   },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "MISSIONS",
+        "class_name": "MissionCoordinator",
+      },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["MissionCoordinator"],
+    },
+  ],
+  "d1_databases": [
+    {
+      "binding": "GUILD_DB",
+      "database_name": "guildhall",
+      "database_id": "00000000-0000-0000-0000-000000000001",
+      "migrations_dir": "../../migrations/d1",
+    },
+  ],
   "assets": {
     "directory": "./dist/client",
     "not_found_handling": "single-page-application",
