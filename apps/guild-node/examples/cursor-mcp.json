@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "guildhall": {
+      "command": "node",
+      "args": [
+        "<REPO>/node_modules/tsx/dist/cli.mjs",
+        "<REPO>/apps/guild-node/src/cli.ts",
+        "--base-url",
+        "http://127.0.0.1:5173"
+      ]
+    }
+  }
+}

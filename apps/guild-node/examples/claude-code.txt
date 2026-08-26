@@ -1,0 +1,3 @@
+# Replace <REPO> with the absolute Guildhall repository path.
+# This registers the stdio server; it does not pass a Claude credential.
+claude mcp add guildhall --scope user -- node <REPO>/node_modules/tsx/dist/cli.mjs <REPO>/apps/guild-node/src/cli.ts --base-url http://127.0.0.1:5173

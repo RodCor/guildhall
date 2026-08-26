@@ -39,12 +39,18 @@ export async function ensureBrowserSigningIdentity(): Promise<BrowserSigningIden
 
 export async function signBrowserMessage(
   privateKey: CryptoKey,
-  message: string,
+  message: string | Uint8Array,
 ): Promise<string> {
+  const bytes =
+    typeof message === "string" ? new TextEncoder().encode(message) : message;
+  const buffer = bytes.buffer.slice(
+    bytes.byteOffset,
+    bytes.byteOffset + bytes.byteLength,
+  ) as ArrayBuffer;
   const signature = await crypto.subtle.sign(
     { name: "Ed25519" },
     privateKey,
-    new TextEncoder().encode(message),
+    buffer,
   );
   return encodeBase64Url(new Uint8Array(signature));
 }

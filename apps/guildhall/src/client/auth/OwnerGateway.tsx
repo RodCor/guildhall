@@ -15,7 +15,11 @@ interface AgentSummary {
   readonly keyId: string;
 }
 
-export function OwnerGateway() {
+export function OwnerGateway({
+  onAgentChange,
+}: {
+  readonly onAgentChange: (agentId: string | null) => void;
+}) {
   const [session, setSession] = useState<OwnerSession | null>(null);
   const [agent, setAgent] = useState<AgentSummary | null>(null);
   const [busy, setBusy] = useState(true);
@@ -49,6 +53,7 @@ export function OwnerGateway() {
       if (!response.ok) throw new Error("Sign out was not accepted");
       setSession(null);
       setAgent(null);
+      onAgentChange(null);
     } catch {
       setNotice("Guild sign-out failed. Refresh and try again.");
     } finally {
@@ -77,7 +82,9 @@ export function OwnerGateway() {
         },
       });
       if (!response.ok) throw new Error("Agent registration was not accepted");
-      setAgent((await response.json()) as AgentSummary);
+      const registered = (await response.json()) as AgentSummary;
+      setAgent(registered);
+      onAgentChange(registered.agentId);
       setNotice(
         "Adventurer registered. The private signing key stayed in this browser.",
       );

@@ -1,4 +1,11 @@
-import { guildCapabilityManifest } from "./manifest.js";
+import {
+  assertCapabilityInput,
+  createCapabilityResultEnvelope,
+} from "./capabilities.js";
+import {
+  guildCapabilityManifest,
+  validateGuildCapabilityManifest,
+} from "./manifest.js";
 import type {
   CapabilityDefinition,
   CapabilityHandler,
@@ -10,7 +17,7 @@ import type {
 
 export const WEBMCP_INPUT_BYTE_LIMIT = 16_384;
 
-interface ModelContextTool {
+export interface ModelContextTool {
   readonly name: string;
   readonly title?: string;
   readonly description: string;
@@ -25,7 +32,7 @@ interface ModelContextTool {
   ) => Promise<unknown>;
 }
 
-interface ModelContextLike {
+export interface ModelContextLike {
   registerTool(
     tool: ModelContextTool,
     options?: {
@@ -124,6 +131,25 @@ function assertWithinInputLimit(
   }
 }
 
+function eventSequenceFromData(data: unknown): number | undefined {
+  if (typeof data !== "object" || data === null || Array.isArray(data)) {
+    return undefined;
+  }
+
+  const record = data as Readonly<Record<string, unknown>>;
+  for (const key of ["sequence", "resultingSequence", "latestSequence"]) {
+    const value = record[key];
+    if (
+      typeof value === "number" &&
+      Number.isSafeInteger(value) &&
+      value >= 0
+    ) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
 function scheduleReconciliation(
   reconcile: CapabilityReconciler | undefined,
   onError: RegisterWebMcpOptions["onReconciliationError"],
@@ -136,7 +162,7 @@ function scheduleReconciliation(
   void reconcile(request).catch((error: unknown) => onError?.(error, request));
 }
 
-function toWebMcpTool(
+export function toWebMcpTool(
   capability: CapabilityDefinition,
   options: RegisterWebMcpOptions,
 ): ModelContextTool {
@@ -156,6 +182,7 @@ function toWebMcpTool(
         : withCommandId(input, options.createCommandId ?? defaultCommandId);
       const canonicalInput = command?.input ?? input;
       assertWithinInputLimit(canonicalInput);
+      assertCapabilityInput(capability, canonicalInput);
 
       let reconcileQueued = false;
       const queueReconciliation = (): void => {
@@ -180,12 +207,18 @@ function toWebMcpTool(
       });
 
       try {
-        return await options.handler(canonicalInput, {
+        const data = await options.handler(canonicalInput, {
           actionName: capability.name,
           canonicalHandlerId: capability.canonicalHandlerId,
           ...(command === undefined ? {} : { commandId: command.commandId }),
           signal: executionOptions.signal,
           provenance: "webmcp",
+          provenanceTrusted: true,
+        });
+        const eventSequence = eventSequenceFromData(data);
+        return createCapabilityResultEnvelope(capability, "webmcp", data, {
+          ...(command === undefined ? {} : { commandId: command.commandId }),
+          ...(eventSequence === undefined ? {} : { eventSequence }),
         });
       } finally {
         executionOptions.signal.removeEventListener(
@@ -224,6 +257,23 @@ export async function registerGuildhallWebMcp(
     };
   }
 
+  const manifest = options.manifest ?? guildCapabilityManifest;
+  try {
+    validateGuildCapabilityManifest(manifest);
+  } catch (error: unknown) {
+    return { status: "failed", error, registrationCount: 0 };
+  }
+
+  if (options.lifetimeSignal?.aborted === true) {
+    return {
+      status: "failed",
+      error:
+        options.lifetimeSignal.reason ??
+        new DOMException("WebMCP registration lifetime ended.", "AbortError"),
+      registrationCount: 0,
+    };
+  }
+
   const controller = new AbortController();
   const abortFromLifetime = (): void =>
     controller.abort(options.lifetimeSignal?.reason);
@@ -231,18 +281,26 @@ export async function registerGuildhallWebMcp(
     once: true,
   });
 
-  if (options.lifetimeSignal?.aborted === true) {
-    abortFromLifetime();
-  }
-
   try {
-    for (const capability of options.manifest ?? guildCapabilityManifest) {
+    for (const capability of manifest) {
+      if (controller.signal.aborted) {
+        throw (
+          controller.signal.reason ??
+          new DOMException("WebMCP registration lifetime ended.", "AbortError")
+        );
+      }
       await modelContext.registerTool(toWebMcpTool(capability, options), {
         signal: controller.signal,
         ...(options.exposedTo === undefined
           ? {}
           : { exposedTo: options.exposedTo }),
       });
+    }
+    if (controller.signal.aborted) {
+      throw (
+        controller.signal.reason ??
+        new DOMException("WebMCP registration lifetime ended.", "AbortError")
+      );
     }
   } catch (error: unknown) {
     controller.abort(error);
@@ -252,7 +310,7 @@ export async function registerGuildhallWebMcp(
 
   return {
     status: "registered",
-    registrationCount: (options.manifest ?? guildCapabilityManifest).length,
+    registrationCount: manifest.length,
     signal: controller.signal,
     abort(reason?: unknown): void {
       controller.abort(reason);

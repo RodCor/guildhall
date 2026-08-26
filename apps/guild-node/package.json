@@ -4,6 +4,22 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "smoke:live": "tsx src/liveSmoke.ts",
+    "start": "tsx src/cli.ts",
+    "test": "vitest run --config vitest.config.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@guildhall/capability-manifest": "workspace:*",
+    "@guildhall/contracts": "workspace:*",
+    "@guildhall/trust-engine": "workspace:*",
+    "@modelcontextprotocol/node": "2.0.0",
+    "@modelcontextprotocol/server": "2.0.0",
+    "tsx": "4.23.12",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.0.0",
+    "vitest": "4.1.11"
   }
 }

@@ -20,6 +20,8 @@ const protocolSurfaces = [
 ] as const;
 
 export function App() {
+  const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
+
   return (
     <div className="app-shell">
       <a className="skip-link" href="#guildhall-content">
@@ -63,7 +65,8 @@ export function App() {
             </div>
           </div>
 
-          <OwnerGateway />
+          <OwnerGateway onAgentChange={setActiveAgentId} />
+          <GuildhallWebMcp activeAgentId={activeAgentId} />
         </section>
 
         <section className="surface-section" aria-labelledby="surface-title">
@@ -101,3 +104,5 @@ export function App() {
   );
 }
 import { OwnerGateway } from "./auth/OwnerGateway";
+import { GuildhallWebMcp } from "./webmcp/GuildhallWebMcp";
+import { useState } from "react";
