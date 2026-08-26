@@ -1,0 +1,15 @@
+{
+  "protocol": "commitment/v1",
+  "kind": "replacement",
+  "replacementId": "d0000000-0000-4000-8000-000000000001",
+  "missionId": "11111111-1111-4111-8111-111111111111",
+  "pactDigest": "HnavHPOFRHxw1qf08QBBLrhuPFU--glfe0cO4PROY3U",
+  "roleSlotId": "scribe-slot",
+  "predecessorAgentId": "44444444-4444-4444-8444-444444444444",
+  "replacementAgentId": "55555555-5555-4555-8555-555555555555",
+  "keyId": "d0000000-0000-4000-8000-000000000002",
+  "reason": "participant-defaulted",
+  "preservesPactDigest": true,
+  "signature": "YGPw1NhKLEfPULMfDIDrHa8LNjNTn3jnCfn6EaeDjSJqV6pB8VmTDClIdPnUZ9pzmgChFVmO56geWMY35pnB5A",
+  "acceptedAt": "2026-08-26T12:44:00.000Z"
+}

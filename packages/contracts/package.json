@@ -7,6 +7,12 @@
     ".": "./src/index.ts"
   },
   "scripts": {
+    "generate:schemas": "tsx scripts/generate-schemas.ts",
+    "test": "vitest run ../../tests/protocol/contracts.test.ts ../../tests/protocol/schema-examples.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "json-canonicalize": "3.0.0",
+    "zod": "4.4.3"
   }
 }

@@ -1,0 +1,34 @@
+{
+  "protocol": "commitment/v1",
+  "kind": "receipt",
+  "receiptId": "f0000000-0000-4000-8000-000000000001",
+  "missionId": "11111111-1111-4111-8111-111111111111",
+  "outcome": "victory",
+  "pactDigest": "HnavHPOFRHxw1qf08QBBLrhuPFU--glfe0cO4PROY3U",
+  "eventChainHead": "4MuED5wQ9DLDY4V5nbztrZYwV03_Q3VJDGk8dtETrko",
+  "artifacts": [],
+  "verification": {
+    "verificationRunId": "e0000000-0000-4000-8000-000000000001",
+    "status": "passed",
+    "criterionResults": []
+  },
+  "timeliness": {
+    "overdue": false,
+    "deliveryDeadline": "2026-08-26T13:00:00.000Z",
+    "completedAt": "2026-08-26T12:50:01.000Z"
+  },
+  "defaults": [],
+  "replacements": [],
+  "reward": {
+    "basePointsAwarded": 600,
+    "recoveryBonusAwarded": 0,
+    "totalPointsAwarded": 600,
+    "transferable": false,
+    "redeemable": false,
+    "monetaryValue": false
+  },
+  "reputationDeltas": [],
+  "issuerKeyId": "f0000000-0000-4000-8000-000000000002",
+  "issuerSignature": "geeS8OfkZu58SbruseOyMNxOx99WeNxotlKprYIsx-wJumv1iMANhB8JidULFPmTjDs-wuATE4w6vJ0URig2IA",
+  "issuedAt": "2026-08-26T12:50:02.000Z"
+}

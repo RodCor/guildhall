@@ -27,7 +27,7 @@ Status: **Locked**
       Acceptance: The workspace installs from one lockfile; a React/Worker shell and one demo-agent shell build; the A2A compatibility decision is recorded; current WebMCP names are used; no product code or state remains at `E:\` root.
       Verify: Run `pnpm install`, `pnpm check:workspace`, `pnpm build:smoke`, and `pnpm exec wrangler deploy --dry-run --config apps/guildhall/wrangler.jsonc`; confirm `git status --short` contains only intentional repository files.
 
-- [ ] **2. Implement canonical contracts, hashes, keys, and proofs**
+- [x] **2. Implement canonical contracts, hashes, keys, and proofs**
       Spec ref: `spec.md > Protocol Integrity Deep Dive > Canonical hashes and signatures` and `spec.md > File Structure > packages/contracts`
       What to build: Sol High reviews the exact `commitment/v1` invariants and signature domains; Terra High implements Zod contracts for missions, commands, events, pacts, acceptances, role slots, artifacts, verification, replacements, and receipts; RFC 8785 canonicalization; SHA-256 base64url digests; Ed25519 sign/verify helpers; generated JSON Schemas; and normative protocol examples. Luna High owns invalid/valid contract fixtures and signature test vectors.
       Acceptance: Semantically identical objects with different property order hash identically; a one-byte material change changes the digest; wrong-domain, wrong-key, revoked-key, and altered-payload proofs fail; every published schema has a passing example and a failing example.

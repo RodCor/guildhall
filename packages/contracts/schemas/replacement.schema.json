@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "protocol": {
+      "$ref": "#/$defs/__schema0"
+    },
+    "kind": {
+      "$ref": "#/$defs/__schema1"
+    },
+    "replacementId": {
+      "$ref": "#/$defs/__schema2"
+    },
+    "missionId": {
+      "$ref": "#/$defs/__schema2"
+    },
+    "pactDigest": {
+      "$ref": "#/$defs/__schema3"
+    },
+    "roleSlotId": {
+      "$ref": "#/$defs/__schema2"
+    },
+    "predecessorAgentId": {
+      "$ref": "#/$defs/__schema2"
+    },
+    "replacementAgentId": {
+      "$ref": "#/$defs/__schema2"
+    },
+    "keyId": {
+      "$ref": "#/$defs/__schema2"
+    },
+    "reason": {
+      "$ref": "#/$defs/__schema4"
+    },
+    "preservesPactDigest": {
+      "$ref": "#/$defs/__schema5"
+    },
+    "signature": {
+      "$ref": "#/$defs/__schema6"
+    },
+    "acceptedAt": {
+      "$ref": "#/$defs/__schema7"
+    }
+  },
+  "required": [
+    "protocol",
+    "kind",
+    "replacementId",
+    "missionId",
+    "pactDigest",
+    "roleSlotId",
+    "predecessorAgentId",
+    "replacementAgentId",
+    "keyId",
+    "reason",
+    "preservesPactDigest",
+    "signature",
+    "acceptedAt"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "__schema0": {
+      "type": "string",
+      "const": "commitment/v1"
+    },
+    "__schema1": {
+      "type": "string",
+      "const": "replacement"
+    },
+    "__schema2": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+    },
+    "__schema3": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "__schema4": {
+      "type": "string",
+      "enum": ["participant-defaulted", "participant-released"]
+    },
+    "__schema5": {
+      "type": "boolean",
+      "const": true
+    },
+    "__schema6": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{86}$"
+    },
+    "__schema7": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d\\.\\d{3}(?:Z))$"
+    }
+  },
+  "$id": "https://guildhall.dev/protocol/commitment-v1/replacement.schema.json"
+}

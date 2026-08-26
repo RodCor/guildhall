@@ -11,12 +11,17 @@
     "check:workspace": "pnpm -r --if-present typecheck && prettier --check .",
     "format": "prettier --write .",
     "test": "vitest run",
+    "test:contracts": "vitest run tests/protocol/contracts.test.ts tests/protocol/schema-examples.test.ts",
+    "test:crypto": "vitest run tests/protocol/crypto.test.ts",
     "test:watch": "vitest",
     "typecheck": "pnpm -r --if-present typecheck"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20260826.1",
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
     "prettier": "3.9.6",
+    "tsx": "4.23.12",
     "typescript": "7.0.2",
     "vitest": "4.1.11",
     "wrangler": "4.126.0"

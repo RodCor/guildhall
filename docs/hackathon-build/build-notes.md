@@ -200,3 +200,26 @@
 - `pnpm build:smoke` passed the React/Worker build and all three official-SDK A2A Worker dry-run bundles.
 - `pnpm exec wrangler deploy --dry-run --config apps/guildhall/wrangler.jsonc` passed and found the built SPA assets.
 - Capability-manifest WebMCP tests passed 3/3. The A2A bundles were approximately 231 KiB each (36.86 KiB gzip).
+
+## 2026-08-26 — Build item 2: canonical commitment contracts and proofs
+
+### Implemented
+
+- Added strict Zod contracts for missions, commands, events, pacts, acceptances, stable role slots, artifact metadata, deterministic verification, exact-slot replacements, and terminal receipts.
+- Published seven generated JSON Schemas both from `packages/contracts/schemas` and under `protocol/commitment-v1`, with fourteen paired valid/invalid normative examples.
+- Implemented RFC 8785/JCS canonical bytes, SHA-256 base64url digests, RFC 7638 Ed25519 public-key thumbprints, Workers-safe key import/generation/sign/verify, and status-aware historical proof verification.
+- Implemented exact domain-separated PACT, REPLACEMENT, ARTIFACT, and COMMAND proof bytes. Command hashing covers the explicit signed projection and excludes adapter-controlled `source` plus the self-referential `proof`.
+- Recorded material-field, immutable replacement, receipt/reputation, timestamp, and public-content rules in the commitment profile.
+
+### Security review corrections
+
+- Corrected the specification's invalid phrase "lowercase base64url." RFC 4648 base64url is case-sensitive; digests now preserve standard casing and omit padding.
+- Historical revocation checks use the server-persisted acceptance timestamp. Revoked keys cannot authorize new proofs, while proofs accepted before revocation remain independently verifiable.
+- Public JWK validation rejects private key material, proof-domain components reject control characters, and schemas require exact 32-byte digest / 64-byte signature encodings.
+- Removed two accidental root-level filenames created by a failed shell quoting experiment. Both targets were verified inside the contained repository before removal; neither held project data and neither is recoverable or needed.
+
+### Verification
+
+- `pnpm check:workspace` passed all strict package/application typechecks and formatting.
+- `pnpm test:contracts` passed 7 tests, including all 14 schema example decisions and runtime cross-field invariants.
+- `pnpm test:crypto` passed 15 tests covering canonical property-order equality, the known SHA-256 vector, one-byte mutation, exact domains, command projection, wrong domain/key/payload, malformed/private keys, revocation, and historical proof behavior.

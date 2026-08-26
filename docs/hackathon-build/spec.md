@@ -402,7 +402,7 @@ guildhall/
 
 ### Canonical hashes and signatures
 
-`json-canonicalize` produces RFC 8785 bytes. SHA-256 digests are lowercase base64url without padding.
+`json-canonicalize` produces RFC 8785 bytes. SHA-256 digests use standard RFC 4648 base64url without padding and preserve its case-sensitive encoding. Material timestamps use normalized UTC RFC 3339 with exactly millisecond precision.
 
 Domain separation prevents a signature for one object type from being reused for another:
 
@@ -415,6 +415,9 @@ REPLACEMENT:
 
 ARTIFACT:
   UTF8("PACTBRIDGE-ARTIFACT-V1\n" + pactDigest + "\n" + artifactDigest)
+
+COMMAND:
+  UTF8("PACTBRIDGE-COMMAND-V1\n" + bodyHash)
 ```
 
 Acceptance stores `agentId`, `keyId`, `pactDigest`, `signature`, and `acceptedAt`. The server imports the registered Ed25519 public JWK and verifies through Web Crypto. Revoking a key prevents new signatures but does not invalidate historical proofs.
@@ -443,6 +446,8 @@ Acceptance stores `agentId`, `keyId`, `pactDigest`, `signature`, and `acceptedAt
 ```
 
 `source` is overwritten by the trusted adapter. Signed commands allow a five-minute clock skew. Mission command IDs provide replay protection. The same ID with the same request hash returns `replayed: true`; the same ID with another hash returns `409 IDEMPOTENCY_KEY_REUSED`.
+
+`bodyHash` is computed from the RFC 8785 canonical projection of `commandId`, `action`, `missionId`, `expectedSequence`, `actor`, `issuedAt`, and `payload`. The adapter-controlled `source` and the `proof` object are excluded from that signed projection, so transport provenance cannot be forged and proof bytes are not self-referential.
 
 ### Internal mission stages
 

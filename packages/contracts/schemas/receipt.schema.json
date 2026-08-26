@@ -1,0 +1,354 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "protocol": {
+      "$ref": "#/$defs/__schema0"
+    },
+    "kind": {
+      "$ref": "#/$defs/__schema1"
+    },
+    "receiptId": {
+      "$ref": "#/$defs/__schema2"
+    },
+    "missionId": {
+      "$ref": "#/$defs/__schema2"
+    },
+    "outcome": {
+      "$ref": "#/$defs/__schema3"
+    },
+    "pactDigest": {
+      "$ref": "#/$defs/__schema4"
+    },
+    "eventChainHead": {
+      "$ref": "#/$defs/__schema4"
+    },
+    "artifacts": {
+      "$ref": "#/$defs/__schema5"
+    },
+    "verification": {
+      "$ref": "#/$defs/__schema7"
+    },
+    "timeliness": {
+      "$ref": "#/$defs/__schema9"
+    },
+    "defaults": {
+      "$ref": "#/$defs/__schema11"
+    },
+    "replacements": {
+      "$ref": "#/$defs/__schema13"
+    },
+    "reward": {
+      "$ref": "#/$defs/__schema15"
+    },
+    "reputationDeltas": {
+      "$ref": "#/$defs/__schema16"
+    },
+    "issuerKeyId": {
+      "$ref": "#/$defs/__schema2"
+    },
+    "issuerSignature": {
+      "$ref": "#/$defs/__schema18"
+    },
+    "issuedAt": {
+      "$ref": "#/$defs/__schema10"
+    }
+  },
+  "required": [
+    "protocol",
+    "kind",
+    "receiptId",
+    "missionId",
+    "outcome",
+    "pactDigest",
+    "eventChainHead",
+    "artifacts",
+    "verification",
+    "timeliness",
+    "defaults",
+    "replacements",
+    "reward",
+    "reputationDeltas",
+    "issuerKeyId",
+    "issuerSignature",
+    "issuedAt"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "__schema0": {
+      "type": "string",
+      "const": "commitment/v1"
+    },
+    "__schema1": {
+      "type": "string",
+      "const": "receipt"
+    },
+    "__schema2": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+    },
+    "__schema3": {
+      "type": "string",
+      "enum": ["completed", "failed", "canceled", "expired"]
+    },
+    "__schema4": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "__schema5": {
+      "maxItems": 8,
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/__schema6"
+      }
+    },
+    "__schema6": {
+      "type": "object",
+      "properties": {
+        "artifactId": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "roleSlotId": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "producingAgentId": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "contentDigest": {
+          "$ref": "#/$defs/__schema4"
+        }
+      },
+      "required": [
+        "artifactId",
+        "roleSlotId",
+        "producingAgentId",
+        "contentDigest"
+      ],
+      "additionalProperties": false
+    },
+    "__schema7": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "verificationRunId": {
+              "$ref": "#/$defs/__schema2"
+            },
+            "status": {
+              "type": "string",
+              "enum": ["passed", "failed"]
+            },
+            "criterionResults": {
+              "minItems": 1,
+              "maxItems": 16,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema8"
+              }
+            }
+          },
+          "required": ["verificationRunId", "status", "criterionResults"],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "__schema8": {
+      "type": "object",
+      "properties": {
+        "criterionId": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["passed", "failed"]
+        }
+      },
+      "required": ["criterionId", "status"],
+      "additionalProperties": false
+    },
+    "__schema9": {
+      "type": "object",
+      "properties": {
+        "overdue": {
+          "type": "boolean"
+        },
+        "deliveryDeadline": {
+          "$ref": "#/$defs/__schema10"
+        },
+        "completedAt": {
+          "$ref": "#/$defs/__schema10"
+        }
+      },
+      "required": ["overdue", "deliveryDeadline", "completedAt"],
+      "additionalProperties": false
+    },
+    "__schema10": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d\\.\\d{3}(?:Z))$"
+    },
+    "__schema11": {
+      "maxItems": 2,
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/__schema12"
+      }
+    },
+    "__schema12": {
+      "type": "object",
+      "properties": {
+        "agentId": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "roleSlotId": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "reason": {
+          "type": "string",
+          "enum": ["participant-defaulted", "participant-released"]
+        }
+      },
+      "required": ["agentId", "roleSlotId", "reason"],
+      "additionalProperties": false
+    },
+    "__schema13": {
+      "maxItems": 2,
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/__schema14"
+      }
+    },
+    "__schema14": {
+      "type": "object",
+      "properties": {
+        "replacementId": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "roleSlotId": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "predecessorAgentId": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "replacementAgentId": {
+          "$ref": "#/$defs/__schema2"
+        }
+      },
+      "required": [
+        "replacementId",
+        "roleSlotId",
+        "predecessorAgentId",
+        "replacementAgentId"
+      ],
+      "additionalProperties": false
+    },
+    "__schema15": {
+      "type": "object",
+      "properties": {
+        "basePointsAwarded": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "recoveryBonusAwarded": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "totalPointsAwarded": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 11000
+        },
+        "transferable": {
+          "type": "boolean",
+          "const": false
+        },
+        "redeemable": {
+          "type": "boolean",
+          "const": false
+        },
+        "monetaryValue": {
+          "type": "boolean",
+          "const": false
+        }
+      },
+      "required": [
+        "basePointsAwarded",
+        "recoveryBonusAwarded",
+        "totalPointsAwarded",
+        "transferable",
+        "redeemable",
+        "monetaryValue"
+      ],
+      "additionalProperties": false
+    },
+    "__schema16": {
+      "maxItems": 8,
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/__schema17"
+      }
+    },
+    "__schema17": {
+      "type": "object",
+      "properties": {
+        "agentId": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "capability": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "pointsDelta": {
+          "type": "integer",
+          "minimum": -10000,
+          "maximum": 10000
+        },
+        "reliabilityDelta": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        },
+        "timelinessDelta": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        },
+        "recoveryBonus": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "verified-role-output",
+            "verified-replacement-output",
+            "post-bind-default"
+          ]
+        }
+      },
+      "required": [
+        "agentId",
+        "capability",
+        "pointsDelta",
+        "reliabilityDelta",
+        "timelinessDelta",
+        "recoveryBonus",
+        "reason"
+      ],
+      "additionalProperties": false
+    },
+    "__schema18": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{86}$"
+    }
+  },
+  "$id": "https://guildhall.dev/protocol/commitment-v1/receipt.schema.json"
+}

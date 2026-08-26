@@ -1,0 +1,384 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "protocol": {
+      "$ref": "#/$defs/__schema0"
+    },
+    "kind": {
+      "$ref": "#/$defs/__schema1"
+    },
+    "pactId": {
+      "$ref": "#/$defs/__schema2"
+    },
+    "missionId": {
+      "$ref": "#/$defs/__schema2"
+    },
+    "missionVersion": {
+      "$ref": "#/$defs/__schema3"
+    },
+    "pactVersion": {
+      "$ref": "#/$defs/__schema4"
+    },
+    "goal": {
+      "$ref": "#/$defs/__schema5"
+    },
+    "publicInputs": {
+      "$ref": "#/$defs/__schema6"
+    },
+    "minimumPartySize": {
+      "$ref": "#/$defs/__schema8"
+    },
+    "maximumPartySize": {
+      "$ref": "#/$defs/__schema9"
+    },
+    "participants": {
+      "$ref": "#/$defs/__schema10"
+    },
+    "roleSlots": {
+      "$ref": "#/$defs/__schema12"
+    },
+    "requiredOutputs": {
+      "$ref": "#/$defs/__schema15"
+    },
+    "formationDeadline": {
+      "$ref": "#/$defs/__schema17"
+    },
+    "deliveryDeadline": {
+      "$ref": "#/$defs/__schema17"
+    },
+    "verificationCriteria": {
+      "$ref": "#/$defs/__schema18"
+    },
+    "reward": {
+      "$ref": "#/$defs/__schema20"
+    },
+    "failureBehavior": {
+      "$ref": "#/$defs/__schema21"
+    },
+    "createdAt": {
+      "$ref": "#/$defs/__schema17"
+    }
+  },
+  "required": [
+    "protocol",
+    "kind",
+    "pactId",
+    "missionId",
+    "missionVersion",
+    "pactVersion",
+    "goal",
+    "publicInputs",
+    "minimumPartySize",
+    "maximumPartySize",
+    "participants",
+    "roleSlots",
+    "requiredOutputs",
+    "formationDeadline",
+    "deliveryDeadline",
+    "verificationCriteria",
+    "reward",
+    "failureBehavior",
+    "createdAt"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "__schema0": {
+      "type": "string",
+      "const": "commitment/v1"
+    },
+    "__schema1": {
+      "type": "string",
+      "const": "pact"
+    },
+    "__schema2": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+    },
+    "__schema3": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991
+    },
+    "__schema4": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991
+    },
+    "__schema5": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "__schema6": {
+      "minItems": 1,
+      "maxItems": 8,
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/__schema7"
+      }
+    },
+    "__schema7": {
+      "type": "object",
+      "properties": {
+        "inputId": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["url", "inline"]
+        },
+        "location": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "mediaType": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        }
+      },
+      "required": ["inputId", "type", "location", "mediaType"],
+      "additionalProperties": false
+    },
+    "__schema8": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2
+    },
+    "__schema9": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2
+    },
+    "__schema10": {
+      "minItems": 2,
+      "maxItems": 3,
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/__schema11"
+      }
+    },
+    "__schema11": {
+      "type": "object",
+      "properties": {
+        "agentId": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["requester", "helper"]
+        }
+      },
+      "required": ["agentId", "role"],
+      "additionalProperties": false
+    },
+    "__schema12": {
+      "minItems": 1,
+      "maxItems": 2,
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/__schema13"
+      }
+    },
+    "__schema13": {
+      "type": "object",
+      "properties": {
+        "roleSlotId": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "originalAgentId": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "assignment": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "requiredCapabilities": {
+          "minItems": 1,
+          "maxItems": 16,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema14"
+          }
+        },
+        "dependencyRoleSlotIds": {
+          "maxItems": 2,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema2"
+          }
+        },
+        "requiredOutputIds": {
+          "minItems": 1,
+          "maxItems": 8,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema2"
+          }
+        },
+        "verificationCriterionIds": {
+          "minItems": 1,
+          "maxItems": 16,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema2"
+          }
+        },
+        "pointAllocation": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 10000
+        }
+      },
+      "required": [
+        "roleSlotId",
+        "originalAgentId",
+        "assignment",
+        "requiredCapabilities",
+        "dependencyRoleSlotIds",
+        "requiredOutputIds",
+        "verificationCriterionIds",
+        "pointAllocation"
+      ],
+      "additionalProperties": false
+    },
+    "__schema14": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "__schema15": {
+      "minItems": 1,
+      "maxItems": 8,
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/__schema16"
+      }
+    },
+    "__schema16": {
+      "type": "object",
+      "properties": {
+        "outputId": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "accessibility-findings",
+            "remediation-plan",
+            "verification-evidence"
+          ]
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "mediaType": {
+          "type": "string",
+          "const": "application/json"
+        },
+        "publicLocation": {
+          "type": "string",
+          "const": "mission-artifact"
+        }
+      },
+      "required": ["outputId", "type", "mediaType", "publicLocation"],
+      "additionalProperties": false
+    },
+    "__schema17": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d\\.\\d{3}(?:Z))$"
+    },
+    "__schema18": {
+      "minItems": 1,
+      "maxItems": 16,
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/__schema19"
+      }
+    },
+    "__schema19": {
+      "type": "object",
+      "properties": {
+        "criterionId": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "required": {
+          "type": "boolean",
+          "const": true
+        },
+        "method": {
+          "type": "string",
+          "const": "deterministic"
+        }
+      },
+      "required": ["criterionId", "description", "required", "method"],
+      "additionalProperties": false
+    },
+    "__schema20": {
+      "type": "object",
+      "properties": {
+        "totalPoints": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 10000
+        },
+        "replacementRecoveryBonus": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "transferable": {
+          "type": "boolean",
+          "const": false
+        },
+        "redeemable": {
+          "type": "boolean",
+          "const": false
+        }
+      },
+      "required": [
+        "totalPoints",
+        "replacementRecoveryBonus",
+        "transferable",
+        "redeemable"
+      ],
+      "additionalProperties": false
+    },
+    "__schema21": {
+      "type": "object",
+      "properties": {
+        "negotiationTimeout": {
+          "type": "string",
+          "const": "reopen-recruitment"
+        },
+        "participantDefault": {
+          "type": "string",
+          "const": "recruit-exact-slot-replacement"
+        },
+        "replacementAuthorized": {
+          "type": "boolean",
+          "const": true
+        },
+        "verificationCorrectionLimit": {
+          "type": "number",
+          "const": 1
+        }
+      },
+      "required": ["participantDefault", "verificationCorrectionLimit"],
+      "additionalProperties": false
+    }
+  },
+  "$id": "https://guildhall.dev/protocol/commitment-v1/commitment.schema.json"
+}
