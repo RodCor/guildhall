@@ -377,4 +377,4 @@
 - `pnpm build` produced the Guildhall client/Worker and all three independent agent bundles; every Wrangler dry-run included the expected D1, Durable Object, and Worker service bindings.
 - `pnpm deploy:check` reported no pending production migrations and passed preflight for all four Workers.
 - The deployed `pnpm demo:smoke` passed the public Guildhall shell/readiness, immutable fixture digest, issuer key, exact GitHub OAuth redirect, all three Agent Cards/readiness endpoints, and the provider-credential-free Guild Node MCP mission listing.
-- Verification pause C awaits Rodrigo's explicit visual acceptance before the commit is tagged as the demo candidate.
+- Rodrigo explicitly accepted the completed live chamber and receipt. Verification pause C is accepted, and commit `d152888` is tagged `live-demo-candidate-v1` as the demo candidate.
