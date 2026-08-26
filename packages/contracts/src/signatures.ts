@@ -5,6 +5,7 @@ const textEncoder = new TextEncoder();
 const PACT_DOMAIN = "PACTBRIDGE-COMMITMENT-V1";
 const REPLACEMENT_DOMAIN = "PACTBRIDGE-REPLACEMENT-V1";
 const ARTIFACT_DOMAIN = "PACTBRIDGE-ARTIFACT-V1";
+const RECEIPT_DOMAIN = "PACTBRIDGE-RECEIPT-V1";
 const COMMAND_DOMAIN = "PACTBRIDGE-COMMAND-V1";
 
 export type SigningKeyStatus = "active" | "revoked";
@@ -91,6 +92,18 @@ export function artifactSigningBytes(
   artifactDigest: string,
 ): Uint8Array {
   return domainBytes(ARTIFACT_DOMAIN, pactDigest, artifactDigest);
+}
+
+export function receiptSigningBytes(receiptDigest: string): Uint8Array {
+  return domainBytes(RECEIPT_DOMAIN, receiptDigest);
+}
+
+/** Signature-free canonical projection committed by a receipt issuer. */
+export function unsignedReceiptProjection<
+  T extends { issuerSignature: string },
+>(receipt: T): Omit<T, "issuerSignature"> {
+  const { issuerSignature: _signature, ...unsigned } = receipt;
+  return unsigned;
 }
 
 export interface CommandHashInput {

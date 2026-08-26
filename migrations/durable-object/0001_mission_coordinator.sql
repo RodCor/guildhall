@@ -3,6 +3,11 @@
 -- the coordinator applies these idempotent tables in its constructor.
 PRAGMA foreign_keys = ON;
 
+CREATE TABLE IF NOT EXISTS schema_migrations (
+  version INTEGER PRIMARY KEY,
+  applied_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS mission_state (
   mission_id TEXT PRIMARY KEY,
   requester_agent_id TEXT NOT NULL,
@@ -12,6 +17,25 @@ CREATE TABLE IF NOT EXISTS mission_state (
   state_json TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS mission_definition (
+  mission_id TEXT PRIMARY KEY,
+  definition_json TEXT NOT NULL,
+  definition_digest TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE TRIGGER IF NOT EXISTS mission_definition_immutable_update
+BEFORE UPDATE ON mission_definition
+BEGIN
+  SELECT RAISE(ABORT, 'mission definition is immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS mission_definition_immutable_delete
+BEFORE DELETE ON mission_definition
+BEGIN
+  SELECT RAISE(ABORT, 'mission definition is immutable');
+END;
 
 CREATE TABLE IF NOT EXISTS mission_versions (
   mission_id TEXT NOT NULL,
@@ -67,12 +91,45 @@ CREATE TABLE IF NOT EXISTS artifacts (
   submitted_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS artifact_records (
+  artifact_id TEXT NOT NULL,
+  attempt INTEGER NOT NULL,
+  role_slot_id TEXT NOT NULL,
+  output_id TEXT NOT NULL,
+  producing_agent_id TEXT NOT NULL,
+  content_digest TEXT NOT NULL,
+  record_json TEXT NOT NULL,
+  accepted_sequence INTEGER NOT NULL,
+  accepted_at TEXT NOT NULL,
+  PRIMARY KEY (artifact_id, attempt)
+);
+
+CREATE INDEX IF NOT EXISTS artifact_records_slot
+  ON artifact_records(role_slot_id, accepted_sequence);
+
+CREATE TABLE IF NOT EXISTS replacement_records (
+  replacement_id TEXT PRIMARY KEY,
+  role_slot_id TEXT NOT NULL,
+  predecessor_agent_id TEXT NOT NULL,
+  replacement_agent_id TEXT NOT NULL,
+  proof_json TEXT NOT NULL,
+  accepted_sequence INTEGER NOT NULL,
+  accepted_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS verification_runs (
   verification_id TEXT PRIMARY KEY,
   status TEXT NOT NULL,
   sequence INTEGER NOT NULL,
   result_json TEXT,
   updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS mission_receipt (
+  receipt_id TEXT PRIMARY KEY,
+  receipt_json TEXT NOT NULL,
+  issued_sequence INTEGER NOT NULL,
+  issued_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS events (
@@ -84,6 +141,13 @@ CREATE TABLE IF NOT EXISTS events (
   previous_event_hash TEXT,
   event_hash TEXT NOT NULL UNIQUE,
   emitted_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS event_redactions (
+  redaction_id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL UNIQUE REFERENCES events(event_id),
+  marker_json TEXT NOT NULL,
+  redacted_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS command_results (
@@ -105,6 +169,9 @@ CREATE TABLE IF NOT EXISTS effect_outbox (
   completed_at TEXT
 );
 
+CREATE INDEX IF NOT EXISTS effect_outbox_due
+  ON effect_outbox(status, next_attempt_at);
+
 CREATE TABLE IF NOT EXISTS projection_outbox (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   projection_type TEXT NOT NULL,
@@ -116,8 +183,17 @@ CREATE TABLE IF NOT EXISTS projection_outbox (
   completed_at TEXT
 );
 
+CREATE INDEX IF NOT EXISTS projection_outbox_due
+  ON projection_outbox(status, next_attempt_at);
+
 CREATE TABLE IF NOT EXISTS deadlines (
   deadline_type TEXT PRIMARY KEY,
   due_at INTEGER NOT NULL,
   handled_at TEXT
 );
+
+INSERT OR IGNORE INTO schema_migrations(version, applied_at)
+VALUES (1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+
+INSERT OR IGNORE INTO schema_migrations(version, applied_at)
+VALUES (2, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));

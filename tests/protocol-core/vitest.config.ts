@@ -25,6 +25,13 @@ export default defineConfig({
           GITHUB_API_BASE_URL: "https://api.github.test",
           AUTH_COOKIE_SECRET:
             "test-only-cookie-secret-with-at-least-thirty-two-characters",
+          GUILD_ISSUER_KEY_ID: "99999999-9999-4999-8999-999999999999",
+          GUILD_ISSUER_PRIVATE_JWK: JSON.stringify({
+            crv: "Ed25519",
+            d: "bUlIWwb__2Bd_x2lN_MJKxsfpUfeqSrmmaWYa0-TODg",
+            kty: "OKP",
+            x: "OnvPItzy4bFTxKLR70P_mJ6VczONWAhEY38hZwWspuc",
+          }),
         },
       },
     })),

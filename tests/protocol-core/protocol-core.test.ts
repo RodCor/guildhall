@@ -4,7 +4,7 @@ import {
   runDurableObjectAlarm,
   runInDurableObject,
 } from "cloudflare:test";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { MissionCoordinator } from "../../apps/guildhall/src/worker/durable/MissionCoordinator";
 import type { CoordinatorCommand } from "../../apps/guildhall/src/worker/durable/protocol";
@@ -22,6 +22,11 @@ import {
   hashOpaqueCredential,
   randomBase64UrlToken,
 } from "../../apps/guildhall/src/worker/auth/crypto";
+import {
+  artifactSigningBytes,
+  canonicalJsonDigest,
+  signEd25519,
+} from "../../packages/contracts/src";
 import { verifyEventChain } from "../../packages/trust-engine/src";
 import {
   applyToMission,
@@ -35,6 +40,7 @@ const REQUESTER = "10000000-0000-4000-8000-000000000001";
 const HELPER_RED = "20000000-0000-4000-8000-000000000001";
 const HELPER_BLUE = "20000000-0000-4000-8000-000000000002";
 const ROLE_RED = "30000000-0000-4000-8000-000000000001";
+const OUTPUT_RED = "50000000-0000-4000-8000-000000000001";
 const PACT_DIGEST_V1 = "P".repeat(43);
 const PACT_DIGEST_V2 = "Q".repeat(43);
 const ACCEPTANCE_KEY_ID = "70000000-0000-4000-8000-000000000001";
@@ -48,6 +54,7 @@ type CoordinatorRpc = Pick<
   | "inspectCore"
   | "retryProjection"
   | "scheduleDeadline"
+  | "submitArtifact"
   | "fetch"
 >;
 
@@ -103,6 +110,33 @@ describe("MissionCoordinator transactional protocol core", () => {
     expect((await stub.getSnapshot()).snapshot.applicationAgentIds).toEqual([
       HELPER_RED,
     ]);
+  });
+
+  it("ignores transport retry time but commits semantic command evidence", async () => {
+    const stub = await recruitingMission("semantic-command-hash");
+    const commandId = crypto.randomUUID();
+    const firstCommand = command(applyToMission(HELPER_RED), {
+      commandId,
+      expectedSequence: 1,
+    });
+    const first = await stub.executeCommand(firstCommand);
+    await stub.executeCommand(command(applyToMission(HELPER_BLUE)));
+
+    const replay = await stub.executeCommand({
+      ...firstCommand,
+      issuedAt: new Date(Date.now() + 60_000).toISOString(),
+    });
+    expect(replay).toEqual(first);
+
+    const conflict = await stub.executeCommand({
+      ...firstCommand,
+      issuedAt: new Date(Date.now() + 120_000).toISOString(),
+      source: "a2a",
+    });
+    expect(conflict).toMatchObject({
+      ok: false,
+      code: "COMMAND_ID_REUSED",
+    });
   });
 
   it("keeps canonical mission truth when D1 fails, then clears its retry", async () => {
@@ -227,6 +261,75 @@ describe("MissionCoordinator transactional protocol core", () => {
     expect(await runDurableObjectAlarm(asDurableStub(stub))).toBe(true);
     const inspection = await stub.inspectCore();
     expect(inspection.scheduledAlarm).toBe(earlier);
+  });
+
+  it("reschedules an unfinished A2A execution retry", async () => {
+    const stub = await recruitingMission("a2a-retry-reschedule");
+    const beforeAlarm = Date.now();
+    const dueAt = beforeAlarm + 60_000;
+    await stub.scheduleDeadline("a2a_retry", dueAt);
+
+    const clock = vi.spyOn(Date, "now").mockReturnValue(dueAt + 1);
+    try {
+      expect(await runDurableObjectAlarm(asDurableStub(stub))).toBe(true);
+    } finally {
+      clock.mockRestore();
+    }
+
+    const inspection = await stub.inspectCore();
+    expect(inspection.scheduledAlarm).not.toBeNull();
+    expect(inspection.scheduledAlarm!).toBeGreaterThan(dueAt);
+    expect(inspection.snapshot).toMatchObject({ stage: "PREPARE" });
+  });
+
+  it("does not schedule demo execution for a wrong fixture digest", async () => {
+    const stub = await negotiatingMission(
+      "wrong-fixture-digest",
+      "D".repeat(43),
+    );
+    for (const agentId of [REQUESTER, HELPER_RED]) {
+      await stub.executeCommand(command(acceptPact(agentId)));
+    }
+
+    expect((await stub.getSnapshot()).snapshot.stage).toBe("EXECUTE");
+    expect((await stub.inspectCore()).scheduledAlarm).toBeNull();
+  });
+
+  it("returns a sanitized artifact safety issue without consuming correction", async () => {
+    const name = "artifact-safety-correction";
+    const signer = await seedArtifactSigner();
+    const stub = await executingMission(name);
+    const before = await stub.getSnapshot();
+    const syntheticMatch = `sk-proj-${"Z".repeat(28)}`;
+
+    const rejected = await stub.submitArtifact(
+      await signedArtifactCommand(name, signer, {
+        result: syntheticMatch,
+      }),
+    );
+    expect(rejected).toMatchObject({
+      ok: false,
+      code: "PUBLIC_SAFETY_REJECTED",
+      safetyIssue: {
+        fieldPath: "$.content.result",
+        category: "provider-token",
+      },
+    });
+    expect(JSON.stringify(rejected)).not.toContain(syntheticMatch);
+    const afterRejected = await stub.getSnapshot();
+    expect(afterRejected.latestSequence).toBe(before.latestSequence);
+    expect(afterRejected.snapshot.correctionCount).toBe(0);
+    expect(afterRejected.artifacts).toEqual([]);
+
+    const accepted = await stub.submitArtifact(
+      await signedArtifactCommand(name, signer, {
+        fixture: "protocol-core-safe-resubmission",
+      }),
+    );
+    expect(accepted).toMatchObject({ ok: true });
+    const afterAccepted = await stub.getSnapshot();
+    expect(afterAccepted.snapshot.correctionCount).toBe(0);
+    expect(afterAccepted.artifacts).toHaveLength(1);
   });
 
   it("persists a completed, verifiable event stream and inspectable outboxes", async () => {
@@ -389,7 +492,7 @@ async function recruitingMission(name: string) {
   return stub;
 }
 
-async function negotiatingMission(name: string) {
+async function negotiatingMission(name: string, publicInputDigest?: string) {
   const stub = await recruitingMission(name);
   await stub.executeCommand(command(applyToMission(HELPER_RED)));
   await stub.executeCommand(
@@ -427,7 +530,10 @@ async function negotiatingMission(name: string) {
           },
         ],
         undefined,
-        { missionId: missionUuid(name) },
+        {
+          missionId: missionUuid(name),
+          ...(publicInputDigest === undefined ? {} : { publicInputDigest }),
+        },
       ),
     ),
   );
@@ -447,25 +553,148 @@ async function negotiatingMission(name: string) {
           },
         ],
         "helper-counter",
-        { missionId: missionUuid(name) },
+        {
+          missionId: missionUuid(name),
+          ...(publicInputDigest === undefined ? {} : { publicInputDigest }),
+        },
       ),
     ),
   );
   return stub;
 }
 
-async function completeMission(name: string) {
+async function executingMission(name: string) {
   const stub = await negotiatingMission(name);
   for (const agentId of [REQUESTER, HELPER_RED]) {
     await stub.executeCommand(command(acceptPact(agentId)));
   }
   await stub.executeCommand(command({ type: "start_execution" }));
+  return stub;
+}
+
+async function completeMission(name: string) {
+  const stub = await executingMission(name);
   await stub.executeCommand(
-    command({ type: "submit_artifact", roleSlotId: ROLE_RED }),
+    command({
+      type: "submit_artifact",
+      roleSlotId: ROLE_RED,
+      artifact: {
+        outputId: OUTPUT_RED,
+        metadata: {
+          protocol: "commitment/v1",
+          kind: "artifact-metadata",
+          artifactId: OUTPUT_RED,
+          missionId: missionUuid(name),
+          pactDigest: PACT_DIGEST_V2,
+          roleSlotId: ROLE_RED,
+          producingAgentId: HELPER_RED,
+          keyId: ACCEPTANCE_KEY_ID,
+          attempt: 1,
+          artifactType: "accessibility-findings",
+          mediaType: "application/json",
+          publicLocation: `https://guildhall.test/artifacts/${OUTPUT_RED}`,
+          contentDigest: "D".repeat(43),
+          signature: "S".repeat(86),
+          safetyStatus: "approved",
+          completedAt: new Date().toISOString(),
+        },
+        content: { fixture: "protocol-core" },
+        dependencyArtifactIds: [],
+      },
+    }),
   );
   await stub.executeCommand(command({ type: "verify" }));
   await stub.executeCommand(command({ type: "verification_passed" }));
   return stub;
+}
+
+interface ArtifactSigner {
+  readonly keyId: string;
+  readonly privateKey: CryptoKey;
+}
+
+async function seedArtifactSigner(): Promise<ArtifactSigner> {
+  const now = new Date().toISOString();
+  const owner = await upsertGithubOwnerAndSession(env.GUILD_DB, {
+    proposedOwnerId: crypto.randomUUID(),
+    githubUserId: 9_002,
+    githubLogin: "artifact-helper-owner",
+    githubAvatarUrl: null,
+    sessionHash: await hashOpaqueCredential(randomBase64UrlToken()),
+    csrfHash: await hashOpaqueCredential(randomBase64UrlToken()),
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    createdAt: now,
+  });
+  await createAgent(env.GUILD_DB, {
+    agentId: HELPER_RED,
+    ownerId: owner.ownerId,
+    slug: "artifact-helper",
+    characterName: "Artifact Helper",
+    characterClass: "Ranger",
+    technicalName: "Artifact Safety Test",
+    guildName: "Guildhall Tests",
+    publicBio: "Exercises private artifact safety correction.",
+    createdAt: now,
+  });
+  const keyPair = (await crypto.subtle.generateKey({ name: "Ed25519" }, true, [
+    "sign",
+    "verify",
+  ])) as CryptoKeyPair;
+  const publicJwk = await crypto.subtle.exportKey("jwk", keyPair.publicKey);
+  const keyId = await deriveEd25519KeyId("a2a", publicJwk);
+  await registerAgentKey(env.GUILD_DB, {
+    keyId,
+    ownerId: owner.ownerId,
+    agentId: HELPER_RED,
+    publicJwk,
+    source: "a2a",
+    createdAt: now,
+  });
+  return { keyId, privateKey: keyPair.privateKey };
+}
+
+async function signedArtifactCommand(
+  name: string,
+  signer: ArtifactSigner,
+  content: Readonly<Record<string, unknown>>,
+): Promise<CoordinatorCommand> {
+  const contentDigest = await canonicalJsonDigest(content);
+  return {
+    commandId: crypto.randomUUID(),
+    actor: { agentId: HELPER_RED, keyId: signer.keyId },
+    source: "a2a",
+    issuedAt: new Date().toISOString(),
+    command: {
+      type: "submit_artifact",
+      roleSlotId: ROLE_RED,
+      artifact: {
+        outputId: OUTPUT_RED,
+        metadata: {
+          protocol: "commitment/v1",
+          kind: "artifact-metadata",
+          artifactId: crypto.randomUUID(),
+          missionId: missionUuid(name),
+          pactDigest: PACT_DIGEST_V2,
+          roleSlotId: ROLE_RED,
+          producingAgentId: HELPER_RED,
+          keyId: signer.keyId,
+          attempt: 1,
+          artifactType: "accessibility-findings",
+          mediaType: "application/json",
+          publicLocation: `https://guildhall.test/artifacts/${OUTPUT_RED}`,
+          contentDigest,
+          signature: await signEd25519(
+            signer.privateKey,
+            artifactSigningBytes(PACT_DIGEST_V2, contentDigest),
+          ),
+          safetyStatus: "approved",
+          completedAt: new Date().toISOString(),
+        },
+        content,
+        dependencyArtifactIds: [],
+      },
+    },
+  };
 }
 
 function coordinator(name: string): CoordinatorRpc {

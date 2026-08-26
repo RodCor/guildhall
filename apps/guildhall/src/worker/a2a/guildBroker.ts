@@ -4,13 +4,11 @@ import {
   type GuildCapabilityName,
 } from "@guildhall/capability-manifest";
 import {
-  PactAcceptanceSchema,
+  ArtifactSubmissionSchema,
   buildPact,
   canonicalJsonDigest,
-  pactSigningBytes,
   type AllocationAssignment,
   type Mission,
-  verifyRegisteredEd25519Proof,
 } from "@guildhall/contracts";
 import {
   deriveDisplayState,
@@ -39,11 +37,11 @@ import {
   authorizeAgentAction,
   type AgentAuthorization,
 } from "../auth/agentAuthorization.js";
-import { listAgentKeys } from "../repositories/index.js";
 import type { GuildhallEnv } from "../types.js";
 import { attemptAutomaticFormation } from "../formation.js";
 import { D1A2ATaskStore } from "./d1TaskStore.js";
 import { buildGuildBrokerCard } from "./guildCard.js";
+import { executeBoundDemoMission } from "../executionOrchestrator.js";
 
 const BASE_PATH = "/a2a/guild/v1";
 const UUID_PATTERN =
@@ -78,8 +76,12 @@ export async function handleGuildBrokerRoute(
     basePath: BASE_PATH,
     requiredExtensionUri: COMMITMENT_V1_EXTENSION_URI,
     validatePublicInput(message) {
-      if (!scanPublicPayload(message).safe) {
-        throw new A2APublicInputRejectedError();
+      const scan = scanPublicPayload(message);
+      if (!scan.safe) {
+        throw new A2APublicInputRejectedError(undefined, {
+          fieldPath: scan.fieldPath,
+          category: scan.category,
+        });
       }
     },
     authorizeRequest(context) {
@@ -263,19 +265,12 @@ class GuildBrokerExecutor implements A2ATaskExecutor {
         "GUILD_PARTICIPANT_REQUIRED",
       );
     }
-    if (command.type === "accept_pact") {
-      await verifyPactAcceptance(
-        this.env,
-        missionId,
-        command,
-        authorization.agentId,
-      );
-    }
     const commandId = stableCommandId(
       input.commandId,
       context.message.messageId,
     );
-    const result = await this.env.MISSIONS.getByName(missionId).executeCommand({
+    const coordinator = this.env.MISSIONS.getByName(missionId);
+    const coordinatorCommand = {
       commandId,
       expectedSequence,
       actor: {
@@ -289,7 +284,13 @@ class GuildBrokerExecutor implements A2ATaskExecutor {
       source: "a2a",
       issuedAt: new Date().toISOString(),
       command,
-    });
+    } as const;
+    const result =
+      command.type === "submit_artifact"
+        ? await coordinator.submitArtifact(coordinatorCommand)
+        : command.type === "accept_pact"
+          ? await coordinator.acceptPact(coordinatorCommand)
+          : await coordinator.executeCommand(coordinatorCommand);
     if (!result.ok) {
       throw taskError("Guild command was rejected.", result.code, {
         canonicalAction: action,
@@ -300,9 +301,29 @@ class GuildBrokerExecutor implements A2ATaskExecutor {
       command.type === "apply"
         ? await attemptAutomaticFormation(this.env, missionId)
         : undefined;
+    if (
+      result.ok &&
+      command.type === "accept_pact" &&
+      result.eventTypes.includes("pact_bound")
+    ) {
+      await executeBoundDemoMission(this.env, missionId, true);
+    }
+    if (result.ok && command.type === "submit_artifact") {
+      const afterArtifact = await this.snapshot(missionId);
+      if (
+        afterArtifact.snapshot.stage === "DELIVER" ||
+        (afterArtifact.snapshot.terminalOutcome !== null &&
+          afterArtifact.receipt == null)
+      ) {
+        await coordinator.runVerification({
+          infrastructureStatus: "available",
+        });
+      }
+    }
     const current = await this.snapshot(missionId);
     return jsonValue({
       ...result,
+      resultingSequence: current.latestSequence,
       missionId,
       missionVersion: current.snapshot.missionVersion,
       displayState: displayState(current.snapshot),
@@ -400,9 +421,49 @@ async function lifecycleCommand(
         signature: metadataString(trusted.commitment, "pactSignature"),
         acceptedAt: metadataString(trusted.commitment, "acceptedAt"),
       };
-    case "guild.publish_mission":
     case "guild.report_progress":
-    case "guild.submit_artifact":
+      return {
+        type: "report_progress",
+        roleSlotId: requiredString(input, "roleSlotId"),
+        status: progressStatus(input.status),
+        summary: requiredString(input, "summary"),
+        completedOutputIds: stringArray(input, "completedOutputIds", true),
+        occurredAt: requiredString(input, "occurredAt"),
+      };
+    case "guild.submit_artifact": {
+      const artifact = ArtifactSubmissionSchema.safeParse(
+        trusted.commitment.artifactSubmission,
+      );
+      if (!artifact.success) {
+        throw taskError(
+          "The signed artifact submission metadata is missing or malformed.",
+          "GUILD_ARTIFACT_INVALID",
+        );
+      }
+      const summary = jsonRecord(input.artifact, "artifact");
+      if (
+        artifact.data.metadata.artifactId !==
+          requiredString(summary, "artifactId") ||
+        artifact.data.outputId !== requiredString(summary, "outputId") ||
+        artifact.data.metadata.contentDigest !==
+          requiredString(summary, "contentDigest") ||
+        artifact.data.metadata.pactDigest !==
+          requiredString(input, "pactDigest") ||
+        artifact.data.metadata.roleSlotId !==
+          requiredString(input, "roleSlotId")
+      ) {
+        throw taskError(
+          "Artifact summary does not match the signed submission.",
+          "GUILD_ARTIFACT_INVALID",
+        );
+      }
+      return {
+        type: "submit_artifact",
+        roleSlotId: artifact.data.metadata.roleSlotId,
+        artifact: artifact.data,
+      };
+    }
+    case "guild.publish_mission":
       throw taskError(
         "This Guild mutation is available after party binding in the next lifecycle phase.",
         "GUILD_ACTION_NOT_AVAILABLE",
@@ -547,49 +608,17 @@ function availability(value: JsonValue | undefined): {
   return { availableFrom, availableUntil };
 }
 
-async function verifyPactAcceptance(
-  env: GuildhallEnv,
-  missionId: string,
-  command: Extract<LifecycleCommand, { type: "accept_pact" }>,
-  authenticatedAgentId: string,
-): Promise<void> {
-  const suppliedAcceptedAt = Date.parse(command.acceptedAt);
-  const key = (await listAgentKeys(env.GUILD_DB, authenticatedAgentId)).find(
-    (candidate) =>
-      candidate.keyId === command.keyId && candidate.status === "active",
-  );
-  const proof =
-    key === undefined ||
-    command.agentId !== authenticatedAgentId ||
-    !Number.isFinite(suppliedAcceptedAt) ||
-    Math.abs(Date.now() - suppliedAcceptedAt) > 5 * 60 * 1_000
-      ? null
-      : await verifyRegisteredEd25519Proof({
-          key: { keyId: key.keyId, publicJwk: key.publicJwk, status: "active" },
-          proof: { keyId: command.keyId, signature: command.signature },
-          message: pactSigningBytes(command.pactDigest),
-          policy: { kind: "new-proof" },
-        });
+function progressStatus(
+  value: JsonValue | undefined,
+): "working" | "blocked" | "ready-for-delivery" {
   if (
-    proof?.valid !== true ||
-    !PactAcceptanceSchema.safeParse({
-      protocol: "commitment/v1",
-      kind: "acceptance",
-      acceptanceId: command.acceptanceId,
-      missionId,
-      pactVersion: command.pactVersion,
-      agentId: authenticatedAgentId,
-      keyId: command.keyId,
-      pactDigest: command.pactDigest,
-      signature: command.signature,
-      acceptedAt: command.acceptedAt,
-    }).success
+    value !== "working" &&
+    value !== "blocked" &&
+    value !== "ready-for-delivery"
   ) {
-    throw taskError(
-      "Pact acceptance proof failed.",
-      "GUILD_PACT_PROOF_INVALID",
-    );
+    throw taskError("Guild progress status is invalid.", "GUILD_INPUT_INVALID");
   }
+  return value;
 }
 
 function isA2AMutationAuthorized(
@@ -621,6 +650,21 @@ function isA2AMutationAuthorized(
         command.agentId === authenticatedAgentId &&
         (authenticatedAgentId === state.requesterAgentId ||
           state.selectedHelperIds.includes(authenticatedAgentId))
+      );
+    case "report_progress":
+      return state.roleSlots.some(
+        (slot) =>
+          slot.roleSlotId === command.roleSlotId &&
+          slot.status === "active" &&
+          slot.occupantAgentId === authenticatedAgentId,
+      );
+    case "submit_artifact":
+      return state.roleSlots.some(
+        (slot) =>
+          slot.roleSlotId === command.roleSlotId &&
+          slot.status === "active" &&
+          slot.occupantAgentId === authenticatedAgentId &&
+          command.artifact.metadata.producingAgentId === authenticatedAgentId,
       );
     default:
       return false;

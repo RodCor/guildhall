@@ -100,7 +100,7 @@ export const ReceiptSchema = z
         monetaryValue: z.literal(false),
       })
       .strict(),
-    reputationDeltas: z.array(ReputationDeltaSchema).max(8),
+    reputationDeltas: z.array(ReputationDeltaSchema).max(16),
     issuerKeyId: UuidSchema,
     issuerSignature: Ed25519SignatureSchema,
     issuedAt: TimestampSchema,
@@ -122,12 +122,44 @@ export const ReceiptSchema = z
           path: ["verification"],
         });
       }
-    } else if (receipt.reward.totalPointsAwarded > 0) {
-      context.addIssue({
-        code: "custom",
-        message: "A non-completed receipt cannot award success points",
-        path: ["reward", "totalPointsAwarded"],
-      });
+      if (
+        receipt.verification?.criterionResults.some(
+          (criterion) => criterion.status !== "passed",
+        )
+      ) {
+        context.addIssue({
+          code: "custom",
+          message: "Completed receipt criteria must all pass",
+          path: ["verification", "criterionResults"],
+        });
+      }
+    } else {
+      if (
+        receipt.reward.basePointsAwarded > 0 ||
+        receipt.reward.recoveryBonusAwarded > 0 ||
+        receipt.reward.totalPointsAwarded > 0
+      ) {
+        context.addIssue({
+          code: "custom",
+          message: "A non-completed receipt cannot award success points",
+          path: ["reward"],
+        });
+      }
+      if (
+        receipt.reputationDeltas.some(
+          (delta) =>
+            delta.pointsDelta !== 0 ||
+            delta.recoveryBonus !== 0 ||
+            delta.reliabilityDelta > 0 ||
+            delta.timelinessDelta > 0,
+        )
+      ) {
+        context.addIssue({
+          code: "custom",
+          message: "A non-completed receipt cannot carry positive reputation",
+          path: ["reputationDeltas"],
+        });
+      }
     }
 
     if (
@@ -150,6 +182,28 @@ export const ReceiptSchema = z
         message: "A receipt may apply one delta per agent and capability",
         path: ["reputationDeltas"],
       });
+    }
+
+    if (receipt.outcome === "completed") {
+      const deltaPoints = receipt.reputationDeltas.reduce(
+        (total, delta) => total + delta.pointsDelta,
+        0,
+      );
+      const recovery = receipt.reputationDeltas.reduce(
+        (total, delta) => total + delta.recoveryBonus,
+        0,
+      );
+      if (
+        deltaPoints !== receipt.reward.totalPointsAwarded ||
+        recovery !== receipt.reward.recoveryBonusAwarded ||
+        deltaPoints - recovery !== receipt.reward.basePointsAwarded
+      ) {
+        context.addIssue({
+          code: "custom",
+          message: "Receipt deltas must reconcile exactly to its reward",
+          path: ["reputationDeltas"],
+        });
+      }
     }
   });
 

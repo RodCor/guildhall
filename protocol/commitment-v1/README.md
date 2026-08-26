@@ -6,7 +6,7 @@
 
 All signed values are I-JSON. Guildhall rejects non-finite numbers, `undefined`, `BigInt`, circular values, unpaired Unicode surrogates, and non-JSON objects before canonicalization. It applies RFC 8785/JCS without Unicode normalization, hashes the canonical UTF-8 bytes with SHA-256, and encodes the 32-byte digest as standard case-sensitive RFC 4648 base64url without padding.
 
-Material pact fields include the mission/version, goal, public inputs, declared party bounds, selected participants, stable role slots, assignments, dependencies, outputs and public destination, formation/delivery deadlines, verification criteria, reward formula, and failure/replacement behavior. Presentation labels and animation state are not pact material.
+Material pact fields include the mission/version, goal, public inputs and their content digests, declared party bounds, selected participants, stable role slots, assignments, dependencies, outputs and public destination, formation/delivery deadlines, verification criteria, reward formula, and failure/replacement behavior. Presentation labels and animation state are not pact material.
 
 Material timestamps are normalized UTC RFC 3339 with exactly millisecond precision. UUIDs, digests, and signatures use their published schemas.
 

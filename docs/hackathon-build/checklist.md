@@ -73,7 +73,7 @@ Status: **Locked**
 
   **Verification pause B — live WebMCP/A2A:** Stop and show Rodrigo the browser agent's real tool call, four Agent Cards, A2A tasks/artifacts, selection evidence, animated/technical work split, and identical pact binding. Do not continue until this checkpoint is acknowledged.
 
-- [ ] **9. Execute, fail, replace, verify, and award from one receipt**
+- [x] **9. Execute, fail, replace, verify, and award from one receipt**
       Spec ref: `spec.md > Data Flow > Execution, default, and replacement` and `Verification, receipt, and reputation`
       What to build: Terra High integrates role-task dispatch, progress, signed/hashed artifacts, safety-gated publication, delivery, overdue flag, deterministic fixture verifier, infrastructure-pending state, one semantic correction, Scribe failure injection, public default/compensation, exact-slot Warden replacement, terminal receipts, and idempotent capability/reliability/timeliness deltas. Sol High reviews that replacement and scoring cannot bypass the bound pact. Luna High owns success, correction, verifier-unavailable, second-failure, overdue, duplicate-artifact, and replacement fixtures.
       Acceptance: Valid Scout output survives Scribe's default; Warden accepts unchanged work without a silent pact edit; active helpers never exceed two; points appear only after all required criteria pass; a failed mission gets no success XP; every rank delta links to one receipt and applies once.

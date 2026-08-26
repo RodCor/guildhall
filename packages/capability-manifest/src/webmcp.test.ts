@@ -15,6 +15,7 @@ const validPublishInput = {
       type: "inline",
       location: "fixture:axe-demo-v1",
       mediaType: "application/json",
+      contentDigest: "D".repeat(43),
     },
   ],
   requiredCapabilities: ["accessibility"],

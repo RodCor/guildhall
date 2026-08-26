@@ -16,6 +16,7 @@ import {
 } from "@a2a-js/sdk/client";
 import {
   ArtifactMetadataSchema,
+  ReplacementProofSchema,
   artifactSigningBytes,
   canonicalJsonDigest,
 } from "../../packages/contracts/src";
@@ -37,7 +38,11 @@ import {
   CONTROLLED_SCRIBE_FAILURE,
   parseApprovedFixture,
 } from "../../apps/demo-agent/src/fixtures";
+import { REPLACEMENT_PROOF_METADATA_KEY } from "../../apps/demo-agent/src/identity";
+import { hostedIdentity } from "../../apps/demo-agent/src/identity";
+import { stableAutonomousAcceptance } from "../../apps/demo-agent/src/guild-client";
 import { createAgentWorker } from "../../apps/demo-agent/src/worker";
+import { pactForProposal } from "../state-machine/fixtures";
 import { TEST_PRIVATE_JWKS } from "./fixtures/test-identities";
 
 const COMPLETED_AT = "2026-08-26T15:00:00.000Z";
@@ -62,6 +67,101 @@ const workers: Readonly<
 };
 
 describe("three independent deterministic A2A Workers", () => {
+  it("refuses to auto-accept a candidate that differs from its own proposal", async () => {
+    const scout = hostedIdentity("scout");
+    const scribe = hostedIdentity("scribe");
+    const requesterId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+    const slots = [
+      {
+        roleSlotId: SCOUT_SLOT,
+        originalAgentId: scout.agentId,
+        occupantAgentId: scout.agentId,
+        status: "active" as const,
+        artifactRequired: true,
+        artifactDelivered: false,
+      },
+      {
+        roleSlotId: SCRIBE_SLOT,
+        originalAgentId: scribe.agentId,
+        occupantAgentId: scribe.agentId,
+        status: "active" as const,
+        artifactRequired: true,
+        artifactDelivered: false,
+      },
+    ];
+    const ownPact = pactForProposal(2, requesterId, slots, "scout-terms", {
+      missionId: MISSION_ID,
+    });
+    const candidatePact = pactForProposal(
+      2,
+      requesterId,
+      slots,
+      "scribe-terms",
+      { missionId: MISSION_ID },
+    );
+    const ownDigest = await canonicalJsonDigest(ownPact);
+    const candidateDigest = await canonicalJsonDigest(candidatePact);
+    expect(ownDigest).not.toBe(candidateDigest);
+
+    expect(
+      await stableAutonomousAcceptance({
+        missionId: MISSION_ID,
+        agentId: scout.agentId,
+        keyId: scout.keyId,
+        selectedHelperIds: [scout.agentId, scribe.agentId],
+        capabilityBids: [
+          {
+            agentId: scout.agentId,
+            keyId: scout.keyId,
+            relevantCapabilities: ["typescript"],
+          },
+          {
+            agentId: scribe.agentId,
+            keyId: scribe.keyId,
+            relevantCapabilities: ["typescript"],
+          },
+        ],
+        assignmentProposals: [
+          {
+            proposerAgentId: scout.agentId,
+            keyId: scout.keyId,
+            proposalRound: 2,
+            pactDigest: ownDigest,
+            pact: ownPact,
+          },
+          {
+            proposerAgentId: scribe.agentId,
+            keyId: scribe.keyId,
+            proposalRound: 2,
+            pactDigest: candidateDigest,
+            pact: candidatePact,
+          },
+        ],
+        snapshot: {
+          stage: "COMMIT",
+          roleSlots: slots,
+          acceptances: {},
+          proposalHistory: [
+            { pactDigest: "P".repeat(43) },
+            { pactDigest: candidateDigest },
+          ],
+          assignmentResolution: {
+            strategy: "selection-order",
+            selectedProposalAgentId: scribe.agentId,
+            consideredProposalAgentIds: [scout.agentId, scribe.agentId],
+            consideredPactDigests: [ownDigest, candidateDigest],
+          },
+          candidatePact: {
+            proposalRound: 2,
+            proposerAgentId: scribe.agentId,
+            pactDigest: candidateDigest,
+            pact: candidatePact,
+          },
+        },
+      }),
+    ).toBeNull();
+  });
+
   it("serves three honest official Agent Cards with distinct public identities", async () => {
     const cards = await Promise.all(
       (["scout", "scribe", "warden"] as const).map(readCard),
@@ -214,14 +314,27 @@ describe("three independent deterministic A2A Workers", () => {
 
   it("lets Warden recover only an unchanged exact role assignment", async () => {
     const findings = fixtureFindings();
+    const scribeRecovery = {
+      findings,
+      originalRole: "scribe",
+      replacementRole: "scribe",
+      replacementAssignmentDigest: ASSIGNMENT_DIGEST,
+    } as const;
+    const scribeOffer = await send(
+      "warden",
+      offerRecoveryRequest(scribeRecovery),
+    );
+    expect(scribeOffer.task.status?.state).toBe(TaskState.TASK_STATE_COMPLETED);
+    expect(scribeOffer.task.artifacts).toEqual([]);
+    const scribeReplacement = ReplacementProofSchema.parse(
+      requiredRecord(
+        requiredRecord(scribeOffer.rawTask, "metadata"),
+        REPLACEMENT_PROOF_METADATA_KEY,
+      ),
+    );
     const recovered = await send(
       "warden",
-      recoveryRequest({
-        findings,
-        originalRole: "scribe",
-        replacementRole: "scribe",
-        replacementAssignmentDigest: ASSIGNMENT_DIGEST,
-      }),
+      recoveryRequest(scribeRecovery, scribeReplacement.replacementId),
     );
     expect(recovered.task.status?.state).toBe(TaskState.TASK_STATE_COMPLETED);
     const recoveredArtifact = firstArtifact(recovered.rawTask);
@@ -234,14 +347,27 @@ describe("three independent deterministic A2A Workers", () => {
       recoveryMode: "exact-role",
     });
 
+    const scoutRecovery = {
+      findings,
+      originalRole: "scout",
+      replacementRole: "scout",
+      replacementAssignmentDigest: ASSIGNMENT_DIGEST,
+    } as const;
+    const scoutOffer = await send(
+      "warden",
+      offerRecoveryRequest(scoutRecovery),
+    );
+    expect(scoutOffer.task.status?.state).toBe(TaskState.TASK_STATE_COMPLETED);
+    expect(scoutOffer.task.artifacts).toEqual([]);
+    const scoutReplacement = ReplacementProofSchema.parse(
+      requiredRecord(
+        requiredRecord(scoutOffer.rawTask, "metadata"),
+        REPLACEMENT_PROOF_METADATA_KEY,
+      ),
+    );
     const recoveredScout = await send(
       "warden",
-      recoveryRequest({
-        findings,
-        originalRole: "scout",
-        replacementRole: "scout",
-        replacementAssignmentDigest: ASSIGNMENT_DIGEST,
-      }),
+      recoveryRequest(scoutRecovery, scoutReplacement.replacementId),
     );
     expect(recoveredScout.task.status?.state).toBe(
       TaskState.TASK_STATE_COMPLETED,
@@ -259,7 +385,7 @@ describe("three independent deterministic A2A Workers", () => {
 
     const changedScope = await send(
       "warden",
-      recoveryRequest({
+      offerRecoveryRequest({
         findings,
         originalRole: "scribe",
         replacementRole: "scribe",
@@ -385,16 +511,38 @@ function assignmentRequest(
   roleSlotId: string,
   data: unknown,
 ): OfficialSendMessageRequest {
-  return officialRequest("execute-role", roleSlotId, data);
+  return officialRequest("execute-role", roleSlotId, {
+    ...asRecord(data),
+    attempt: 1,
+  });
 }
 
-function recoveryRequest(input: {
+interface RecoveryRequestInput {
   readonly findings: readonly unknown[];
   readonly originalRole: "scout" | "scribe";
   readonly replacementRole: "scout" | "scribe";
   readonly replacementAssignmentDigest: string;
-}): OfficialSendMessageRequest {
+}
+
+function offerRecoveryRequest(
+  input: RecoveryRequestInput,
+): OfficialSendMessageRequest {
+  return officialRequest("offer-recovery", SCRIBE_SLOT, recoveryPayload(input));
+}
+
+function recoveryRequest(
+  input: RecoveryRequestInput,
+  acceptedReplacementId: string,
+): OfficialSendMessageRequest {
   return officialRequest("recover-role", SCRIBE_SLOT, {
+    ...recoveryPayload(input),
+    acceptedReplacementId,
+  });
+}
+
+function recoveryPayload(input: RecoveryRequestInput): Record<string, unknown> {
+  return {
+    attempt: 1,
     findings: input.findings,
     fixtureId: ACCESSIBILITY_FIXTURE_ID,
     kind: "role-recovery",
@@ -412,11 +560,11 @@ function recoveryRequest(input: {
       role: input.replacementRole,
       roleSlotId: SCRIBE_SLOT,
     },
-  });
+  };
 }
 
 function officialRequest(
-  action: "execute-role" | "recover-role",
+  action: "execute-role" | "offer-recovery" | "recover-role",
   roleSlotId: string,
   data: unknown,
 ): OfficialSendMessageRequest {

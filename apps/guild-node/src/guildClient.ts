@@ -1,4 +1,5 @@
 import {
+  ArtifactMetadataSchema,
   artifactSigningBytes,
   buildPact,
   canonicalJsonDigest,
@@ -113,16 +114,18 @@ export class GuildClient {
       case "guild.accept_pact":
         return this.#acceptPact(input, signal);
       case "guild.report_progress":
-        return this.#signedJson(
-          "POST",
-          `/api/missions/${segment(requiredString(input, "missionId"))}/progress`,
+        return this.#command(
+          input,
           {
-            commandId: commandId(input),
-            expectedSequence: await this.#expectedSequence(input, signal),
+            type: "report_progress",
             roleSlotId: requiredString(input, "roleSlotId"),
             status: requiredString(input, "status"),
             summary: requiredString(input, "summary"),
-            completedOutputIds: input.completedOutputIds,
+            completedOutputIds: requiredStringArray(
+              input,
+              "completedOutputIds",
+              true,
+            ),
             occurredAt: requiredString(input, "occurredAt"),
           },
           signal,
@@ -315,13 +318,15 @@ export class GuildClient {
     signal?: AbortSignal,
   ): Promise<Record<string, unknown>> {
     const config = await this.#paired();
+    const acceptanceId = commandId(input);
+    input.commandId = acceptanceId;
     const pactDigest = requiredString(input, "pactDigest");
     return this.#command(
       input,
       {
         type: "accept_pact",
         agentId: config.agentId,
-        acceptanceId: crypto.randomUUID(),
+        acceptanceId,
         keyId: config.keyId,
         pactVersion: requiredInteger(input, "pactVersion"),
         pactDigest,
@@ -329,7 +334,7 @@ export class GuildClient {
           config.privateJwk,
           pactSigningBytes(pactDigest),
         ),
-        acceptedAt: new Date().toISOString(),
+        acceptedAt: requiredString(input, "acceptedAt"),
       },
       signal,
     );
@@ -341,23 +346,51 @@ export class GuildClient {
   ): Promise<Record<string, unknown>> {
     const config = await this.#paired();
     const artifact = requiredRecord(input, "artifact");
+    const missionId = requiredString(input, "missionId");
     const pactDigest = requiredString(input, "pactDigest");
-    const contentDigest = requiredString(artifact, "contentDigest");
-    return this.#signedJson(
-      "POST",
-      `/api/missions/${segment(requiredString(input, "missionId"))}/artifacts`,
+    const content = requiredRecord(artifact, "content");
+    const contentDigest = await canonicalJsonDigest(content);
+    if (contentDigest !== requiredString(artifact, "contentDigest")) {
+      throw new TypeError(
+        "artifact.contentDigest does not match artifact.content",
+      );
+    }
+    const metadata = ArtifactMetadataSchema.parse({
+      protocol: "commitment/v1",
+      kind: "artifact-metadata",
+      artifactId: requiredString(artifact, "artifactId"),
+      missionId,
+      pactDigest,
+      roleSlotId: requiredString(input, "roleSlotId"),
+      producingAgentId: config.agentId,
+      keyId: config.keyId,
+      attempt: requiredInteger(artifact, "attempt"),
+      artifactType: requiredString(artifact, "type"),
+      mediaType: "application/json",
+      publicLocation: artifactPublicLocation(config.baseUrl, missionId),
+      contentDigest,
+      signature: await signMessage(
+        config.privateJwk,
+        artifactSigningBytes(pactDigest, contentDigest),
+      ),
+      safetyStatus: "approved",
+      completedAt: requiredString(artifact, "completedAt"),
+    });
+    return this.#command(
+      input,
       {
-        commandId: commandId(input),
-        expectedSequence: await this.#expectedSequence(input, signal),
-        roleSlotId: requiredString(input, "roleSlotId"),
-        pactDigest,
-        artifact,
-        contentDigest,
-        keyId: config.keyId,
-        signature: await signMessage(
-          config.privateJwk,
-          artifactSigningBytes(pactDigest, contentDigest),
-        ),
+        type: "submit_artifact",
+        roleSlotId: metadata.roleSlotId,
+        artifact: {
+          outputId: requiredString(artifact, "outputId"),
+          metadata,
+          content,
+          dependencyArtifactIds: requiredStringArray(
+            artifact,
+            "dependencyArtifactIds",
+            true,
+          ),
+        },
       },
       signal,
     );
@@ -481,6 +514,12 @@ function query(
 
 function segment(value: string): string {
   return encodeURIComponent(value);
+}
+
+function artifactPublicLocation(baseUrl: string, missionId: string): string {
+  const url = new URL(`/api/missions/${segment(missionId)}`, baseUrl);
+  if (url.protocol === "http:") url.protocol = "https:";
+  return url.toString();
 }
 
 function commandId(input: Record<string, unknown>): string {

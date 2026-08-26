@@ -32,6 +32,28 @@ export const ArtifactMetadataSchema = z
   })
   .strict();
 
+/** Complete public artifact accepted by the authoritative mission coordinator. */
+export const ArtifactSubmissionSchema = z
+  .object({
+    outputId: UuidSchema,
+    metadata: ArtifactMetadataSchema,
+    content: z.record(z.string(), z.unknown()),
+    dependencyArtifactIds: z.array(UuidSchema).max(8),
+  })
+  .strict()
+  .superRefine((submission, context) => {
+    if (
+      new Set(submission.dependencyArtifactIds).size !==
+      submission.dependencyArtifactIds.length
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Artifact dependency identifiers must be unique",
+        path: ["dependencyArtifactIds"],
+      });
+    }
+  });
+
 export const VerificationCriterionResultSchema = z
   .object({
     criterionId: UuidSchema,
@@ -92,4 +114,5 @@ export const VerificationResultSchema = z
   });
 
 export type ArtifactMetadata = z.infer<typeof ArtifactMetadataSchema>;
+export type ArtifactSubmission = z.infer<typeof ArtifactSubmissionSchema>;
 export type VerificationResult = z.infer<typeof VerificationResultSchema>;

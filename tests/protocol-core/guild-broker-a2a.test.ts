@@ -348,6 +348,7 @@ function brokerMission(
         type: "url" as const,
         location: "https://guildhall.test/fixtures/accessibility-dungeon-v1",
         mediaType: "text/html",
+        contentDigest: "geKBB1Pr83xZU8RzZaoC-YcNy6MO2jw3lB_lupUQQ58",
       },
     ],
     requiredCapabilities: ["accessibility-audit"],

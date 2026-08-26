@@ -83,8 +83,9 @@ const PUBLIC_INPUT = objectSchema(
     type: enumSchema(["url", "inline"]),
     location: LONG_TEXT,
     mediaType: schema({ type: "string", minLength: 1, maxLength: 120 }),
+    contentDigest: DIGEST,
   },
-  ["inputId", "type", "location", "mediaType"],
+  ["inputId", "type", "location", "mediaType", "contentDigest"],
 );
 
 const REQUIRED_OUTPUT = objectSchema(
@@ -267,6 +268,10 @@ const INSPECT_DATA = objectSchema(
     events: arraySchema(schema({ type: "object" }), 0, 500, false),
     afterSequence: SEQUENCE,
     latestSequence: SEQUENCE,
+    artifacts: arraySchema(schema({ type: "object" }), 0, 32, false),
+    replacements: arraySchema(schema({ type: "object" }), 0, 8, false),
+    verificationRuns: arraySchema(schema({ type: "object" }), 0, 2, false),
+    receipt: nullable(schema({ type: "object", maxProperties: 32 })),
   },
   [
     "missionId",
@@ -280,45 +285,7 @@ const INSPECT_DATA = objectSchema(
 
 const RECEIPT_DATA = objectSchema(
   {
-    receipt: nullable(
-      objectSchema(
-        {
-          receiptId: IDENTIFIER,
-          missionId: IDENTIFIER,
-          outcome: enumSchema(["completed", "failed", "canceled", "expired"]),
-          pactDigest: nullable(DIGEST),
-          eventChainHead: DIGEST,
-          reward: objectSchema(
-            {
-              basePointsAwarded: schema({ type: "integer", minimum: 0 }),
-              recoveryBonusAwarded: schema({ type: "integer", minimum: 0 }),
-              totalPointsAwarded: schema({ type: "integer", minimum: 0 }),
-              transferable: schema({ const: false }),
-              redeemable: schema({ const: false }),
-              monetaryValue: schema({ const: false }),
-            },
-            [
-              "basePointsAwarded",
-              "recoveryBonusAwarded",
-              "totalPointsAwarded",
-              "transferable",
-              "redeemable",
-              "monetaryValue",
-            ],
-          ),
-          issuedAt: TIMESTAMP,
-        },
-        [
-          "receiptId",
-          "missionId",
-          "outcome",
-          "pactDigest",
-          "eventChainHead",
-          "reward",
-          "issuedAt",
-        ],
-      ),
-    ),
+    receipt: nullable(schema({ type: "object", maxProperties: 32 })),
   },
   ["receipt"],
 );
@@ -548,6 +515,7 @@ export const guildCapabilityManifest = deepFreeze([
         ...MISSION_COMMAND_INPUT,
         pactVersion: schema({ type: "integer", minimum: 1, maximum: 2 }),
         pactDigest: DIGEST,
+        acceptedAt: TIMESTAMP,
       },
       ["missionId", "expectedSequence", "pactVersion", "pactDigest"],
     ),
@@ -609,8 +577,14 @@ export const guildCapabilityManifest = deepFreeze([
             mediaType: schema({ const: "application/json" }),
             contentDigest: DIGEST,
             publicLocation: schema({ const: "mission-artifact" }),
+            content: schema({
+              type: "object",
+              minProperties: 1,
+              maxProperties: 32,
+            }),
             dependencyArtifactIds: arraySchema(IDENTIFIER, 0, 8, true),
             attempt: schema({ type: "integer", minimum: 1, maximum: 2 }),
+            completedAt: TIMESTAMP,
           },
           [
             "artifactId",

@@ -12,12 +12,18 @@ import type { HostedAgentKind } from "./agent-card";
 import {
   ACCESSIBILITY_FIXTURE_ID,
   CONTROLLED_SCRIBE_FAILURE,
+  CONTROLLED_SCRIBE_FAILURE_CODE,
+  CONTROLLED_SCRIBE_FAILURE_MESSAGE,
   type AccessibilityFinding,
   findingsArtifactContent,
   parseApprovedFixture,
   remediationArtifactContent,
 } from "./fixtures";
-import { createSignedArtifact } from "./identity";
+import {
+  REPLACEMENT_PROOF_METADATA_KEY,
+  createSignedArtifact,
+  createSignedReplacementProof,
+} from "./identity";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
@@ -55,6 +61,7 @@ async function executeScout(
 ): Promise<A2AExecutionResult> {
   ensureAction(context, "execute-role");
   const payload = assignmentPayload(context.message, "scout");
+  const attempt = requiredAttempt(payload);
   const proof = commitmentProof(context);
   const findings = parseApprovedFixture(requiredString(payload, "fixtureId"));
   const content = findingsArtifactContent(findings);
@@ -66,6 +73,7 @@ async function executeScout(
     missionId: context.contextId,
     pactDigest: proof.pactDigest,
     roleSlotId: proof.roleSlotId,
+    attempt,
     artifactType: "accessibility-findings",
     content,
   });
@@ -79,14 +87,22 @@ async function executeScribe(
 ): Promise<A2AExecutionResult> {
   ensureAction(context, "execute-role");
   const payload = assignmentPayload(context.message, "scribe");
+  const attempt = requiredAttempt(payload);
   const proof = commitmentProof(context);
   const findings = parseFindings(payload.findings);
   if (
     optionalString(payload, "fixtureScenario") === CONTROLLED_SCRIBE_FAILURE
   ) {
-    throw new A2ATaskExecutionError(
-      "Controlled Scribe failure fixture activated.",
-    );
+    throw new A2ATaskExecutionError(CONTROLLED_SCRIBE_FAILURE_MESSAGE, {
+      code: CONTROLLED_SCRIBE_FAILURE_CODE,
+      metadata: {
+        deterministic: true,
+        failedRole: "scribe",
+        failureFixture: CONTROLLED_SCRIBE_FAILURE,
+        guildMissionVerification: "pending",
+        retryable: false,
+      },
+    });
   }
   const content = remediationArtifactContent(findings);
   const artifact = await createSignedArtifact({
@@ -97,6 +113,7 @@ async function executeScribe(
     missionId: context.contextId,
     pactDigest: proof.pactDigest,
     roleSlotId: proof.roleSlotId,
+    attempt,
     artifactType: "remediation-plan",
     content,
   });
@@ -108,8 +125,9 @@ async function executeWarden(
   options: HostedExecutorOptions,
   now: () => Date,
 ): Promise<A2AExecutionResult> {
-  ensureAction(context, "recover-role");
+  ensureWardenAction(context);
   const payload = dataPayload(context.message);
+  const attempt = requiredAttempt(payload);
   if (
     requiredString(payload, "protocol") !== "commitment/v1" ||
     requiredString(payload, "kind") !== "role-recovery" ||
@@ -152,21 +170,61 @@ async function executeWarden(
       : remediationArtifactContent(parseFindings(payload.findings));
   const artifactType =
     role === "scout" ? "accessibility-findings" : "remediation-plan";
-  const artifact = await createSignedArtifact({
-    kind: "warden",
+  const completedAt = now().toISOString();
+  const replacementProof = await createSignedReplacementProof({
     privateJwk: options.privateJwk,
-    origin: options.origin,
-    completedAt: now().toISOString(),
+    acceptedAt: completedAt,
     missionId: context.contextId,
     pactDigest: proof.pactDigest,
     roleSlotId: proof.roleSlotId,
+    predecessorAgentId,
+  });
+  if (context.commitment.action === "offer-recovery") {
+    return {
+      artifacts: [],
+      taskMetadata: {
+        deterministic: true,
+        guildMissionVerification: "pending",
+        [REPLACEMENT_PROOF_METADATA_KEY]: replacementProof,
+        predecessorAgentId,
+        recoveredRole: role,
+        recoveryMode: "exact-role-offer",
+        replacementProofId: requiredString(replacementProof, "replacementId"),
+      },
+    };
+  }
+  if (
+    requiredString(payload, "acceptedReplacementId") !==
+    requiredString(replacementProof, "replacementId")
+  ) {
+    throw rejectedAssignment(
+      "Recovery work requires the bound replacement ID.",
+    );
+  }
+  const signedArtifact = await createSignedArtifact({
+    kind: "warden",
+    privateJwk: options.privateJwk,
+    origin: options.origin,
+    completedAt,
+    missionId: context.contextId,
+    pactDigest: proof.pactDigest,
+    roleSlotId: proof.roleSlotId,
+    attempt,
     artifactType,
     content,
   });
+  const artifact = {
+    ...signedArtifact,
+    metadata: {
+      ...signedArtifact.metadata,
+      [REPLACEMENT_PROOF_METADATA_KEY]: replacementProof,
+    },
+  };
   return completedResult(artifact.artifactId, [artifact], {
     predecessorAgentId,
     recoveredRole: role,
     recoveryMode: "exact-role",
+    replacementProofId: requiredString(replacementProof, "replacementId"),
   });
 }
 
@@ -239,6 +297,20 @@ function ensureAction(
   }
   if (context.commitment.action !== expected) {
     throw rejectedAssignment(`Expected the ${expected} commitment action.`);
+  }
+}
+
+function ensureWardenAction(context: A2AExecutionContext): void {
+  if (context.signal.aborted) {
+    throw rejectedAssignment("Execution was canceled before it started.");
+  }
+  if (
+    context.commitment.action !== "offer-recovery" &&
+    context.commitment.action !== "recover-role"
+  ) {
+    throw rejectedAssignment(
+      "Expected the offer-recovery or recover-role commitment action.",
+    );
   }
 }
 
@@ -325,6 +397,14 @@ function requiredDigest(value: JsonObject, key: string): string {
   const candidate = requiredString(value, key);
   if (!DIGEST_PATTERN.test(candidate)) {
     throw rejectedAssignment(`${key} is invalid.`);
+  }
+  return candidate;
+}
+
+function requiredAttempt(value: JsonObject): 1 | 2 {
+  const candidate = value.attempt;
+  if (candidate !== 1 && candidate !== 2) {
+    throw rejectedAssignment("attempt must be 1 or 2.");
   }
   return candidate;
 }

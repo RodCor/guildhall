@@ -89,12 +89,45 @@ CREATE TABLE IF NOT EXISTS artifacts (
   submitted_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS artifact_records (
+  artifact_id TEXT NOT NULL,
+  attempt INTEGER NOT NULL,
+  role_slot_id TEXT NOT NULL,
+  output_id TEXT NOT NULL,
+  producing_agent_id TEXT NOT NULL,
+  content_digest TEXT NOT NULL,
+  record_json TEXT NOT NULL,
+  accepted_sequence INTEGER NOT NULL,
+  accepted_at TEXT NOT NULL,
+  PRIMARY KEY (artifact_id, attempt)
+);
+
+CREATE INDEX IF NOT EXISTS artifact_records_slot
+  ON artifact_records(role_slot_id, accepted_sequence);
+
+CREATE TABLE IF NOT EXISTS replacement_records (
+  replacement_id TEXT PRIMARY KEY,
+  role_slot_id TEXT NOT NULL,
+  predecessor_agent_id TEXT NOT NULL,
+  replacement_agent_id TEXT NOT NULL,
+  proof_json TEXT NOT NULL,
+  accepted_sequence INTEGER NOT NULL,
+  accepted_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS verification_runs (
   verification_id TEXT PRIMARY KEY,
   status TEXT NOT NULL,
   sequence INTEGER NOT NULL,
   result_json TEXT,
   updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS mission_receipt (
+  receipt_id TEXT PRIMARY KEY,
+  receipt_json TEXT NOT NULL,
+  issued_sequence INTEGER NOT NULL,
+  issued_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS events (

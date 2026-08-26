@@ -95,7 +95,9 @@ export async function buildPact(input: {
     verificationCriteria: input.mission.verificationCriteria,
     reward: {
       totalPoints: input.mission.pointReward,
-      replacementRecoveryBonus: 0,
+      replacementRecoveryBonus: replacementRecoveryBonus(
+        input.mission.pointReward,
+      ),
       transferable: false,
       redeemable: false,
     },
@@ -122,10 +124,16 @@ export function pactMatchesMission(pact: Pact, mission: Mission): boolean {
     pact.deliveryDeadline === mission.deliveryDeadline &&
     sameJson(pact.verificationCriteria, mission.verificationCriteria) &&
     pact.reward.totalPoints === mission.pointReward &&
+    pact.reward.replacementRecoveryBonus ===
+      replacementRecoveryBonus(mission.pointReward) &&
     pact.reward.transferable === false &&
     pact.reward.redeemable === false &&
     sameJson(pact.failureBehavior, mission.failureBehavior)
   );
+}
+
+function replacementRecoveryBonus(pointReward: number): number {
+  return Math.min(1_000, Math.max(1, Math.floor(pointReward / 10)));
 }
 
 async function pactIdForMission(missionId: string): Promise<string> {

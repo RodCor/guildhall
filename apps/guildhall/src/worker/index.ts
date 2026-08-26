@@ -1,11 +1,8 @@
 import { scanPublicPayload } from "@guildhall/trust-engine";
 import {
-  PactAcceptanceSchema,
   canonicalJsonDigest,
   pactMatchesMission,
-  pactSigningBytes,
   type Mission,
-  verifyRegisteredEd25519Proof,
 } from "@guildhall/contracts";
 import type {
   LifecycleCommand,
@@ -20,10 +17,11 @@ import { handleAgentRoute } from "./auth/agentRoutes.js";
 import { authorizeAgentAction } from "./auth/agentAuthorization.js";
 import { handleOAuthRoute } from "./auth/oauth.js";
 import { handleSessionRoute } from "./auth/session.js";
-import { getAutonomyPolicy, listAgentKeys } from "./repositories/index.js";
+import { getAutonomyPolicy } from "./repositories/index.js";
 import { handlePublicApiRoute } from "./publicApi.js";
 import { handleGuildBrokerRoute } from "./a2a/guildBroker.js";
 import type { GuildhallEnv } from "./types.js";
+import { executeBoundDemoMission } from "./executionOrchestrator.js";
 
 export { MissionCoordinator } from "./durable/MissionCoordinator.js";
 export type { GuildhallEnv as Env } from "./types.js";
@@ -36,7 +34,7 @@ const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
 export default {
-  async fetch(request, env): Promise<Response> {
+  async fetch(request, env, ctx): Promise<Response> {
     const url = new URL(request.url);
 
     if (url.pathname === "/api/health") {
@@ -96,16 +94,15 @@ export default {
       }
       const publicScan = scanPublicPayload({
         commandId: body.commandId,
-        command:
-          body.command.type === "accept_pact"
-            ? { ...body.command, signature: "[public-ed25519-signature]" }
-            : body.command,
+        command: publicCommandForSafetyScan(body.command),
       });
       if (!publicScan.safe) {
         return Response.json(
           {
             error: "PUBLIC_SAFETY_REJECTED",
             message: "The public command did not pass the safety boundary",
+            fieldPath: publicScan.fieldPath,
+            category: publicScan.category,
           },
           { status: 422 },
         );
@@ -116,64 +113,47 @@ export default {
         requiredScope: "missions:write",
       });
       if (!authorization.ok) return authorization.response;
-      const acceptedAt = new Date().toISOString();
-      if (body.command.type === "accept_pact") {
-        const suppliedAcceptedAt = Date.parse(body.command.acceptedAt);
-        const key = (
-          await listAgentKeys(env.GUILD_DB, authorization.agentId)
-        ).find(
-          (candidate) =>
-            candidate.keyId === authorization.keyId &&
-            candidate.status === "active",
-        );
-        const proof =
-          key === undefined ||
-          body.command.keyId !== authorization.keyId ||
-          body.command.agentId !== authorization.agentId ||
-          !Number.isFinite(suppliedAcceptedAt) ||
-          Math.abs(Date.now() - suppliedAcceptedAt) > 5 * 60 * 1_000
-            ? null
-            : await verifyRegisteredEd25519Proof({
-                key: {
-                  keyId: key.keyId,
-                  publicJwk: key.publicJwk,
-                  status: "active",
-                },
-                proof: {
-                  keyId: body.command.keyId,
-                  signature: body.command.signature,
-                },
-                message: pactSigningBytes(body.command.pactDigest),
-                policy: { kind: "new-proof" },
-              });
-        if (proof?.valid !== true) {
-          return Response.json(
-            {
-              error: "PACT_PROOF_NOT_AUTHORIZED",
-              message: "Pact acceptance proof failed",
-            },
-            { status: 403 },
-          );
-        }
-        if (
-          !PactAcceptanceSchema.safeParse({
-            protocol: "commitment/v1",
-            kind: "acceptance",
-            acceptanceId: body.command.acceptanceId,
-            missionId,
-            pactVersion: body.command.pactVersion,
-            agentId: authorization.agentId,
-            keyId: authorization.keyId,
-            pactDigest: body.command.pactDigest,
-            signature: body.command.signature,
-            acceptedAt,
-          }).success
-        ) {
-          return Response.json(
-            { error: "INVALID_COMMAND", message: "Pact proof is malformed" },
-            { status: 400 },
-          );
-        }
+      const authenticatedCommand = {
+        ...body,
+        actor: {
+          agentId: authorization.agentId,
+          ownerId:
+            authorization.kind === "owner"
+              ? `github:${authorization.owner.principal.githubUserId}`
+              : authorization.credential.publicOwnerId,
+          keyId: authorization.keyId,
+        },
+        source:
+          webMcpCommandMatch !== null
+            ? ("webmcp" as const)
+            : authorization.kind === "guild-node"
+              ? ("mcp" as const)
+              : ("http" as const),
+        command:
+          body.command.type === "apply"
+            ? {
+                ...body.command,
+                agentId: authorization.agentId,
+                keyId: authorization.keyId,
+              }
+            : body.command.type === "submit_capability_bid"
+              ? {
+                  ...body.command,
+                  agentId: authorization.agentId,
+                  keyId: authorization.keyId,
+                }
+              : body.command.type === "submit_assignment_proposal"
+                ? {
+                    ...body.command,
+                    proposerAgentId: authorization.agentId,
+                    keyId: authorization.keyId,
+                  }
+                : body.command,
+      };
+      const coordinator = env.MISSIONS.getByName(missionId);
+      const replay = await coordinator.replayCommand(authenticatedCommand);
+      if (replay !== null) {
+        return Response.json(replay, { status: replay.ok ? 200 : 409 });
       }
       let snapshot: MissionSnapshotPacket & {
         readonly definition?: Mission | null;
@@ -195,7 +175,6 @@ export default {
         );
       }
       if (
-        body.expectedSequence !== snapshot.latestSequence ||
         !isExternalCommandAuthorized(
           snapshot.snapshot,
           body.command,
@@ -264,56 +243,73 @@ export default {
           );
         }
       }
-      const authenticatedCommand = {
-        ...body,
-        actor: {
-          agentId: authorization.agentId,
-          ownerId:
-            authorization.kind === "owner"
-              ? `github:${authorization.owner.principal.githubUserId}`
-              : authorization.credential.publicOwnerId,
-          keyId: authorization.keyId,
-        },
-        source:
-          webMcpCommandMatch !== null
-            ? ("webmcp" as const)
-            : authorization.kind === "guild-node"
-              ? ("mcp" as const)
-              : ("http" as const),
-        command:
-          body.command.type === "accept_pact"
-            ? { ...body.command, acceptedAt }
-            : body.command.type === "apply"
-              ? {
-                  ...body.command,
-                  agentId: authorization.agentId,
-                  keyId: authorization.keyId,
-                }
-              : body.command.type === "submit_capability_bid"
-                ? {
-                    ...body.command,
-                    agentId: authorization.agentId,
-                    keyId: authorization.keyId,
-                  }
-                : body.command.type === "submit_assignment_proposal"
-                  ? {
-                      ...body.command,
-                      proposerAgentId: authorization.agentId,
-                      keyId: authorization.keyId,
-                    }
-                  : body.command,
-      };
       const result =
-        await env.MISSIONS.getByName(missionId).executeCommand(
-          authenticatedCommand,
+        authenticatedCommand.command.type === "submit_artifact"
+          ? await coordinator.submitArtifact(authenticatedCommand)
+          : authenticatedCommand.command.type === "accept_pact"
+            ? await coordinator.acceptPact(authenticatedCommand)
+            : authenticatedCommand.command.type === "fill_role_slot"
+              ? await coordinator.bindReplacement(authenticatedCommand)
+              : await coordinator.executeCommand(authenticatedCommand);
+      let responseResult = result;
+      if (
+        result.ok &&
+        authenticatedCommand.command.type === "accept_pact" &&
+        result.eventTypes.includes("pact_bound")
+      ) {
+        ctx.waitUntil(
+          executeBoundDemoMission(env, missionId, true).catch((error) => {
+            console.error(
+              JSON.stringify({
+                missionId,
+                errorName: error instanceof Error ? error.name : "UnknownError",
+                message: "autonomous demo execution failed",
+              }),
+            );
+          }),
         );
-      const status = result.ok
+      }
+      if (
+        result.ok &&
+        authenticatedCommand.command.type === "submit_artifact"
+      ) {
+        const afterArtifact = await (
+          coordinator as unknown as {
+            getSnapshot(): Promise<
+              MissionSnapshotPacket & {
+                readonly receipt?: unknown;
+              }
+            >;
+          }
+        ).getSnapshot();
+        if (
+          afterArtifact.snapshot.stage === "DELIVER" ||
+          (afterArtifact.snapshot.terminalOutcome !== null &&
+            afterArtifact.receipt == null)
+        ) {
+          await coordinator.runVerification({
+            infrastructureStatus: "available",
+          });
+        }
+        const reconciled = await (
+          coordinator as unknown as {
+            getSnapshot(): Promise<MissionSnapshotPacket>;
+          }
+        ).getSnapshot();
+        responseResult = {
+          ...result,
+          resultingSequence: reconciled.latestSequence,
+        };
+      }
+      const status = responseResult.ok
         ? 200
-        : result.code === "COMMAND_ID_REUSED" ||
-            result.code === "EXPECTED_SEQUENCE_MISMATCH"
-          ? 409
-          : 422;
-      return Response.json(result, { status });
+        : responseResult.code === "PACT_PROOF_INVALID"
+          ? 403
+          : responseResult.code === "COMMAND_ID_REUSED" ||
+              responseResult.code === "EXPECTED_SEQUENCE_MISMATCH"
+            ? 409
+            : 422;
+      return Response.json(responseResult, { status });
     }
 
     const streamMatch = STREAM_ROUTE.exec(url.pathname);
@@ -437,18 +433,36 @@ function isExternalCommandAuthorized(
         command.proposerAgentId === authenticatedAgentId &&
         state.selectedHelperIds.includes(authenticatedAgentId)
       );
+    case "report_progress":
+      return state.roleSlots.some(
+        (slot) =>
+          slot.roleSlotId === command.roleSlotId &&
+          slot.status === "active" &&
+          slot.occupantAgentId === authenticatedAgentId,
+      );
     case "submit_artifact":
+      return state.roleSlots.some(
+        (slot) =>
+          slot.roleSlotId === command.roleSlotId &&
+          slot.status === "active" &&
+          slot.occupantAgentId === authenticatedAgentId &&
+          command.artifact.metadata.producingAgentId === authenticatedAgentId,
+      );
     case "fill_role_slot":
-      // Dedicated artifact/replacement adapters add their domain proofs in item 8.
-      return false;
+      return command.replacementAgentId === authenticatedAgentId;
     case "publish":
     case "revise_mission":
     case "start_execution":
-    case "default_role":
-    case "release_role":
     case "safety_pause":
     case "cancel":
       return authenticatedAgentId === state.requesterAgentId;
+    case "release_role":
+      return state.roleSlots.some(
+        (slot) =>
+          slot.roleSlotId === command.roleSlotId &&
+          slot.status === "active" &&
+          slot.occupantAgentId === authenticatedAgentId,
+      );
     case "form_party":
       // Party selection is server-derived from the frozen application and
       // registry evidence snapshot; no external adapter may supply helper IDs.
@@ -457,12 +471,39 @@ function isExternalCommandAuthorized(
       return false;
     case "negotiation_timeout":
     case "mark_overdue":
+    case "default_role":
     case "verify":
     case "verifier_unavailable":
     case "verification_failed":
     case "verification_passed":
+    case "issue_receipt":
     case "safety_reject":
     case "expire":
       return false;
   }
+}
+
+function publicCommandForSafetyScan(command: LifecycleCommand): unknown {
+  if (command.type === "accept_pact") {
+    return { ...command, signature: "[public-ed25519-signature]" };
+  }
+  if (command.type === "submit_artifact") {
+    return {
+      ...command,
+      artifact: {
+        ...command.artifact,
+        metadata: {
+          ...command.artifact.metadata,
+          signature: "[public-ed25519-signature]",
+        },
+      },
+    };
+  }
+  if (command.type === "fill_role_slot") {
+    return {
+      ...command,
+      proof: { ...command.proof, signature: "[public-ed25519-signature]" },
+    };
+  }
+  return command;
 }

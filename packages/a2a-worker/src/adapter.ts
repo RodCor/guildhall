@@ -301,8 +301,9 @@ async function executeMessage(
       commitment,
       signal: request.signal,
     });
+    const minimumArtifactCount = commitment.action === "offer-recovery" ? 0 : 1;
     if (
-      result.artifacts.length < 1 ||
+      result.artifacts.length < minimumArtifactCount ||
       result.artifacts.length > limits.artifactsPerTask
     ) {
       throw new A2AProtocolError("Agent returned an invalid Artifact count.", {

@@ -74,6 +74,7 @@ export const PactSchema = z
       (participant) => participant.agentId,
     );
     const slotIds = pact.roleSlots.map((slot) => slot.roleSlotId);
+    const slotAgentIds = pact.roleSlots.map((slot) => slot.originalAgentId);
     const helperIds = new Set(helpers.map((helper) => helper.agentId));
 
     if (requesters.length !== 1) {
@@ -104,6 +105,25 @@ export const PactSchema = z
         path: ["roleSlots"],
       });
     }
+    if (new Set(slotAgentIds).size !== slotAgentIds.length) {
+      context.addIssue({
+        code: "custom",
+        message: "A helper may own only one role slot",
+        path: ["roleSlots"],
+      });
+    }
+    if (
+      pact.roleSlots.reduce(
+        (total, slot) => total + slot.requiredCapabilities.length,
+        0,
+      ) > 8
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "A pact supports at most eight capability allocations",
+        path: ["roleSlots"],
+      });
+    }
     for (const [index, slot] of pact.roleSlots.entries()) {
       if (!helperIds.has(slot.originalAgentId)) {
         context.addIssue({
@@ -117,6 +137,24 @@ export const PactSchema = z
           code: "custom",
           message: "A role slot cannot depend on itself",
           path: ["roleSlots", index, "dependencyRoleSlotIds"],
+        });
+      }
+      if (
+        new Set(slot.requiredCapabilities).size !==
+        slot.requiredCapabilities.length
+      ) {
+        context.addIssue({
+          code: "custom",
+          message: "Role capabilities must be unique",
+          path: ["roleSlots", index, "requiredCapabilities"],
+        });
+      }
+      if (slot.pointAllocation < slot.requiredCapabilities.length) {
+        context.addIssue({
+          code: "custom",
+          message:
+            "Role points must allocate at least one point per capability",
+          path: ["roleSlots", index, "pointAllocation"],
         });
       }
     }

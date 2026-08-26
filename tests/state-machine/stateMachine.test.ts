@@ -77,6 +77,92 @@ function acceptPact(
   };
 }
 
+function submitArtifact(
+  state: LifecycleState,
+  roleSlotId: string,
+): Extract<LifecycleCommand, { type: "submit_artifact" }> {
+  const candidate = state.candidatePact;
+  if (candidate === null) throw new Error("Expected a candidate pact");
+  const pactSlot = candidate.pact.roleSlots.find(
+    (slot) => slot.roleSlotId === roleSlotId,
+  );
+  const runtimeSlot = state.roleSlots.find(
+    (slot) => slot.roleSlotId === roleSlotId,
+  );
+  const output = candidate.pact.requiredOutputs.find(
+    (entry) => entry.outputId === pactSlot?.requiredOutputIds[0],
+  );
+  if (
+    pactSlot === undefined ||
+    runtimeSlot === undefined ||
+    output === undefined
+  ) {
+    throw new Error("Expected a bound role output");
+  }
+  return {
+    type: "submit_artifact",
+    roleSlotId,
+    artifact: {
+      outputId: output.outputId,
+      metadata: {
+        protocol: "commitment/v1",
+        kind: "artifact-metadata",
+        artifactId: output.outputId,
+        missionId: state.missionId,
+        pactDigest: candidate.pactDigest,
+        roleSlotId,
+        producingAgentId: runtimeSlot.occupantAgentId,
+        keyId: acceptanceKeyId,
+        attempt: (state.correctionCount + 1) as 1 | 2,
+        artifactType: output.type,
+        mediaType: "application/json",
+        publicLocation: `https://guildhall.test/artifacts/${output.outputId}`,
+        contentDigest: "D".repeat(43),
+        signature: "S".repeat(86),
+        safetyStatus: "approved",
+        completedAt: acceptedAt,
+      },
+      content: { fixture: "test" },
+      dependencyArtifactIds: [],
+    },
+  };
+}
+
+function defaultRole(
+  roleSlotId: string,
+): Extract<LifecycleCommand, { type: "default_role" }> {
+  return {
+    type: "default_role",
+    roleSlotId,
+    evidence: {
+      taskId: crypto.randomUUID(),
+      taskState: "TASK_STATE_FAILED",
+      errorCode: "CONTROLLED_TEST_FAILURE",
+      failureFixture: "state-machine-test",
+      retryable: false,
+      observedAt: acceptedAt,
+    },
+  };
+}
+
+function replacementProof(roleSlotId: string, pactDigestValue: string) {
+  return {
+    protocol: "commitment/v1" as const,
+    kind: "replacement" as const,
+    replacementId: "90000000-0000-4000-8000-000000000001",
+    missionId: MISSION_ID,
+    pactDigest: pactDigestValue,
+    roleSlotId,
+    predecessorAgentId: scribe,
+    replacementAgentId: warden,
+    keyId: acceptanceKeyId,
+    reason: "participant-defaulted" as const,
+    preservesPactDigest: true as const,
+    signature: "S".repeat(86),
+    acceptedAt,
+  };
+}
+
 function boundParty(
   helperIds = [scout, scribe],
   slots = [scoutSlot, scribeSlot],
@@ -203,14 +289,8 @@ describe("pure mission lifecycle", () => {
     expect(state.stage).toBe("EXECUTE");
     expect(deriveDisplayState(state)).toBe("Bound");
     state = apply(state, { type: "start_execution" });
-    state = apply(state, {
-      type: "submit_artifact",
-      roleSlotId: scoutSlot.roleSlotId,
-    });
-    state = apply(state, {
-      type: "submit_artifact",
-      roleSlotId: scribeSlot.roleSlotId,
-    });
+    state = apply(state, submitArtifact(state, scoutSlot.roleSlotId));
+    state = apply(state, submitArtifact(state, scribeSlot.roleSlotId));
     expect(state.stage).toBe("DELIVER");
     state = apply(state, { type: "verify" });
     expect(deriveDisplayState(state)).toBe("Verifying");
@@ -571,10 +651,7 @@ describe("pure mission lifecycle", () => {
 
   it("replaces only the defaulted exact slot without changing the pact", () => {
     let state = boundParty();
-    state = apply(state, {
-      type: "default_role",
-      roleSlotId: scribeSlot.roleSlotId,
-    });
+    state = apply(state, defaultRole(scribeSlot.roleSlotId));
     expect(state.stage).toBe("COMPENSATE");
     expect(deriveDisplayState(state)).toBe("Replacement needed");
 
@@ -584,6 +661,7 @@ describe("pure mission lifecycle", () => {
       predecessorAgentId: scribe,
       replacementAgentId: warden,
       pactDigest: "changed-pact",
+      proof: replacementProof(scribeSlot.roleSlotId, "changed-pact"),
     });
     expect(changedPact).toMatchObject({
       ok: false,
@@ -596,6 +674,7 @@ describe("pure mission lifecycle", () => {
       predecessorAgentId: scribe,
       replacementAgentId: warden,
       pactDigest: PACT_DIGEST_B,
+      proof: replacementProof(scribeSlot.roleSlotId, PACT_DIGEST_B),
     });
     expect(state.stage).toBe("EXECUTE");
     expect(state.roleSlots[1]).toMatchObject({
@@ -608,10 +687,7 @@ describe("pure mission lifecycle", () => {
 
   it("separates safety rejection from the single semantic correction", () => {
     let state = boundParty([scout], [scoutSlot]);
-    state = apply(state, {
-      type: "submit_artifact",
-      roleSlotId: scoutSlot.roleSlotId,
-    });
+    state = apply(state, submitArtifact(state, scoutSlot.roleSlotId));
     state = apply(state, { type: "verify" });
     state = apply(state, { type: "safety_reject" });
     expect(state.correctionCount).toBe(0);
@@ -625,16 +701,10 @@ describe("pure mission lifecycle", () => {
 
   it("opens one correction and makes the second semantic failure terminal", () => {
     let state = boundParty([scout], [scoutSlot]);
-    state = apply(state, {
-      type: "submit_artifact",
-      roleSlotId: scoutSlot.roleSlotId,
-    });
+    state = apply(state, submitArtifact(state, scoutSlot.roleSlotId));
     state = apply(state, { type: "verify" });
     state = apply(state, { type: "verification_failed" });
-    state = apply(state, {
-      type: "submit_artifact",
-      roleSlotId: scoutSlot.roleSlotId,
-    });
+    state = apply(state, submitArtifact(state, scoutSlot.roleSlotId));
     state = apply(state, { type: "verify" });
     state = apply(state, { type: "verification_failed" });
     expect(deriveDisplayState(state)).toBe("Failed");
@@ -642,14 +712,8 @@ describe("pure mission lifecycle", () => {
 
   it("preserves a valid artifact when another role slot needs correction", () => {
     let state = boundParty();
-    state = apply(state, {
-      type: "submit_artifact",
-      roleSlotId: scoutSlot.roleSlotId,
-    });
-    state = apply(state, {
-      type: "submit_artifact",
-      roleSlotId: scribeSlot.roleSlotId,
-    });
+    state = apply(state, submitArtifact(state, scoutSlot.roleSlotId));
+    state = apply(state, submitArtifact(state, scribeSlot.roleSlotId));
     state = apply(state, { type: "verify" });
     state = apply(state, {
       type: "verification_failed",
@@ -671,10 +735,7 @@ describe("pure mission lifecycle", () => {
     let state = boundParty([scout], [scoutSlot]);
     state = apply(state, { type: "mark_overdue" });
     expect(deriveDisplayState(state)).toBe("Overdue");
-    state = apply(state, {
-      type: "submit_artifact",
-      roleSlotId: scoutSlot.roleSlotId,
-    });
+    state = apply(state, submitArtifact(state, scoutSlot.roleSlotId));
     state = apply(state, { type: "verify" });
     state = apply(state, { type: "verification_passed" });
     expect(deriveDisplayState(state)).toBe("Completed");
@@ -693,7 +754,7 @@ describe("pure mission lifecycle", () => {
     expect(redacted).toMatchObject({
       ok: true,
       state: { safety: "paused", terminalOutcome: "canceled" },
-      events: ["safety_redacted", "mission_canceled", "receipt_issued"],
+      events: ["safety_redacted", "mission_canceled"],
     });
   });
 
@@ -714,7 +775,7 @@ describe("pure mission lifecycle", () => {
     expect(transition(redacted.state, { type: "cancel" })).toMatchObject({
       ok: true,
       state: { terminalOutcome: "canceled" },
-      events: ["compensation_started", "mission_canceled", "receipt_issued"],
+      events: ["compensation_started", "mission_canceled"],
     });
   });
 

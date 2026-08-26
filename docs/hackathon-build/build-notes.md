@@ -306,3 +306,32 @@
 - The complete automated suite passed (`pnpm check`: 18 Vitest files / 165 tests plus 8 Workers-runtime files / 29 tests), along with the Guildhall production build and Wrangler dry-run.
 - After the Worker/static-asset routing correction, Rodrigo repeated the participant-owned GitHub browser flow and confirmed: "Now it work fine!"
 - Verification pause B is accepted. Checklist item 9 is the next build item; no item-9 implementation began during the pause.
+
+## 2026-08-26 — Build item 9: failure, recovery, verification, and receipt
+
+### Implemented
+
+- Added resumable A2A execution dispatch for Scout and Scribe, signed progress and artifact delivery, controlled Scribe failure, public default, and exact Scribe-slot replacement by Warden under the unchanged pact digest.
+- Added autonomous helper acceptance of the final pact during scheduled runs. Scout and Scribe validate the canonical v2 pact, their own bid/proposal/slot evidence, and existing acceptances before signing; duplicate cron invocations do not create another acceptance.
+- Added server-side artifact safety feedback containing only the affected field path and general category. Unsafe content remains private, does not advance the event sequence, and does not consume the verification correction opportunity.
+- Added the deterministic Accessibility Dungeon verifier, infrastructure-pending behavior, one semantic correction, immutable accepted artifacts, terminal signed receipts, and exact-once D1 reputation projection.
+- Added public receipt and issuer-key projections, complete reward evidence, recovery bonus allocation, reliability/timeliness deltas, and independent event-chain plus receipt-signature verification.
+- Made every public mission input commit to a SHA-256 digest. Guildhall serves the immutable fixture bytes at the pact URL, and the contract, orchestrator, and verifier all require the exact bundled digest without fetching arbitrary URLs.
+- Added a Durable Object retry deadline when a pact binds. Alarm re-entry resumes incomplete execution, reschedules transiently incomplete work, and consumes the retry after receipt issuance without duplicating events.
+
+### Protocol and security review corrections
+
+- Command idempotency hashes semantic evidence while excluding only the outer transport retry timestamp. Exact replay is checked before sequence- or state-dependent authorization so a valid retry survives later mission progress.
+- Autonomous helpers refuse a candidate whose digest differs from their own signed proposal, including the protocol's deterministic selection-order resolution of divergent proposals.
+- Only the exact public fixture URL, media type, and content digest may schedule autonomous demo execution; wrong-digest pacts bind normally but never enter an infinite runner retry loop.
+- Replacement is two-phase: Warden first returns a signed exact-slot replacement proof; the coordinator binds it before Warden receives or completes the inherited work.
+- Receipt issuance is atomic with its final event, and the receipt commits to the resulting event-chain head. Failed missions cannot receive positive success XP.
+- The safety rejection is deliberately private and correctable rather than a public lifecycle mutation; only the sanitized field path and category are returned to the submitting agent/owner.
+- A compromised local GitHub OAuth client secret was detected in the ignored `.dev.vars` during diagnostics. It is not tracked or documented and must be rotated before deployment.
+
+### Verification
+
+- `pnpm test:execution-e2e` passed the live WebMCP publication, autonomous A2A applications/negotiation/acceptance, two active slots, Scout artifact preservation, Scribe default, Warden replacement, verification, signed receipt, exact 100 + 10 reward, and replay idempotency.
+- `pnpm test:verification` passed 12 deterministic verifier tests, including fixture-digest substitution rejection.
+- `pnpm test:reputation` passed 9 pure scoring tests and 3 Workers/D1 projection tests.
+- `pnpm check` passed every strict workspace typecheck and formatting check. The final scoped gates include 31 standard plus 2 Durable A2A tests and 9 Workers-runtime files / 36 protocol tests.

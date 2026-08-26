@@ -4,7 +4,11 @@ import {
   type A2ASendMessageResponse,
   type JsonObject,
 } from "@guildhall/a2a-worker";
-import { pactSigningBytes } from "@guildhall/contracts";
+import {
+  PactSchema,
+  canonicalJsonDigest,
+  pactSigningBytes,
+} from "@guildhall/contracts";
 import { createAgentRequestSignatureMessage } from "@guildhall/trust-engine";
 
 import type { HostedAgentKind } from "./agent-card";
@@ -34,7 +38,11 @@ export interface GuildApplication {
 export interface AutonomousRecruitmentResult {
   readonly joined: boolean;
   readonly missionId?: string;
-  readonly action?: "application" | "capability-bid" | "assignment-proposal";
+  readonly action?:
+    | "application"
+    | "capability-bid"
+    | "assignment-proposal"
+    | "pact-acceptance";
   readonly reason?: "no-matching-mission" | "already-applied";
 }
 
@@ -226,9 +234,165 @@ async function advanceNegotiatingMission(
           };
         }
       }
+      const acceptance = await stableAutonomousAcceptance({
+        missionId: card.missionId,
+        agentId: identity.agentId,
+        keyId: identity.keyId,
+        snapshot,
+        selectedHelperIds,
+        capabilityBids,
+        assignmentProposals,
+      });
+      if (acceptance !== null) {
+        const response = await acceptGuildPact(kind, connection, {
+          missionId: card.missionId,
+          expectedSequence: latestSequence,
+          pactVersion: 2,
+          pactDigest: acceptance.pactDigest,
+        });
+        if (completed(response)) {
+          return {
+            joined: true,
+            missionId: card.missionId,
+            action: "pact-acceptance",
+          };
+        }
+      }
     }
   }
   return null;
+}
+
+export async function stableAutonomousAcceptance(input: {
+  readonly missionId: string;
+  readonly agentId: string;
+  readonly keyId: string;
+  readonly snapshot: Record<string, unknown>;
+  readonly selectedHelperIds: readonly string[];
+  readonly capabilityBids: readonly Record<string, unknown>[];
+  readonly assignmentProposals: readonly Record<string, unknown>[];
+}): Promise<{ readonly pactDigest: string } | null> {
+  if (
+    input.snapshot.stage !== "COMMIT" ||
+    input.selectedHelperIds.length === 0 ||
+    new Set(input.selectedHelperIds).size !== input.selectedHelperIds.length
+  ) {
+    return null;
+  }
+  const candidate = record(input.snapshot.candidatePact);
+  const resolution = record(input.snapshot.assignmentResolution);
+  const acceptances = record(input.snapshot.acceptances);
+  const proposalHistory = records(input.snapshot.proposalHistory);
+  if (
+    candidate === null ||
+    resolution === null ||
+    acceptances === null ||
+    acceptances[input.agentId] !== undefined ||
+    candidate.proposalRound !== 2 ||
+    proposalHistory.length !== 2
+  ) {
+    return null;
+  }
+  const pactResult = PactSchema.safeParse(candidate.pact);
+  if (!pactResult.success) return null;
+  const pact = pactResult.data;
+  const pactDigest = candidate.pactDigest;
+  if (
+    pact.pactVersion !== 2 ||
+    pact.missionId !== input.missionId ||
+    typeof pactDigest !== "string" ||
+    !/^[A-Za-z0-9_-]{43}$/u.test(pactDigest) ||
+    (await canonicalJsonDigest(pact)) !== pactDigest ||
+    record(proposalHistory[1])?.pactDigest !== pactDigest ||
+    resolution.selectedProposalAgentId !== candidate.proposerAgentId
+  ) {
+    return null;
+  }
+
+  const helperParticipantIds = pact.participants.flatMap((participant) =>
+    participant.role === "helper" ? [participant.agentId] : [],
+  );
+  const slotAgentIds = pact.roleSlots.map((slot) => slot.originalAgentId);
+  const reservedSlots = records(input.snapshot.roleSlots);
+  if (
+    !sameStringSet(helperParticipantIds, input.selectedHelperIds) ||
+    !sameStringSet(slotAgentIds, input.selectedHelperIds) ||
+    reservedSlots.length !== pact.roleSlots.length ||
+    pact.roleSlots.some(
+      (slot) =>
+        !reservedSlots.some(
+          (reserved) =>
+            reserved.roleSlotId === slot.roleSlotId &&
+            reserved.originalAgentId === slot.originalAgentId,
+        ),
+    )
+  ) {
+    return null;
+  }
+  const ownSlots = pact.roleSlots.filter(
+    (slot) => slot.originalAgentId === input.agentId,
+  );
+  const ownBid = input.capabilityBids.find(
+    (bid) => bid.agentId === input.agentId && bid.keyId === input.keyId,
+  );
+  if (
+    ownSlots.length !== 1 ||
+    ownBid === undefined ||
+    !ownSlots[0]!.requiredCapabilities.every((capability) =>
+      stringValues(ownBid.relevantCapabilities).includes(capability),
+    )
+  ) {
+    return null;
+  }
+
+  const orderedProposals = input.selectedHelperIds.map((agentId) =>
+    input.assignmentProposals.find(
+      (proposal) => proposal.proposerAgentId === agentId,
+    ),
+  );
+  if (orderedProposals.some((proposal) => proposal === undefined)) return null;
+  const consideredAgentIds = stringValues(
+    resolution.consideredProposalAgentIds,
+  );
+  const consideredPactDigests = stringValues(resolution.consideredPactDigests);
+  if (!sameStrings(consideredAgentIds, input.selectedHelperIds)) return null;
+
+  const proposalDigests: string[] = [];
+  for (const proposal of orderedProposals) {
+    if (
+      proposal === undefined ||
+      proposal.proposalRound !== 2 ||
+      typeof proposal.pactDigest !== "string"
+    ) {
+      return null;
+    }
+    const proposalPact = PactSchema.safeParse(proposal.pact);
+    if (
+      !proposalPact.success ||
+      proposalPact.data.missionId !== input.missionId ||
+      proposalPact.data.pactVersion !== 2 ||
+      (await canonicalJsonDigest(proposalPact.data)) !== proposal.pactDigest
+    ) {
+      return null;
+    }
+    proposalDigests.push(proposal.pactDigest);
+  }
+  const ownProposal = orderedProposals.find(
+    (proposal) => proposal?.proposerAgentId === input.agentId,
+  );
+  const selectedProposal = orderedProposals.find(
+    (proposal) =>
+      proposal?.proposerAgentId === resolution.selectedProposalAgentId,
+  );
+  if (
+    ownProposal?.keyId !== input.keyId ||
+    ownProposal.pactDigest !== pactDigest ||
+    selectedProposal?.pactDigest !== pactDigest ||
+    !sameStrings(consideredPactDigests, proposalDigests)
+  ) {
+    return null;
+  }
+  return { pactDigest };
 }
 
 function autonomousAllocation(
@@ -521,6 +685,28 @@ function stringValues(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === "string")
     : [];
+}
+
+function sameStringSet(
+  left: readonly string[],
+  right: readonly string[],
+): boolean {
+  return (
+    left.length === right.length &&
+    new Set(left).size === left.length &&
+    new Set(right).size === right.length &&
+    left.every((value) => right.includes(value))
+  );
+}
+
+function sameStrings(
+  left: readonly string[],
+  right: readonly string[],
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every((value, index) => value === right[index])
+  );
 }
 
 function safeInteger(value: unknown): number | null {

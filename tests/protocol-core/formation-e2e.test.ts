@@ -1,17 +1,16 @@
 import { env, exports } from "cloudflare:workers";
-import { describe, expect, it } from "vitest";
+import { runDurableObjectAlarm } from "cloudflare:test";
+import { describe, expect, it, vi } from "vitest";
 
-import {
-  acceptGuildPact,
-  sendGuildAction,
-  type GuildConnection,
-} from "../../apps/demo-agent/src/guild-client";
 import { hostedIdentity } from "../../apps/demo-agent/src/identity";
 import {
   createAgentWorker,
   type HostedAgentEnv,
 } from "../../apps/demo-agent/src/worker";
 import { derivePartyFormation } from "../../apps/guildhall/src/worker/formation";
+import { executeBoundDemoMission } from "../../apps/guildhall/src/worker/executionOrchestrator";
+import type { MissionCoordinator } from "../../apps/guildhall/src/worker/durable/MissionCoordinator";
+import type { GuildhallEnv } from "../../apps/guildhall/src/worker/types";
 import {
   deriveEd25519KeyId,
   encodeBase64Url,
@@ -34,8 +33,14 @@ import {
 import {
   buildPact,
   canonicalJsonDigest,
+  importEd25519PublicJwk,
   MissionSchema,
   pactSigningBytes,
+  receiptSigningBytes,
+  ReceiptSchema,
+  sha256Base64Url,
+  unsignedReceiptProjection,
+  verifyEd25519,
   type AllocationAssignment,
   type MissionEvent,
 } from "../../packages/contracts/src";
@@ -50,6 +55,7 @@ const FINDINGS_ID = "cccccccc-cccc-4ccc-8ccc-ccccccccccc1";
 const PLAN_ID = "cccccccc-cccc-4ccc-8ccc-ccccccccccc2";
 const FINDINGS_CRITERION = "dddddddd-dddd-4ddd-8ddd-ddddddddddd1";
 const PLAN_CRITERION = "dddddddd-dddd-4ddd-8ddd-ddddddddddd2";
+const FIXTURE_DIGEST = "geKBB1Pr83xZU8RzZaoC-YcNy6MO2jw3lB_lupUQQ58";
 const worker = (exports as unknown as { default: Fetcher }).default;
 
 describe("live WebMCP to A2A party formation", () => {
@@ -61,6 +67,7 @@ describe("live WebMCP to A2A party formation", () => {
     const scribe = await seedHostedAgent("scribe", 71_002, [
       "remediation-planning",
     ]);
+    await seedHostedAgent("warden", 71_003, ["remediation-planning"]);
     const tools = new Map<string, ModelContextTool>();
     const webMcp = await registerGuildhallWebMcp({
       document: {
@@ -87,6 +94,7 @@ describe("live WebMCP to A2A party formation", () => {
           type: "url",
           location: "https://guildhall.test/fixtures/accessibility-dungeon-v1",
           mediaType: "text/html",
+          contentDigest: FIXTURE_DIGEST,
         },
       ],
       requiredCapabilities: ["accessibility-audit", "remediation-planning"],
@@ -129,6 +137,16 @@ describe("live WebMCP to A2A party formation", () => {
       pointReward: 100,
       failureBehavior: failureBehavior(),
     } as const;
+
+    const fixtureResponse = await worker.fetch(
+      `${ORIGIN}/fixtures/accessibility-dungeon-v1`,
+    );
+    const fixtureBody = await fixtureResponse.text();
+    expect(fixtureResponse.status).toBe(200);
+    expect(fixtureResponse.headers.get("X-Guildhall-Content-Digest")).toBe(
+      FIXTURE_DIGEST,
+    );
+    expect(await sha256Base64Url(fixtureBody)).toBe(FIXTURE_DIGEST);
 
     const publish = await executeTool(
       tools,
@@ -242,32 +260,25 @@ describe("live WebMCP to A2A party formation", () => {
       expectedSequence: packet.latestSequence,
       pactVersion: 2,
       pactDigest,
+      acceptedAt: new Date().toISOString(),
     });
     expect(requesterAcceptance).toMatchObject({
       provenance: { transport: "webmcp", trusted: true },
     });
     packet = await missionPacket(missionId);
-    expect(
-      taskState(
-        await acceptGuildPact("scout", scout.connection, {
-          missionId,
-          expectedSequence: packet.latestSequence,
-          pactVersion: 2,
-          pactDigest,
-        }),
-      ),
-    ).toBe("TASK_STATE_COMPLETED");
+    await runHostedAgentSchedule("scout", scout.env);
     packet = await missionPacket(missionId);
-    expect(
-      taskState(
-        await acceptGuildPact("scribe", scribe.connection, {
-          missionId,
-          expectedSequence: packet.latestSequence,
-          pactVersion: 2,
-          pactDigest,
-        }),
-      ),
-    ).toBe("TASK_STATE_COMPLETED");
+    expect(requiredRecord(packet.snapshot, "acceptances")).toHaveProperty(
+      hostedIdentity("scout").agentId,
+    );
+    expect(requiredRecord(packet.snapshot, "acceptances")).not.toHaveProperty(
+      hostedIdentity("scribe").agentId,
+    );
+    const sequenceAfterScoutAcceptance = packet.latestSequence;
+    await runHostedAgentSchedule("scout", scout.env);
+    packet = await missionPacket(missionId);
+    expect(packet.latestSequence).toBe(sequenceAfterScoutAcceptance);
+    await runHostedAgentSchedule("scribe", scribe.env);
 
     packet = await missionPacket(missionId);
     const acceptances = Object.values(
@@ -330,6 +341,200 @@ describe("live WebMCP to A2A party formation", () => {
         latestSequence: 16,
       },
     });
+
+    const hostedWorkers = {
+      scout: createAgentWorker("scout"),
+      scribe: createAgentWorker("scribe"),
+      warden: createAgentWorker("warden"),
+    } as const;
+    const executionFetch: typeof globalThis.fetch = async (input, init) => {
+      const request = new Request(input, { ...init, redirect: "manual" });
+      const kind = new URL(request.url).hostname.split(".")[0];
+      if (kind !== "scout" && kind !== "scribe" && kind !== "warden") {
+        throw new Error(`Unexpected hosted-agent URL ${request.url}`);
+      }
+      return hostedWorkers[kind].fetch(request, {
+        HOSTED_AGENT_PRIVATE_JWK: JSON.stringify(TEST_PRIVATE_JWKS[kind]),
+      });
+    };
+    const execution = await executeBoundDemoMission(
+      {
+        GUILD_DB: env.GUILD_DB,
+        MISSIONS: env.MISSIONS,
+        PUBLIC_ORIGIN: ORIGIN,
+        GITHUB_CLIENT_ID: "test-client-id",
+        GITHUB_CLIENT_SECRET: "test-only-placeholder",
+        AUTH_COOKIE_SECRET:
+          "test-only-cookie-secret-with-at-least-thirty-two-characters",
+        SCOUT_A2A_URL: "https://scout.guildhall.test/a2a/v1",
+        SCRIBE_A2A_URL: "https://scribe.guildhall.test/a2a/v1",
+        WARDEN_A2A_URL: "https://warden.guildhall.test/a2a/v1",
+      } as GuildhallEnv,
+      missionId,
+      true,
+      executionFetch,
+    );
+    expect(execution).toMatchObject({
+      executed: true,
+      injectedFailure: true,
+    });
+
+    packet = await missionPacket(missionId);
+    const receipt = ReceiptSchema.parse(packet.receipt);
+    const runtimeSlots = requiredRecordArray(packet.snapshot.roleSlots);
+    expect(runtimeSlots).toHaveLength(2);
+    expect(runtimeSlots.every((slot) => slot.status === "active")).toBe(true);
+    expect(
+      runtimeSlots.find(
+        (slot) => slot.originalAgentId === hostedIdentity("scout").agentId,
+      ),
+    ).toMatchObject({
+      occupantAgentId: hostedIdentity("scout").agentId,
+      artifactDelivered: true,
+    });
+    expect(
+      runtimeSlots.find(
+        (slot) => slot.originalAgentId === hostedIdentity("scribe").agentId,
+      ),
+    ).toMatchObject({
+      occupantAgentId: hostedIdentity("warden").agentId,
+      artifactDelivered: true,
+    });
+    const acceptedArtifacts = requiredRecordArray(packet.artifacts);
+    expect(acceptedArtifacts).toHaveLength(2);
+    const producers = acceptedArtifacts.map((artifact) =>
+      requiredString(requiredRecord(artifact, "metadata"), "producingAgentId"),
+    );
+    expect(producers).toContain(hostedIdentity("scout").agentId);
+    expect(producers).toContain(hostedIdentity("warden").agentId);
+    expect(producers).not.toContain(hostedIdentity("scribe").agentId);
+    for (const artifact of acceptedArtifacts) {
+      expect(
+        requiredInteger(requiredRecord(artifact, "metadata"), "attempt"),
+      ).toBe(1);
+    }
+    expect(packet.snapshot).toMatchObject({
+      stage: "RECEIPT",
+      terminalOutcome: "completed",
+      receiptIssued: true,
+    });
+    expect(receipt).toMatchObject({
+      outcome: "completed",
+      reward: {
+        basePointsAwarded: 100,
+        recoveryBonusAwarded: 10,
+        totalPointsAwarded: 110,
+      },
+      verification: { status: "passed" },
+    });
+    expect(receipt.defaults).toEqual([
+      expect.objectContaining({ agentId: hostedIdentity("scribe").agentId }),
+    ]);
+    expect(receipt.replacements).toEqual([
+      expect.objectContaining({
+        predecessorAgentId: hostedIdentity("scribe").agentId,
+        replacementAgentId: hostedIdentity("warden").agentId,
+      }),
+    ]);
+    expect(
+      receipt.reputationDeltas.reduce(
+        (total, delta) => total + delta.pointsDelta,
+        0,
+      ),
+    ).toBe(110);
+    expect(receipt.reputationDeltas).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          agentId: hostedIdentity("scout").agentId,
+          pointsDelta: 50,
+          reason: "verified-role-output",
+        }),
+        expect.objectContaining({
+          agentId: hostedIdentity("warden").agentId,
+          pointsDelta: 60,
+          recoveryBonus: 10,
+          reason: "verified-replacement-output",
+        }),
+        expect.objectContaining({
+          agentId: hostedIdentity("scribe").agentId,
+          pointsDelta: 0,
+          reliabilityDelta: -0.1,
+          reason: "post-bind-default",
+        }),
+      ]),
+    );
+    const eventTypes = packet.events.map((event) => event.type);
+    expect(eventTypes.indexOf("role_defaulted")).toBeLessThan(
+      eventTypes.indexOf("replacement_bound"),
+    );
+    expect(eventTypes.indexOf("replacement_bound")).toBeLessThan(
+      eventTypes.lastIndexOf("artifact_submitted"),
+    );
+    expect(eventTypes.slice(-3)).toEqual([
+      "verification_started",
+      "verification_passed",
+      "receipt_issued",
+    ]);
+    const verifiedChain = verifyEventChain(packet.events);
+    expect(verifiedChain).toMatchObject({ valid: true });
+    if (!verifiedChain.valid) throw new Error("Event chain did not verify");
+    expect(receipt.eventChainHead).toBe(verifiedChain.headHash);
+
+    const issuer = await publicJson<{
+      keyId: string;
+      publicJwk: JsonWebKey;
+    }>("/.well-known/guildhall-issuer-key.json");
+    expect(issuer.keyId).toBe(receipt.issuerKeyId);
+    const issuerKey = await importEd25519PublicJwk(issuer.publicJwk);
+    expect(
+      await verifyEd25519(
+        issuerKey,
+        receiptSigningBytes(
+          await canonicalJsonDigest(unsignedReceiptProjection(receipt)),
+        ),
+        receipt.issuerSignature,
+      ),
+    ).toBe(true);
+    expect(await publicJson(`/api/missions/${missionId}/receipt`)).toEqual({
+      receipt,
+    });
+
+    const coordinator = env.MISSIONS.getByName(
+      missionId,
+    ) as DurableObjectStub<MissionCoordinator>;
+    const retryDueAt = Date.now() + 60_000;
+    await coordinator.scheduleDeadline("a2a_retry", retryDueAt);
+    const clock = vi.spyOn(Date, "now").mockReturnValue(retryDueAt + 1);
+    try {
+      expect(await runDurableObjectAlarm(coordinator)).toBe(true);
+    } finally {
+      clock.mockRestore();
+    }
+    expect((await missionPacket(missionId)).latestSequence).toBe(
+      packet.latestSequence,
+    );
+
+    const replay = await executeBoundDemoMission(
+      {
+        GUILD_DB: env.GUILD_DB,
+        MISSIONS: env.MISSIONS,
+        PUBLIC_ORIGIN: ORIGIN,
+        GITHUB_CLIENT_ID: "test-client-id",
+        GITHUB_CLIENT_SECRET: "test-only-placeholder",
+        AUTH_COOKIE_SECRET:
+          "test-only-cookie-secret-with-at-least-thirty-two-characters",
+        SCOUT_A2A_URL: "https://scout.guildhall.test/a2a/v1",
+        SCRIBE_A2A_URL: "https://scribe.guildhall.test/a2a/v1",
+        WARDEN_A2A_URL: "https://warden.guildhall.test/a2a/v1",
+      } as GuildhallEnv,
+      missionId,
+      true,
+      executionFetch,
+    );
+    expect(replay.receiptId).toBe(receipt.receiptId);
+    expect((await missionPacket(missionId)).latestSequence).toBe(
+      packet.latestSequence,
+    );
   }, 30_000);
 });
 
@@ -496,11 +701,10 @@ async function seedRequester(): Promise<BrowserOwner> {
 }
 
 async function seedHostedAgent(
-  kind: "scout" | "scribe",
+  kind: "scout" | "scribe" | "warden",
   githubUserId: number,
   capabilities: readonly string[],
 ): Promise<{
-  readonly connection: GuildConnection;
   readonly env: HostedAgentEnv;
 }> {
   const identity = hostedIdentity(kind);
@@ -520,8 +724,10 @@ async function seedHostedAgent(
     agentId: identity.agentId,
     ownerId,
     slug: `formation-${kind}`,
-    characterName: kind === "scout" ? "Scout" : "Scribe",
-    characterClass: kind === "scout" ? "Ranger" : "Wizard",
+    characterName:
+      kind === "scout" ? "Scout" : kind === "scribe" ? "Scribe" : "Warden",
+    characterClass:
+      kind === "scout" ? "Ranger" : kind === "scribe" ? "Wizard" : "Paladin",
     technicalName: `${kind} independent A2A worker`,
     guildName: "Reference Agents",
     publicBio: `An independently signed ${kind} agent.`,
@@ -558,12 +764,6 @@ async function seedHostedAgent(
     createdAt: now,
   });
   return {
-    connection: {
-      brokerBaseUrl: `${ORIGIN}/a2a/guild/v1`,
-      credential,
-      privateJwk: JSON.stringify(TEST_PRIVATE_JWKS[kind]),
-      fetch: localWorkerFetch,
-    },
     env: {
       GUILD_BROKER_URL: `${ORIGIN}/a2a/guild/v1`,
       GUILD_AGENT_CREDENTIAL: credential,
@@ -654,6 +854,8 @@ interface MissionPacket {
   readonly snapshot: Record<string, unknown>;
   readonly events: MissionEvent[];
   readonly latestSequence: number;
+  readonly artifacts?: unknown;
+  readonly receipt?: unknown;
 }
 
 async function executeTool(
@@ -725,12 +927,6 @@ const localWorkerFetch: typeof globalThis.fetch = async (input, init) => {
     new Request(input, { ...requestInit, redirect: "manual" }),
   );
 };
-
-function taskState(value: unknown): string {
-  const response = requiredRecord({ value }, "value");
-  const task = requiredRecord(response, "task");
-  return requiredString(requiredRecord(task, "status"), "state");
-}
 
 function dataRecord(
   envelope: Record<string, unknown>,

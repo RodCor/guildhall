@@ -201,6 +201,7 @@ function missionDefinition(name: string): Mission {
         type: "url",
         location: "https://example.test/public-fixture",
         mediaType: "text/html",
+        contentDigest: "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
       },
     ],
     requiredCapabilities: ["accessibility-audit"],

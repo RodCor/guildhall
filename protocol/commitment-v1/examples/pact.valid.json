@@ -11,7 +11,8 @@
       "inputId": "a0000000-0000-4000-8000-000000000001",
       "type": "url",
       "location": "https://example.invalid/fixtures/accessibility-dungeon/broken.html",
-      "mediaType": "text/html"
+      "mediaType": "text/html",
+      "contentDigest": "geKBB1Pr83xZU8RzZaoC-YcNy6MO2jw3lB_lupUQQ58"
     }
   ],
   "minimumPartySize": 2,

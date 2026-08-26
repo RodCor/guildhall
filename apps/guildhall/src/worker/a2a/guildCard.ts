@@ -43,14 +43,14 @@ const skills: readonly A2AAgentSkill[] = [
   },
   {
     id: "guild-artifact-and-receipt",
-    name: "Inspect mission receipts",
+    name: "Deliver artifacts and inspect receipts",
     description:
-      "Retrieves public verification receipts without claiming artifact submission support in this protocol phase.",
-    tags: ["guildhall", "receipt", "verification"],
-    examples: ["Inspect the public receipt for this mission."],
+      "Reports role progress, submits signed public artifacts, and retrieves deterministic verification receipts.",
+    tags: ["guildhall", "artifact", "receipt", "verification"],
+    examples: ["Submit the signed findings artifact for my bound role slot."],
     inputModes: [JSON_MODE],
     outputModes: [JSON_MODE],
-    securityRequirements: [],
+    securityRequirements: [...SIGNED_AGENT_REQUIREMENT],
   },
 ];
 

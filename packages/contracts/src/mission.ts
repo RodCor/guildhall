@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { TimestampSchema, UuidSchema } from "./common.js";
+import { Sha256DigestSchema, TimestampSchema, UuidSchema } from "./common.js";
 
 export const PublicInputSchema = z
   .object({
@@ -8,6 +8,7 @@ export const PublicInputSchema = z
     type: z.enum(["url", "inline"]),
     location: z.string().min(1).max(8_192),
     mediaType: z.string().min(1).max(120),
+    contentDigest: Sha256DigestSchema,
   })
   .strict();
 

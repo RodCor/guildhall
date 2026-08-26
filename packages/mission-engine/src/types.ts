@@ -1,4 +1,10 @@
-import type { DisplayState, MissionStage, Pact } from "@guildhall/contracts";
+import type {
+  ArtifactSubmission,
+  DisplayState,
+  MissionStage,
+  Pact,
+  ReplacementProof,
+} from "@guildhall/contracts";
 
 import type { HelperSelectionResult } from "./selection.js";
 
@@ -88,13 +94,17 @@ export interface LifecycleState {
   readonly assignmentResolution: AssignmentResolution | null;
   readonly acceptances: Readonly<Record<string, PactAcceptanceRecord>>;
   readonly roleSlots: readonly RuntimeRoleSlot[];
+  /** Bound required-output IDs with a currently valid accepted artifact. */
+  readonly deliveredOutputIds: readonly string[];
   readonly correctionCount: 0 | 1;
   readonly correctionAvailable: boolean;
   readonly verificationPending: boolean;
   readonly executionStarted: boolean;
+  readonly progressReports: readonly ProgressReport[];
   readonly overdue: boolean;
   readonly safety: SafetyState;
   readonly terminalOutcome: TerminalOutcome | null;
+  readonly receiptIssued: boolean;
   readonly published: boolean;
 }
 
@@ -151,9 +161,25 @@ export type LifecycleCommand =
     }
   | { readonly type: "revise_mission" }
   | { readonly type: "start_execution" }
-  | { readonly type: "submit_artifact"; readonly roleSlotId: string }
+  | {
+      readonly type: "report_progress";
+      readonly roleSlotId: string;
+      readonly status: "working" | "blocked" | "ready-for-delivery";
+      readonly summary: string;
+      readonly completedOutputIds: readonly string[];
+      readonly occurredAt: string;
+    }
+  | {
+      readonly type: "submit_artifact";
+      readonly roleSlotId: string;
+      readonly artifact: ArtifactSubmission;
+    }
   | { readonly type: "mark_overdue" }
-  | { readonly type: "default_role"; readonly roleSlotId: string }
+  | {
+      readonly type: "default_role";
+      readonly roleSlotId: string;
+      readonly evidence: RoleFailureEvidence;
+    }
   | { readonly type: "release_role"; readonly roleSlotId: string }
   | {
       readonly type: "fill_role_slot";
@@ -161,6 +187,7 @@ export type LifecycleCommand =
       readonly predecessorAgentId: string;
       readonly replacementAgentId: string;
       readonly pactDigest: string;
+      readonly proof: ReplacementProof;
     }
   | { readonly type: "verify" }
   | { readonly type: "verifier_unavailable" }
@@ -169,14 +196,34 @@ export type LifecycleCommand =
       readonly failedRoleSlotIds?: readonly string[];
     }
   | { readonly type: "verification_passed" }
+  | { readonly type: "issue_receipt"; readonly receiptId: string }
   | { readonly type: "safety_pause" }
   | { readonly type: "safety_redact"; readonly redactedEventId: string }
   | { readonly type: "safety_reject" }
   | { readonly type: "cancel" }
   | { readonly type: "expire" };
 
+export interface ProgressReport {
+  readonly roleSlotId: string;
+  readonly status: "working" | "blocked" | "ready-for-delivery";
+  readonly summary: string;
+  readonly completedOutputIds: readonly string[];
+  readonly occurredAt: string;
+  readonly sequence: number;
+}
+
+export interface RoleFailureEvidence {
+  readonly taskId: string;
+  readonly taskState: "TASK_STATE_FAILED";
+  readonly errorCode: string;
+  readonly failureFixture: string;
+  readonly retryable: false;
+  readonly observedAt: string;
+}
+
 export type TransitionFailureCode =
   | "ILLEGAL_TRANSITION"
+  | "INVALID_COMMAND"
   | "INVALID_PARTY"
   | "INVALID_APPLICATION"
   | "APPLICATION_DUPLICATE"

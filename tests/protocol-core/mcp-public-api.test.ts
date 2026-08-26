@@ -232,19 +232,9 @@ describe("bounded public REST projections", () => {
     const response = await fetchApi(`/api/missions/${missionId}/receipt`);
     expect(response.status).toBe(200);
     const responseText = await response.text();
-    expect(responseText).not.toContain("issuerSignature");
-    expect(responseText).not.toContain("reputationDeltas");
-    expect(JSON.parse(responseText)).toEqual({
-      receipt: {
-        receiptId,
-        missionId,
-        outcome: "canceled",
-        pactDigest: null,
-        eventChainHead: fullReceipt.eventChainHead,
-        reward: fullReceipt.reward,
-        issuedAt,
-      },
-    });
+    expect(responseText).toContain("issuerSignature");
+    expect(responseText).toContain("reputationDeltas");
+    expect(JSON.parse(responseText)).toEqual({ receipt: fullReceipt });
 
     expect(
       await json(

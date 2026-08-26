@@ -93,6 +93,7 @@ describe("private draft and public safety boundary", () => {
           type: "url",
           location: "https://guildhall.test/quests/demo",
           mediaType: "text/html",
+          contentDigest: "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
         },
       ],
       requiredCapabilities: ["accessibility-audit"],

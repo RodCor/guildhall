@@ -79,13 +79,22 @@ export class A2ATaskExecutionError extends Error {
 
 /** Public scanner/policy rejection safe to return without persisting input. */
 export class A2APublicInputRejectedError extends A2AProtocolError {
-  constructor(publicMessage = "Public input did not pass the safety policy.") {
+  constructor(
+    publicMessage = "Public input did not pass the safety policy.",
+    issue?: Readonly<{ fieldPath: string; category: string }>,
+  ) {
     super(publicMessage, {
       httpStatus: 400,
       status: "INVALID_ARGUMENT",
       reason: "INVALID_PARAMS",
       fieldViolations: [
-        { field: "message", description: "Public input was rejected." },
+        {
+          field: issue?.fieldPath ?? "message",
+          description:
+            issue === undefined
+              ? "Public input was rejected."
+              : `Public input was rejected: ${issue.category}.`,
+        },
       ],
     });
     this.name = "A2APublicInputRejectedError";

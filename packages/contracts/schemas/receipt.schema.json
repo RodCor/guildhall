@@ -298,7 +298,7 @@
       "additionalProperties": false
     },
     "__schema17": {
-      "maxItems": 8,
+      "maxItems": 16,
       "type": "array",
       "items": {
         "$ref": "#/$defs/__schema18"

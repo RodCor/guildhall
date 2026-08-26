@@ -2,6 +2,9 @@ import type { JsonObject } from "@guildhall/a2a-worker";
 
 export const ACCESSIBILITY_FIXTURE_ID = "accessibility-dungeon-v1";
 export const CONTROLLED_SCRIBE_FAILURE = "scribe-controlled-failure-v1";
+export const CONTROLLED_SCRIBE_FAILURE_CODE = "SCRIBE_CONTROLLED_FAILURE";
+export const CONTROLLED_SCRIBE_FAILURE_MESSAGE =
+  "Controlled Scribe failure fixture activated.";
 
 const APPROVED_FIXTURE_HTML = `<!doctype html>
 <html>

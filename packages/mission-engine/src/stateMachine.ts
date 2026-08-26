@@ -29,13 +29,16 @@ export function initialLifecycleState(options: {
     assignmentResolution: null,
     acceptances: {},
     roleSlots: [],
+    deliveredOutputIds: [],
     correctionCount: 0,
     correctionAvailable: false,
     verificationPending: false,
     executionStarted: false,
+    progressReports: [],
     overdue: false,
     safety: "none",
     terminalOutcome: null,
+    receiptIssued: false,
     published: false,
   };
 }
@@ -71,7 +74,12 @@ export function transition(
   state: LifecycleState,
   command: LifecycleCommand,
 ): TransitionResult {
-  if (state.terminalOutcome !== null) return failure(state, "TERMINAL_MISSION");
+  if (state.terminalOutcome !== null) {
+    if (command.type === "issue_receipt" && !state.receiptIssued) {
+      return success(state, { receiptIssued: true }, ["receipt_issued"]);
+    }
+    return failure(state, "TERMINAL_MISSION");
+  }
   if (
     state.safety === "paused" &&
     command.type !== "cancel" &&
@@ -493,6 +501,47 @@ export function transition(
       if (state.executionStarted) return failure(state, "ILLEGAL_TRANSITION");
       return success(state, { executionStarted: true }, ["execution_started"]);
 
+    case "report_progress": {
+      if (state.stage !== "EXECUTE" && state.stage !== "DELIVER") {
+        return failure(state, "ILLEGAL_TRANSITION");
+      }
+      if (
+        !state.roleSlots.some(
+          (candidate) => candidate.roleSlotId === command.roleSlotId,
+        )
+      ) {
+        return failure(state, "ROLE_SLOT_NOT_FOUND");
+      }
+      if (
+        command.completedOutputIds.some(
+          (outputId) =>
+            state.candidatePact?.pact.requiredOutputs.some(
+              (output) => output.outputId === outputId,
+            ) !== true,
+        )
+      ) {
+        return failure(state, "INVALID_COMMAND");
+      }
+      return success(
+        state,
+        {
+          executionStarted: true,
+          progressReports: [
+            ...state.progressReports,
+            {
+              roleSlotId: command.roleSlotId,
+              status: command.status,
+              summary: command.summary,
+              completedOutputIds: [...command.completedOutputIds],
+              occurredAt: command.occurredAt,
+              sequence: state.sequence + 1,
+            },
+          ],
+        },
+        ["progress_reported"],
+      );
+    }
+
     case "submit_artifact": {
       if (state.stage !== "EXECUTE" && state.stage !== "DELIVER") {
         return failure(state, "ILLEGAL_TRANSITION");
@@ -502,19 +551,49 @@ export function transition(
       );
       if (slotIndex < 0) return failure(state, "ROLE_SLOT_NOT_FOUND");
       const slot = state.roleSlots[slotIndex];
-      if (slot?.artifactDelivered === true)
+      const artifact = command.artifact;
+      if (state.deliveredOutputIds.includes(artifact.outputId))
         return failure(state, "ARTIFACT_ALREADY_DELIVERED");
+      const pact = state.candidatePact;
+      const requiredOutput = pact?.pact.requiredOutputs.find(
+        (output) => output.outputId === artifact.outputId,
+      );
+      const pactSlot = pact?.pact.roleSlots.find(
+        (candidate) => candidate.roleSlotId === command.roleSlotId,
+      );
+      if (
+        pact === null ||
+        artifact.metadata.missionId !== state.missionId ||
+        artifact.metadata.pactDigest !== pact.pactDigest ||
+        artifact.metadata.roleSlotId !== command.roleSlotId ||
+        artifact.metadata.producingAgentId !== slot?.occupantAgentId ||
+        pactSlot?.requiredOutputIds.includes(artifact.outputId) !== true ||
+        requiredOutput === undefined ||
+        artifact.metadata.artifactType !== requiredOutput.type ||
+        artifact.metadata.mediaType !== requiredOutput.mediaType ||
+        artifact.metadata.attempt !== state.correctionCount + 1
+      ) {
+        return failure(state, "INVALID_COMMAND");
+      }
+      const deliveredOutputIds = [
+        ...state.deliveredOutputIds,
+        artifact.outputId,
+      ];
       const roleSlots = replaceSlot(state.roleSlots, slotIndex, {
         ...slot!,
-        artifactDelivered: true,
+        artifactDelivered:
+          pactSlot?.requiredOutputIds.every((outputId) =>
+            deliveredOutputIds.includes(outputId),
+          ) === true,
       });
-      const allDelivered = roleSlots
-        .filter((candidate) => candidate.artifactRequired)
-        .every((candidate) => candidate.artifactDelivered);
+      const allDelivered = pact.pact.requiredOutputs.every((output) =>
+        deliveredOutputIds.includes(output.outputId),
+      );
       return success(
         state,
         {
           roleSlots,
+          deliveredOutputIds,
           stage: allDelivered ? "DELIVER" : "EXECUTE",
           executionStarted: true,
           correctionAvailable: false,
@@ -553,6 +632,9 @@ export function transition(
       );
       if (slotIndex < 0) return failure(state, "ROLE_SLOT_NOT_FOUND");
       const slot = state.roleSlots[slotIndex];
+      if (slot?.status !== "active") {
+        return failure(state, "ROLE_SLOT_NOT_REPLACEABLE");
+      }
       const roleSlots = replaceSlot(state.roleSlots, slotIndex, {
         ...slot!,
         status: command.type === "default_role" ? "defaulted" : "released",
@@ -570,6 +652,25 @@ export function transition(
       if (command.pactDigest !== state.candidatePact.pactDigest) {
         return failure(state, "REPLACEMENT_CHANGES_PACT");
       }
+      const proof = command.proof;
+      if (
+        state.candidatePact.pact.failureBehavior.participantDefault !==
+          "recruit-exact-slot-replacement" ||
+        proof.pactDigest !== command.pactDigest ||
+        proof.missionId !== state.missionId ||
+        proof.roleSlotId !== command.roleSlotId ||
+        proof.predecessorAgentId !== command.predecessorAgentId ||
+        proof.replacementAgentId !== command.replacementAgentId ||
+        proof.reason !==
+          (state.roleSlots.find(
+            (slot) => slot.roleSlotId === command.roleSlotId,
+          )?.status === "defaulted"
+            ? "participant-defaulted"
+            : "participant-released") ||
+        proof.preservesPactDigest !== true
+      ) {
+        return failure(state, "REPLACEMENT_CHANGES_PACT");
+      }
       const slotIndex = state.roleSlots.findIndex(
         (slot) => slot.roleSlotId === command.roleSlotId,
       );
@@ -578,8 +679,10 @@ export function transition(
       if (
         slot === undefined ||
         slot.status === "active" ||
+        slot.occupantAgentId !== slot.originalAgentId ||
         slot.occupantAgentId !== command.predecessorAgentId ||
-        command.predecessorAgentId === command.replacementAgentId
+        command.predecessorAgentId === command.replacementAgentId ||
+        command.replacementAgentId === state.requesterAgentId
       ) {
         return failure(state, "ROLE_SLOT_NOT_REPLACEABLE");
       }
@@ -589,6 +692,9 @@ export function transition(
           .filter((candidate) => candidate.status === "active")
           .map((candidate) => candidate.occupantAgentId),
       );
+      if (otherActiveAgents.has(command.replacementAgentId)) {
+        return failure(state, "ROLE_SLOT_NOT_REPLACEABLE");
+      }
       otherActiveAgents.add(command.replacementAgentId);
       if (otherActiveAgents.size > 2) {
         return failure(state, "ACTIVE_HELPER_LIMIT");
@@ -601,11 +707,18 @@ export function transition(
       const stillNeedsReplacement = roleSlots.some(
         (candidate) => candidate.status !== "active",
       );
+      const allDelivered = state.candidatePact.pact.requiredOutputs.every(
+        (output) => state.deliveredOutputIds.includes(output.outputId),
+      );
       return success(
         state,
         {
           roleSlots,
-          stage: stillNeedsReplacement ? "COMPENSATE" : "EXECUTE",
+          stage: stillNeedsReplacement
+            ? "COMPENSATE"
+            : allDelivered
+              ? "DELIVER"
+              : "EXECUTE",
           executionStarted: true,
         },
         [
@@ -656,21 +769,30 @@ export function transition(
                   ? false
                   : slot.artifactDelivered,
             })),
+            deliveredOutputIds:
+              command.failedRoleSlotIds === undefined
+                ? []
+                : state.deliveredOutputIds.filter((outputId) => {
+                    const owner = state.candidatePact?.pact.roleSlots.find(
+                      (slot) => slot.requiredOutputIds.includes(outputId),
+                    );
+                    return (
+                      owner !== undefined &&
+                      !command.failedRoleSlotIds!.includes(owner.roleSlotId)
+                    );
+                  }),
           },
           ["verification_failed", "correction_opened"],
         );
       }
-      return terminal(state, "failed", [
-        "verification_failed",
-        "receipt_issued",
-      ]);
+      return terminal(state, "failed", ["verification_failed"]);
 
     case "verification_passed":
       if (state.stage !== "VERIFY") return failure(state, "ILLEGAL_TRANSITION");
-      return terminal(state, "completed", [
-        "verification_passed",
-        "receipt_issued",
-      ]);
+      return terminal(state, "completed", ["verification_passed"]);
+
+    case "issue_receipt":
+      return failure(state, "ILLEGAL_TRANSITION");
 
     case "safety_pause":
       return success(state, { safety: "paused" }, ["safety_paused"]);
@@ -691,7 +813,7 @@ export function transition(
             verificationPending: false,
             correctionAvailable: false,
           },
-          ["safety_redacted", "mission_canceled", "receipt_issued"],
+          ["safety_redacted", "mission_canceled"],
         );
       }
       return success(state, { safety: "paused" }, [
@@ -709,8 +831,8 @@ export function transition(
         state.stage === "EXECUTE" ||
           state.stage === "DELIVER" ||
           state.stage === "VERIFY"
-          ? ["compensation_started", "mission_canceled", "receipt_issued"]
-          : ["mission_canceled", "receipt_issued"],
+          ? ["compensation_started", "mission_canceled"]
+          : ["mission_canceled"],
       );
 
     case "expire":
@@ -721,7 +843,7 @@ export function transition(
       ) {
         return failure(state, "ILLEGAL_TRANSITION");
       }
-      return terminal(state, "expired", ["mission_expired", "receipt_issued"]);
+      return terminal(state, "expired", ["mission_expired"]);
   }
 }
 

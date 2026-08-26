@@ -142,9 +142,13 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 120
+        },
+        "contentDigest": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{43}$"
         }
       },
-      "required": ["inputId", "type", "location", "mediaType"],
+      "required": ["inputId", "type", "location", "mediaType", "contentDigest"],
       "additionalProperties": false
     },
     "__schema8": {

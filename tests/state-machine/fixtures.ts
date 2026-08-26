@@ -92,6 +92,7 @@ export function pactForProposal(
   options: {
     readonly missionId?: string;
     readonly missionVersion?: number;
+    readonly publicInputDigest?: string;
   } = {},
 ): Pact {
   return {
@@ -108,6 +109,9 @@ export function pactForProposal(
         type: "url",
         location: "https://guildhall.test/fixtures/accessibility-dungeon-v1",
         mediaType: "text/html",
+        contentDigest:
+          options.publicInputDigest ??
+          "geKBB1Pr83xZU8RzZaoC-YcNy6MO2jw3lB_lupUQQ58",
       },
     ],
     minimumPartySize: 1,
@@ -174,6 +178,7 @@ export function submitProposal(
     readonly missionId?: string;
     readonly missionVersion?: number;
     readonly requesterAgentId?: string;
+    readonly publicInputDigest?: string;
   } = {},
 ): Extract<LifecycleCommand, { type: "submit_proposal" }> {
   return {
@@ -213,6 +218,7 @@ export function submitAssignmentProposal(
     readonly missionId?: string;
     readonly missionVersion?: number;
     readonly requesterAgentId?: string;
+    readonly publicInputDigest?: string;
   } = {},
 ): Extract<LifecycleCommand, { type: "submit_assignment_proposal" }> {
   return {

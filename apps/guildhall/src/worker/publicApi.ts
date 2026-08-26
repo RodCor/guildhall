@@ -1,4 +1,8 @@
 import { ReceiptSchema } from "@guildhall/contracts";
+import {
+  ACCESSIBILITY_DUNGEON_FIXTURE_DIGEST,
+  ACCESSIBILITY_DUNGEON_FIXTURE_HTML,
+} from "@guildhall/trust-engine";
 
 import { authorizeAgentAction } from "./auth/agentAuthorization.js";
 import {
@@ -116,6 +120,22 @@ export async function handlePublicApiRoute(
 ): Promise<Response | null> {
   if (request.method !== "GET") return null;
   const url = new URL(request.url);
+
+  if (url.pathname === "/fixtures/accessibility-dungeon-v1") {
+    return new Response(ACCESSIBILITY_DUNGEON_FIXTURE_HTML, {
+      headers: {
+        "Cache-Control": "public, max-age=31536000, immutable",
+        "Content-Security-Policy": "default-src 'none'; img-src 'self'",
+        "Content-Type": "text/html; charset=utf-8",
+        "X-Content-Type-Options": "nosniff",
+        "X-Guildhall-Content-Digest": ACCESSIBILITY_DUNGEON_FIXTURE_DIGEST,
+      },
+    });
+  }
+
+  if (url.pathname === "/.well-known/guildhall-issuer-key.json") {
+    return readIssuerKey(env);
+  }
 
   if (url.pathname === "/api/agents") {
     return listAgents(url, env);
@@ -300,16 +320,31 @@ async function readReceipt(
   }
   const receipt = ReceiptSchema.safeParse(parsed);
   if (!receipt.success) return invalidProjection();
+  return noStoreJson({ receipt: receipt.data });
+}
+
+function readIssuerKey(env: GuildhallEnv): Response {
+  if (
+    env.GUILD_ISSUER_KEY_ID === undefined ||
+    env.GUILD_ISSUER_PRIVATE_JWK === undefined
+  ) {
+    return noStoreJson({ error: "ISSUER_KEY_UNAVAILABLE" }, { status: 503 });
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(env.GUILD_ISSUER_PRIVATE_JWK) as unknown;
+  } catch {
+    return noStoreJson({ error: "ISSUER_KEY_UNAVAILABLE" }, { status: 503 });
+  }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return noStoreJson({ error: "ISSUER_KEY_UNAVAILABLE" }, { status: 503 });
+  }
+  const { d: _private, ...publicJwk } = parsed as Record<string, unknown>;
   return noStoreJson({
-    receipt: {
-      receiptId: receipt.data.receiptId,
-      missionId: receipt.data.missionId,
-      outcome: receipt.data.outcome,
-      pactDigest: receipt.data.pactDigest,
-      eventChainHead: receipt.data.eventChainHead,
-      reward: receipt.data.reward,
-      issuedAt: receipt.data.issuedAt,
-    },
+    keyId: env.GUILD_ISSUER_KEY_ID,
+    algorithm: "Ed25519",
+    publicJwk,
+    receiptSigningDomain: "PACTBRIDGE-RECEIPT-V1",
   });
 }
 

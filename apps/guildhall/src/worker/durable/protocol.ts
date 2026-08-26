@@ -3,7 +3,16 @@ import type {
   LifecycleState,
   TransitionFailureCode,
 } from "@guildhall/mission-engine";
-import { PactSchema, type MissionEvent } from "@guildhall/contracts";
+import {
+  ArtifactSubmissionSchema,
+  PactSchema,
+  ReplacementProofSchema,
+  type ArtifactSubmission,
+  type MissionEvent,
+  type Receipt,
+  type ReplacementProof,
+  type VerificationResult,
+} from "@guildhall/contracts";
 
 export type ProvenanceSource = "webmcp" | "mcp" | "a2a" | "http" | "system";
 
@@ -45,9 +54,17 @@ export interface RejectedCommandResult {
     | "EXPECTED_SEQUENCE_MISMATCH"
     | "COMMAND_ID_REUSED"
     | "INVALID_COMMAND"
+    | "ARTIFACT_PROOF_INVALID"
+    | "PACT_PROOF_INVALID"
+    | "PUBLIC_SAFETY_REJECTED"
+    | "REPLACEMENT_PROOF_INVALID"
     | "MISSION_NOT_INITIALIZED";
   readonly expectedSequence?: number;
   readonly actualSequence?: number;
+  readonly safetyIssue?: Readonly<{
+    fieldPath: string;
+    category: string;
+  }>;
 }
 
 export type CoordinatorCommandResult =
@@ -59,6 +76,15 @@ export interface MissionSnapshotPacket {
   readonly events: readonly MissionEvent[];
   readonly afterSequence: number;
   readonly latestSequence: number;
+  readonly artifacts?: readonly AcceptedArtifactRecord[];
+  readonly replacements?: readonly ReplacementProof[];
+  readonly verificationRuns?: readonly VerificationResult[];
+  readonly receipt?: Receipt | null;
+}
+
+export interface AcceptedArtifactRecord extends ArtifactSubmission {
+  readonly acceptedAt: string;
+  readonly acceptedSequence: number;
 }
 
 export interface CoordinatorInspection {
@@ -151,6 +177,30 @@ function isLifecycleCommand(value: unknown): value is LifecycleCommand {
     case "cancel":
     case "expire":
       return hasOnlyKeys(value, ["type"]);
+    case "issue_receipt":
+      return hasOnlyKeys(value, ["type", "receiptId"]) && uuid(value.receiptId);
+    case "report_progress":
+      return (
+        hasOnlyKeys(value, [
+          "type",
+          "roleSlotId",
+          "status",
+          "summary",
+          "completedOutputIds",
+          "occurredAt",
+        ]) &&
+        nonEmpty(value.roleSlotId) &&
+        (value.status === "working" ||
+          value.status === "blocked" ||
+          value.status === "ready-for-delivery") &&
+        nonEmpty(value.summary) &&
+        value.summary.length <= 1_000 &&
+        Array.isArray(value.completedOutputIds) &&
+        stringArray(value.completedOutputIds) &&
+        value.completedOutputIds.length <= 8 &&
+        typeof value.occurredAt === "string" &&
+        Number.isFinite(Date.parse(value.occurredAt))
+      );
     case "safety_redact":
       return (
         hasOnlyKeys(value, ["type", "redactedEventId"]) &&
@@ -264,11 +314,36 @@ function isLifecycleCommand(value: unknown): value is LifecycleCommand {
         (value.minimumNotMet === undefined ||
           typeof value.minimumNotMet === "boolean")
       );
-    case "submit_artifact":
-    case "default_role":
     case "release_role":
       return (
         hasOnlyKeys(value, ["type", "roleSlotId"]) && nonEmpty(value.roleSlotId)
+      );
+    case "default_role":
+      return (
+        hasOnlyKeys(value, ["type", "roleSlotId", "evidence"]) &&
+        nonEmpty(value.roleSlotId) &&
+        isRecord(value.evidence) &&
+        hasOnlyKeys(value.evidence, [
+          "taskId",
+          "taskState",
+          "errorCode",
+          "failureFixture",
+          "retryable",
+          "observedAt",
+        ]) &&
+        nonEmpty(value.evidence.taskId) &&
+        value.evidence.taskState === "TASK_STATE_FAILED" &&
+        nonEmpty(value.evidence.errorCode) &&
+        nonEmpty(value.evidence.failureFixture) &&
+        value.evidence.retryable === false &&
+        typeof value.evidence.observedAt === "string" &&
+        Number.isFinite(Date.parse(value.evidence.observedAt))
+      );
+    case "submit_artifact":
+      return (
+        hasOnlyKeys(value, ["type", "roleSlotId", "artifact"]) &&
+        nonEmpty(value.roleSlotId) &&
+        ArtifactSubmissionSchema.safeParse(value.artifact).success
       );
     case "fill_role_slot":
       return (
@@ -278,11 +353,13 @@ function isLifecycleCommand(value: unknown): value is LifecycleCommand {
           "predecessorAgentId",
           "replacementAgentId",
           "pactDigest",
+          "proof",
         ]) &&
         nonEmpty(value.roleSlotId) &&
         nonEmpty(value.predecessorAgentId) &&
         nonEmpty(value.replacementAgentId) &&
-        nonEmpty(value.pactDigest)
+        nonEmpty(value.pactDigest) &&
+        ReplacementProofSchema.safeParse(value.proof).success
       );
     case "verification_failed":
       return (

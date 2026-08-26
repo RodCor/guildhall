@@ -5,6 +5,7 @@ import {
   type WebMcpDocumentLike,
 } from "@guildhall/capability-manifest";
 import {
+  ArtifactMetadataSchema,
   artifactSigningBytes,
   buildPact,
   canonicalJsonDigest,
@@ -204,7 +205,7 @@ async function invokeBrowserCapability(
         {
           type: "accept_pact",
           agentId: requireActiveAgent(activeAgentId),
-          acceptanceId: crypto.randomUUID(),
+          acceptanceId: context.commandId,
           keyId: identity.keyId,
           pactVersion: requiredInteger(input, "pactVersion"),
           pactDigest,
@@ -212,47 +213,82 @@ async function invokeBrowserCapability(
             identity.privateKey,
             pactSigningBytes(pactDigest),
           ),
-          acceptedAt: new Date().toISOString(),
+          acceptedAt: requiredString(input, "acceptedAt"),
         },
         context,
         activeAgentId,
       );
     }
     case "guild.report_progress":
-      return ownerJson(
-        `/api/missions/${segment(requiredString(input, "missionId"))}/progress`,
+      return sendCommand(
+        input,
         {
-          commandId: context.commandId,
-          expectedSequence: await expectedSequence(input, context.signal),
+          type: "report_progress",
           roleSlotId: requiredString(input, "roleSlotId"),
           status: requiredString(input, "status"),
           summary: requiredString(input, "summary"),
-          completedOutputIds: input.completedOutputIds,
+          completedOutputIds: requiredStringArray(
+            input,
+            "completedOutputIds",
+            true,
+          ),
           occurredAt: requiredString(input, "occurredAt"),
         },
-        context.signal,
+        context,
+        activeAgentId,
       );
     case "guild.submit_artifact": {
       const identity = await ensureBrowserSigningIdentity();
       const artifact = requiredRecord(input, "artifact");
+      const missionId = requiredString(input, "missionId");
+      const producingAgentId = requireActiveAgent(activeAgentId);
       const pactDigest = requiredString(input, "pactDigest");
-      const contentDigest = requiredString(artifact, "contentDigest");
-      return ownerJson(
-        `/api/missions/${segment(requiredString(input, "missionId"))}/artifacts`,
+      const content = requiredRecord(artifact, "content");
+      const contentDigest = await canonicalJsonDigest(content);
+      if (contentDigest !== requiredString(artifact, "contentDigest")) {
+        throw new TypeError(
+          "artifact.contentDigest does not match artifact.content",
+        );
+      }
+      const metadata = ArtifactMetadataSchema.parse({
+        protocol: "commitment/v1",
+        kind: "artifact-metadata",
+        artifactId: requiredString(artifact, "artifactId"),
+        missionId,
+        pactDigest,
+        roleSlotId: requiredString(input, "roleSlotId"),
+        producingAgentId,
+        keyId: identity.keyId,
+        attempt: requiredInteger(artifact, "attempt"),
+        artifactType: requiredString(artifact, "type"),
+        mediaType: "application/json",
+        publicLocation: artifactPublicLocation(missionId),
+        contentDigest,
+        signature: await signBrowserMessage(
+          identity.privateKey,
+          artifactSigningBytes(pactDigest, contentDigest),
+        ),
+        safetyStatus: "approved",
+        completedAt: requiredString(artifact, "completedAt"),
+      });
+      return sendCommand(
+        input,
         {
-          commandId: context.commandId,
-          expectedSequence: await expectedSequence(input, context.signal),
-          roleSlotId: requiredString(input, "roleSlotId"),
-          pactDigest,
-          artifact,
-          contentDigest,
-          keyId: identity.keyId,
-          signature: await signBrowserMessage(
-            identity.privateKey,
-            artifactSigningBytes(pactDigest, contentDigest),
-          ),
+          type: "submit_artifact",
+          roleSlotId: metadata.roleSlotId,
+          artifact: {
+            outputId: requiredString(artifact, "outputId"),
+            metadata,
+            content,
+            dependencyArtifactIds: requiredStringArray(
+              artifact,
+              "dependencyArtifactIds",
+              true,
+            ),
+          },
         },
-        context.signal,
+        context,
+        activeAgentId,
       );
     }
     case "guild.inspect_receipt":
@@ -454,6 +490,15 @@ function query(
 
 function segment(value: string): string {
   return encodeURIComponent(value);
+}
+
+function artifactPublicLocation(missionId: string): string {
+  const url = new URL(
+    `/api/missions/${segment(missionId)}`,
+    window.location.href,
+  );
+  if (url.protocol === "http:") url.protocol = "https:";
+  return url.toString();
 }
 
 function optionalString(value: unknown): string | null {

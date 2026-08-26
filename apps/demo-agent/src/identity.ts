@@ -1,11 +1,16 @@
 import {
   ArtifactMetadataSchema,
+  ReplacementProofSchema,
   artifactSigningBytes,
   canonicalJsonDigest,
+  replacementSigningBytes,
 } from "@guildhall/contracts";
 import type { A2AArtifact, JsonObject } from "@guildhall/a2a-worker";
 
 import type { HostedAgentKind } from "./agent-card";
+
+export const REPLACEMENT_PROOF_METADATA_KEY =
+  "https://guildhall.example/extensions/commitment/v1/replacement-proof";
 
 export interface HostedAgentIdentity {
   readonly agentId: string;
@@ -88,6 +93,7 @@ export async function createSignedArtifact(input: {
   readonly missionId: string;
   readonly pactDigest: string;
   readonly roleSlotId: string;
+  readonly attempt: 1 | 2;
   readonly artifactType: "accessibility-findings" | "remediation-plan";
   readonly content: JsonObject;
 }): Promise<A2AArtifact> {
@@ -118,7 +124,7 @@ export async function createSignedArtifact(input: {
     roleSlotId: input.roleSlotId,
     producingAgentId: identity.agentId,
     keyId: identity.keyId,
-    attempt: 1,
+    attempt: input.attempt,
     artifactType: input.artifactType,
     mediaType: "application/json",
     publicLocation: `${input.origin}/artifacts/${artifactId}`,
@@ -146,6 +152,53 @@ export async function createSignedArtifact(input: {
   };
 }
 
+export async function createSignedReplacementProof(input: {
+  readonly privateJwk: JsonWebKey;
+  readonly acceptedAt: string;
+  readonly missionId: string;
+  readonly pactDigest: string;
+  readonly roleSlotId: string;
+  readonly predecessorAgentId: string;
+}): Promise<JsonObject> {
+  const identity = hostedIdentity("warden");
+  const replacementId = await deterministicUuid(
+    await canonicalJsonDigest({
+      kind: "replacement",
+      missionId: input.missionId,
+      pactDigest: input.pactDigest,
+      predecessorAgentId: input.predecessorAgentId,
+      replacementAgentId: identity.agentId,
+      roleSlotId: input.roleSlotId,
+    }),
+  );
+  const privateKey = await importSigningKey(input.privateJwk);
+  const signature = await signBytes(
+    privateKey,
+    replacementSigningBytes(
+      input.pactDigest,
+      input.roleSlotId,
+      input.predecessorAgentId,
+    ),
+  );
+  const proof = ReplacementProofSchema.parse({
+    protocol: "commitment/v1",
+    kind: "replacement",
+    replacementId,
+    missionId: input.missionId,
+    pactDigest: input.pactDigest,
+    roleSlotId: input.roleSlotId,
+    predecessorAgentId: input.predecessorAgentId,
+    replacementAgentId: identity.agentId,
+    keyId: identity.keyId,
+    reason: "participant-defaulted",
+    preservesPactDigest: true,
+    signature,
+    acceptedAt: input.acceptedAt,
+  });
+
+  return { ...proof };
+}
+
 export async function artifactIdForContent(
   content: JsonObject,
 ): Promise<string> {
@@ -163,6 +216,29 @@ function encodeBase64Url(bytes: Uint8Array): string {
     .replaceAll("+", "-")
     .replaceAll("/", "_")
     .replace(/=+$/u, "");
+}
+
+async function importSigningKey(privateJwk: JsonWebKey): Promise<CryptoKey> {
+  return crypto.subtle.importKey(
+    "jwk",
+    privateJwk,
+    { name: "Ed25519" },
+    false,
+    ["sign"],
+  );
+}
+
+async function signBytes(
+  privateKey: CryptoKey,
+  proof: Uint8Array,
+): Promise<string> {
+  const signingInput = new ArrayBuffer(proof.byteLength);
+  new Uint8Array(signingInput).set(proof);
+  return encodeBase64Url(
+    new Uint8Array(
+      await crypto.subtle.sign("Ed25519", privateKey, signingInput),
+    ),
+  );
 }
 
 async function deterministicUuid(value: string): Promise<string> {
