@@ -13,6 +13,8 @@
     "test": "vitest run",
     "test:contracts": "vitest run tests/protocol/contracts.test.ts tests/protocol/schema-examples.test.ts",
     "test:crypto": "vitest run tests/protocol/crypto.test.ts",
+    "test:state-machine": "vitest run tests/state-machine --exclude tests/state-machine/properties.test.ts",
+    "test:state-properties": "vitest run tests/state-machine/properties.test.ts",
     "test:watch": "vitest",
     "typecheck": "pnpm -r --if-present typecheck"
   },

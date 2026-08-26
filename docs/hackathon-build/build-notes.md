@@ -223,3 +223,27 @@
 - `pnpm check:workspace` passed all strict package/application typechecks and formatting.
 - `pnpm test:contracts` passed 7 tests, including all 14 schema example decisions and runtime cross-field invariants.
 - `pnpm test:crypto` passed 15 tests covering canonical property-order equality, the known SHA-256 vector, one-byte mutation, exact domains, command projection, wrong domain/key/payload, malformed/private keys, revocation, and historical proof behavior.
+
+## 2026-08-26 — Build item 3: pure mission lifecycle engine
+
+### Implemented
+
+- Added a pure DRAFT→PREPARE→RESERVE→COMMIT→EXECUTE→DELIVER→VERIFY→COMPENSATE→RECEIPT reducer with explicit illegal-transition results, monotonic event sequence, absorbing terminal outcomes, and the locked display-state priority.
+- Added application/withdrawal state, material mission-version invalidation, reservation release, at-most-two helpers, visible one-helper fallback, two proposal rounds, exact digest/version acceptances, and requester-plus-all-helper binding.
+- Added deterministic applicant ranking by skill coverage, verified capability rank, reliability, and application event sequence, with agent ID used only as a deterministic final tie breaker.
+- Added material-versus-cosmetic pact classification, immutable post-bind scope, exact stable-slot replacement, remaining-helper inheritance, preserved valid role artifacts, overdue completion, one semantic correction, safety/infrastructure separation, and command idempotency decisions.
+- Generated `tests/state-machine/transition-coverage.json`, proving all sixteen PRD display states derive from an intentional internal snapshot or terminal receipt.
+
+### Review corrections
+
+- Treated the declared minimum party size as a soft requested floor: one eligible helper proceeds, receives a visible minimum-not-met event, and owns one combined allocation without a ghost helper.
+- Clarified the first semantic failure as `VERIFY → EXECUTE / Correction available`; only failed role-slot artifacts reopen, then a safe correction reaches `DELIVER` before explicit verification attempt two.
+- Made pre-bind canceled/expired receipt pact digests nullable while requiring a bound digest for completed receipts.
+- Counted the two-agent maximum by unique active helpers so the remaining helper may inherit a failed exact slot without rewriting pact terms.
+
+### Verification
+
+- `pnpm check:workspace` passed every strict package/application typecheck and formatting check.
+- `pnpm test:state-machine` passed 48 table-driven selection, negotiation, replacement, lifecycle, and idempotency tests.
+- `pnpm test:state-properties` passed 4 generated/invariant tests: rejected-command immutability, terminal absorption, complete display coverage, and the active-helper ceiling.
+- `pnpm test:contracts` remained green at 8 tests after the nullable pre-bind receipt correction.

@@ -496,8 +496,8 @@ The technical inspector always shows both the internal stage and derived display
 | Fill exact role slot       | `COMPENSATE`                           | Replacement proof; return to `EXECUTE`                            |
 | Verify                     | `DELIVER` or correction delivery       | `VERIFY`                                                          |
 | Verifier unavailable       | `VERIFY`                               | Stay `VERIFY / Verification pending`                              |
-| First verification failure | `VERIFY`                               | Correction available; no points                                   |
-| Correct artifact           | Correction available                   | `DELIVER` then `VERIFY`                                           |
+| First verification failure | `VERIFY`                               | `EXECUTE / Correction available`; preserve valid slot artifacts   |
+| Correct artifact           | `EXECUTE / Correction available`       | Safe failed-slot correction, then `DELIVER` and explicit `VERIFY` |
 | Second failure             | `VERIFY`                               | `RECEIPT / Failed`                                                |
 | Verification pass          | `VERIFY`                               | `RECEIPT / Completed`                                             |
 | Emergency safety override  | Any nonterminal public state           | Hide payload, emit redaction, pause or compensate/cancel          |
@@ -552,6 +552,8 @@ Schema initialization/migration is the only work inside `blockConcurrencyWhile()
 | `mission_catalog`    | Searchable latest mission projection with `last_sequence`      |
 | `receipts`           | Public terminal evidence and event-chain head                  |
 | `receipt_deltas`     | Idempotently applied capability/reliability/timeliness changes |
+
+A completed or post-bind terminal receipt carries the bound pact digest. A pre-bind canceled or expired receipt uses a null pact digest because no commitment ever bound; it must have no verification evidence or success reward.
 
 MVP does not enable D1 read replication. If enabled later, authorization and autonomy-policy reads begin with a primary-constrained D1 session to avoid stale revocation decisions.
 

@@ -39,7 +39,7 @@ export const ReceiptSchema = z
     receiptId: UuidSchema,
     missionId: UuidSchema,
     outcome: z.enum(["completed", "failed", "canceled", "expired"]),
-    pactDigest: Sha256DigestSchema,
+    pactDigest: Sha256DigestSchema.nullable(),
     eventChainHead: Sha256DigestSchema,
     artifacts: z.array(ReceiptArtifactSchema).max(8),
     verification: z
@@ -108,6 +108,13 @@ export const ReceiptSchema = z
   .strict()
   .superRefine((receipt, context) => {
     if (receipt.outcome === "completed") {
+      if (receipt.pactDigest === null) {
+        context.addIssue({
+          code: "custom",
+          message: "A completed receipt requires a bound pact digest",
+          path: ["pactDigest"],
+        });
+      }
       if (receipt.verification?.status !== "passed") {
         context.addIssue({
           code: "custom",

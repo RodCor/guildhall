@@ -21,37 +21,37 @@
       "$ref": "#/$defs/__schema4"
     },
     "eventChainHead": {
-      "$ref": "#/$defs/__schema4"
-    },
-    "artifacts": {
       "$ref": "#/$defs/__schema5"
     },
+    "artifacts": {
+      "$ref": "#/$defs/__schema6"
+    },
     "verification": {
-      "$ref": "#/$defs/__schema7"
+      "$ref": "#/$defs/__schema8"
     },
     "timeliness": {
-      "$ref": "#/$defs/__schema9"
+      "$ref": "#/$defs/__schema10"
     },
     "defaults": {
-      "$ref": "#/$defs/__schema11"
+      "$ref": "#/$defs/__schema12"
     },
     "replacements": {
-      "$ref": "#/$defs/__schema13"
+      "$ref": "#/$defs/__schema14"
     },
     "reward": {
-      "$ref": "#/$defs/__schema15"
+      "$ref": "#/$defs/__schema16"
     },
     "reputationDeltas": {
-      "$ref": "#/$defs/__schema16"
+      "$ref": "#/$defs/__schema17"
     },
     "issuerKeyId": {
       "$ref": "#/$defs/__schema2"
     },
     "issuerSignature": {
-      "$ref": "#/$defs/__schema18"
+      "$ref": "#/$defs/__schema19"
     },
     "issuedAt": {
-      "$ref": "#/$defs/__schema10"
+      "$ref": "#/$defs/__schema11"
     }
   },
   "required": [
@@ -93,17 +93,27 @@
       "enum": ["completed", "failed", "canceled", "expired"]
     },
     "__schema4": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/__schema5"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "__schema5": {
       "type": "string",
       "pattern": "^[A-Za-z0-9_-]{43}$"
     },
-    "__schema5": {
+    "__schema6": {
       "maxItems": 8,
       "type": "array",
       "items": {
-        "$ref": "#/$defs/__schema6"
+        "$ref": "#/$defs/__schema7"
       }
     },
-    "__schema6": {
+    "__schema7": {
       "type": "object",
       "properties": {
         "artifactId": {
@@ -116,7 +126,7 @@
           "$ref": "#/$defs/__schema2"
         },
         "contentDigest": {
-          "$ref": "#/$defs/__schema4"
+          "$ref": "#/$defs/__schema5"
         }
       },
       "required": [
@@ -127,7 +137,7 @@
       ],
       "additionalProperties": false
     },
-    "__schema7": {
+    "__schema8": {
       "anyOf": [
         {
           "type": "object",
@@ -144,7 +154,7 @@
               "maxItems": 16,
               "type": "array",
               "items": {
-                "$ref": "#/$defs/__schema8"
+                "$ref": "#/$defs/__schema9"
               }
             }
           },
@@ -156,7 +166,7 @@
         }
       ]
     },
-    "__schema8": {
+    "__schema9": {
       "type": "object",
       "properties": {
         "criterionId": {
@@ -170,35 +180,35 @@
       "required": ["criterionId", "status"],
       "additionalProperties": false
     },
-    "__schema9": {
+    "__schema10": {
       "type": "object",
       "properties": {
         "overdue": {
           "type": "boolean"
         },
         "deliveryDeadline": {
-          "$ref": "#/$defs/__schema10"
+          "$ref": "#/$defs/__schema11"
         },
         "completedAt": {
-          "$ref": "#/$defs/__schema10"
+          "$ref": "#/$defs/__schema11"
         }
       },
       "required": ["overdue", "deliveryDeadline", "completedAt"],
       "additionalProperties": false
     },
-    "__schema10": {
+    "__schema11": {
       "type": "string",
       "format": "date-time",
       "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d\\.\\d{3}(?:Z))$"
     },
-    "__schema11": {
+    "__schema12": {
       "maxItems": 2,
       "type": "array",
       "items": {
-        "$ref": "#/$defs/__schema12"
+        "$ref": "#/$defs/__schema13"
       }
     },
-    "__schema12": {
+    "__schema13": {
       "type": "object",
       "properties": {
         "agentId": {
@@ -215,14 +225,14 @@
       "required": ["agentId", "roleSlotId", "reason"],
       "additionalProperties": false
     },
-    "__schema13": {
+    "__schema14": {
       "maxItems": 2,
       "type": "array",
       "items": {
-        "$ref": "#/$defs/__schema14"
+        "$ref": "#/$defs/__schema15"
       }
     },
-    "__schema14": {
+    "__schema15": {
       "type": "object",
       "properties": {
         "replacementId": {
@@ -246,7 +256,7 @@
       ],
       "additionalProperties": false
     },
-    "__schema15": {
+    "__schema16": {
       "type": "object",
       "properties": {
         "basePointsAwarded": {
@@ -287,14 +297,14 @@
       ],
       "additionalProperties": false
     },
-    "__schema16": {
+    "__schema17": {
       "maxItems": 8,
       "type": "array",
       "items": {
-        "$ref": "#/$defs/__schema17"
+        "$ref": "#/$defs/__schema18"
       }
     },
-    "__schema17": {
+    "__schema18": {
       "type": "object",
       "properties": {
         "agentId": {
@@ -345,7 +355,7 @@
       ],
       "additionalProperties": false
     },
-    "__schema18": {
+    "__schema19": {
       "type": "string",
       "pattern": "^[A-Za-z0-9_-]{86}$"
     }

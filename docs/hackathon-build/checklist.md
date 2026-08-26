@@ -33,7 +33,7 @@ Status: **Locked**
       Acceptance: Semantically identical objects with different property order hash identically; a one-byte material change changes the digest; wrong-domain, wrong-key, revoked-key, and altered-payload proofs fail; every published schema has a passing example and a failing example.
       Verify: Run `pnpm test:contracts` and `pnpm test:crypto`; validate every file under `protocol/commitment-v1/examples` against its published schema.
 
-- [ ] **3. Build the pure mission lifecycle, selection, negotiation, and replacement engine**
+- [x] **3. Build the pure mission lifecycle, selection, negotiation, and replacement engine**
       Spec ref: `spec.md > Protocol Integrity Deep Dive > Internal mission stages` through `Exact replacement semantics`
       What to build: Sol High reviews transition completeness and material-change boundaries; Terra High implements the pure PREPARE→RESERVE→COMMIT→EXECUTE→DELIVER→VERIFY→COMPENSATE→RECEIPT engine, display-state derivation, applicant ordering, maximum-two-helper enforcement, one-helper inheritance, two-round assignment negotiation, pact-version invalidation, identical-digest binding, overdue behavior, correction accounting, and exact role-slot replacement. Luna High owns table-driven illegal-transition and edge-case fixtures.
       Acceptance: Selection uses skill coverage, verified rank, reliability, then application event sequence; one helper may proceed when two were preferred; mixed pact digests cannot bind; a material pre-bind edit invalidates prior applications/acceptances; post-bind changed scope cannot masquerade as replacement; safety rejection does not consume the one verification correction.

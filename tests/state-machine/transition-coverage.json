@@ -1,0 +1,101 @@
+{
+  "generatedFrom": "deriveDisplayState",
+  "coverage": [
+    {
+      "expectedDisplayState": "Draft",
+      "derivedDisplayState": "Draft",
+      "internalStage": "DRAFT",
+      "source": "derived snapshot"
+    },
+    {
+      "expectedDisplayState": "Recruiting",
+      "derivedDisplayState": "Recruiting",
+      "internalStage": "PREPARE",
+      "source": "derived snapshot"
+    },
+    {
+      "expectedDisplayState": "Negotiating",
+      "derivedDisplayState": "Negotiating",
+      "internalStage": "RESERVE",
+      "source": "derived snapshot"
+    },
+    {
+      "expectedDisplayState": "Bound",
+      "derivedDisplayState": "Bound",
+      "internalStage": "EXECUTE",
+      "source": "derived snapshot"
+    },
+    {
+      "expectedDisplayState": "Executing",
+      "derivedDisplayState": "Executing",
+      "internalStage": "EXECUTE",
+      "source": "derived snapshot"
+    },
+    {
+      "expectedDisplayState": "Verifying",
+      "derivedDisplayState": "Verifying",
+      "internalStage": "VERIFY",
+      "source": "derived snapshot"
+    },
+    {
+      "expectedDisplayState": "Overdue",
+      "derivedDisplayState": "Overdue",
+      "internalStage": "VERIFY",
+      "source": "derived snapshot"
+    },
+    {
+      "expectedDisplayState": "Replacement needed",
+      "derivedDisplayState": "Replacement needed",
+      "internalStage": "COMPENSATE",
+      "source": "derived snapshot"
+    },
+    {
+      "expectedDisplayState": "Verification pending",
+      "derivedDisplayState": "Verification pending",
+      "internalStage": "VERIFY",
+      "source": "derived snapshot"
+    },
+    {
+      "expectedDisplayState": "Correction available",
+      "derivedDisplayState": "Correction available",
+      "internalStage": "EXECUTE",
+      "source": "derived snapshot"
+    },
+    {
+      "expectedDisplayState": "Paused for safety",
+      "derivedDisplayState": "Paused for safety",
+      "internalStage": "EXECUTE",
+      "source": "derived snapshot"
+    },
+    {
+      "expectedDisplayState": "Safety rejected",
+      "derivedDisplayState": "Safety rejected",
+      "internalStage": "EXECUTE",
+      "source": "derived snapshot"
+    },
+    {
+      "expectedDisplayState": "Completed",
+      "derivedDisplayState": "Completed",
+      "internalStage": "RECEIPT",
+      "source": "terminal receipt"
+    },
+    {
+      "expectedDisplayState": "Failed",
+      "derivedDisplayState": "Failed",
+      "internalStage": "RECEIPT",
+      "source": "terminal receipt"
+    },
+    {
+      "expectedDisplayState": "Canceled",
+      "derivedDisplayState": "Canceled",
+      "internalStage": "RECEIPT",
+      "source": "terminal receipt"
+    },
+    {
+      "expectedDisplayState": "Expired",
+      "derivedDisplayState": "Expired",
+      "internalStage": "RECEIPT",
+      "source": "terminal receipt"
+    }
+  ]
+}

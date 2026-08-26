@@ -7,6 +7,11 @@
     ".": "./src/index.ts"
   },
   "scripts": {
+    "generate:transition-coverage": "tsx scripts/generate-transition-coverage.ts",
+    "test": "vitest run ../../tests/state-machine",
     "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@guildhall/contracts": "workspace:*"
   }
 }

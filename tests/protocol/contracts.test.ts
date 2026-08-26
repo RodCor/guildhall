@@ -102,4 +102,26 @@ describe("commitment/v1 runtime contracts", () => {
       }).success,
     ).toBe(false);
   });
+
+  it("permits a zero-reward pre-bind cancellation receipt without a pact", () => {
+    const receipt = ReceiptSchema.parse(receiptFixture);
+    expect(
+      ReceiptSchema.safeParse({
+        ...receipt,
+        outcome: "canceled",
+        pactDigest: null,
+        artifacts: [],
+        verification: null,
+        defaults: [],
+        replacements: [],
+        reward: {
+          ...receipt.reward,
+          basePointsAwarded: 0,
+          recoveryBonusAwarded: 0,
+          totalPointsAwarded: 0,
+        },
+        reputationDeltas: [],
+      }).success,
+    ).toBe(true);
+  });
 });
