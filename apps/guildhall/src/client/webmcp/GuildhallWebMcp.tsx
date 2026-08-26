@@ -94,8 +94,14 @@ export function GuildhallWebMcp({
   }, [activeAgentId]);
 
   return (
-    <p className="gateway-status" data-webmcp-status={status}>
-      WebMCP: {statusLabel(status)}
+    <p
+      className={`webmcp-readiness webmcp-${status}`}
+      data-webmcp-status={status}
+      role={status === "failed" ? "alert" : "status"}
+      aria-live="polite"
+    >
+      <span aria-hidden="true" />
+      {statusLabel(status)}
     </p>
   );
 }
@@ -924,13 +930,13 @@ function statusLabel(
 ) {
   switch (status) {
     case "checking":
-      return "checking this browser";
+      return "Checking browser agent controls…";
     case "registered":
-      return "canonical guild tools registered";
+      return "WebMCP tools are live in this browser";
     case "unavailable":
-      return "manual controls active (browser API unavailable)";
+      return "Visual demo ready · WebMCP is not exposed by this browser";
     case "failed":
-      return "registration failed; manual controls remain available";
+      return "WebMCP registration failed · the visual demo still works";
   }
 }
 

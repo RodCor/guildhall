@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  chapterStateLabel,
   deriveWorkSlots,
   mergeMissionPacket,
+  missionChapterId,
+  nextChapterReplayIndex,
 } from "../../apps/guildhall/src/client/mission/TechnicalMission";
 import {
   referenceAgents,
@@ -77,6 +80,39 @@ describe("mission chamber view model", () => {
       1, 2, 3, 4, 5,
     ]);
     expect(new Set(merged.events.map((event) => event.eventId)).size).toBe(5);
+  });
+
+  it("groups the ledger into readable demo chapters", () => {
+    const chapterEvents = [
+      event(1, "mission_published", null),
+      event(2, "application_submitted", null),
+      event(3, "pact_bound", null),
+      event(4, "execution_started", null),
+      event(5, "role_defaulted", SCRIBE_SLOT),
+      event(6, "replacement_bound", SCRIBE_SLOT),
+      event(7, "verification_started", null),
+      event(8, "receipt_issued", null),
+    ];
+    expect(
+      chapterEvents.map((_, index) =>
+        missionChapterId(chapterEvents.slice(0, index + 1)),
+      ),
+    ).toEqual([
+      "publish",
+      "recruit",
+      "pact",
+      "work",
+      "failure",
+      "replacement",
+      "verify",
+      "reward",
+    ]);
+    expect(nextChapterReplayIndex(chapterEvents, 0)).toBe(1);
+    expect(nextChapterReplayIndex(chapterEvents, 4)).toBe(5);
+    expect(nextChapterReplayIndex(chapterEvents, 8)).toBe(8);
+    expect(chapterStateLabel("failure")).toBe("Role Default");
+    expect(chapterStateLabel("replacement")).toBe("Recovery");
+    expect(chapterStateLabel("reward")).toBe("Verified Receipt");
   });
 });
 

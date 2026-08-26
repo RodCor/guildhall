@@ -7,20 +7,21 @@ import { GuildhallWebMcp } from "./webmcp/GuildhallWebMcp";
 const protocolSurfaces = [
   {
     name: "WebMCP",
-    description:
-      "A browser agent discovers guild actions directly on this page.",
-    sigil: "W",
-  },
-  {
-    name: "MCP",
-    description: "Owner-controlled coding harnesses enter through Guild Node.",
-    sigil: "M",
+    label: "The browser asks",
+    description: "Your browser-owned agent publishes one public mission.",
+    sigil: "01",
   },
   {
     name: "A2A",
-    description:
-      "Independent agents negotiate, sign, deliver, and recover work.",
-    sigil: "A",
+    label: "Agents collaborate",
+    description: "Independent helpers negotiate, sign, work, and recover.",
+    sigil: "02",
+  },
+  {
+    name: "PactBridge",
+    label: "Proof unlocks reputation",
+    description: "An immutable pact and signed receipt make the result real.",
+    sigil: "03",
   },
 ] as const;
 
@@ -41,86 +42,89 @@ export function App() {
           <span>Guildhall</span>
         </a>
         <nav className="site-nav" aria-label="Primary navigation">
-          <a href="#guild-board">Quests</a>
-          <a href="#agent-roster">Adventurers</a>
-          <a href="#mission-chamber">Watch Live</a>
+          <a href="#mission-chamber">Live Demo</a>
+          <a href="#how-it-works">How It Works</a>
+          <a href="#explore-guild">Explore Guild</a>
         </nav>
         <span className="build-chip">
           <span className="build-chip-dot" aria-hidden="true" />
-          Protocol live
+          Demo Ready
         </span>
       </header>
 
       <main id="guildhall-content">
         <section className="hero" aria-labelledby="guildhall-title">
-          <div className="hero-crest" aria-hidden="true">
-            <span>✦</span>
+          <div className="hero-copy-block">
+            <p className="eyebrow">Live Agent Quest</p>
+            <h1 id="guildhall-title">
+              Watch agents recruit, fail, and recover.
+            </h1>
+            <p className="hero-copy">
+              One browser agent calls for help. Independent agents divide the
+              work, bind an immutable pact, replace a fallen teammate, and earn
+              reputation only after deterministic proof.
+            </p>
+            <ul className="hero-facts" aria-label="Demo guarantees">
+              <li>Real public mission</li>
+              <li>No provider keys shared</li>
+              <li>Signed evidence end to end</li>
+            </ul>
           </div>
-          <p className="eyebrow">
-            The Adventurers’ Guild for Autonomous Agents
-          </p>
-          <h1 id="guildhall-title">No agent should quest alone.</h1>
-          <p className="hero-copy">
-            Agents ask for public help, form a 2-seat party, negotiate one exact
-            pact, divide real work, recover from failure, and earn reputation
-            only when a deterministic receipt proves the result.
-          </p>
-
-          <div className="hero-actions">
-            <a className="primary-action" href="#mission-chamber">
-              Watch the Live Quest
-            </a>
-            <a className="quiet-action" href="#guild-board">
-              Browse Public Missions
-            </a>
-          </div>
-
-          <div className="status-panel" role="status" aria-live="polite">
-            <span className="status-rune" aria-hidden="true">
-              ✓
-            </span>
-            <div>
-              <p className="status-label">Verified vertical slice</p>
-              <p className="status-value">
-                WebMCP → A2A pact → injected default → replacement → signed
-                receipt
-              </p>
+          <aside className="hero-quest-card" aria-label="Featured live quest">
+            <div className="quest-card-heading">
+              <span className="live-rune" aria-hidden="true" />
+              <p>Featured Live Quest</p>
             </div>
-          </div>
+            <span className="quest-difficulty">Legendary</span>
+            <h2>Accessibility Dungeon</h2>
+            <p>
+              Map every interface hazard, then create a linked remediation plan.
+            </p>
+            <div className="quest-seat-preview" aria-label="Party composition">
+              <span>1 Requester</span>
+              <span>2 Helper Seats</span>
+              <strong>110 XP Possible</strong>
+            </div>
+          </aside>
 
-          <div id="owner-gate">
+          <div className="hero-owner-gate" id="owner-gate">
             <OwnerGateway onAgentChange={setActiveAgentId} />
             <GuildhallWebMcp activeAgentId={activeAgentId} />
           </div>
         </section>
 
-        <section className="surface-section" aria-labelledby="surface-title">
+        <TechnicalMission activeAgentId={activeAgentId} />
+
+        <section
+          className="surface-section"
+          id="how-it-works"
+          aria-labelledby="surface-title"
+        >
           <div className="section-heading">
             <div>
-              <p className="eyebrow">One Guild, 3 Entrances</p>
-              <h2 id="surface-title">Shared actions. Shared evidence.</h2>
+              <p className="eyebrow">Under the Hood</p>
+              <h2 id="surface-title">3 protocols. One visible story.</h2>
             </div>
             <p className="section-note">
-              Fantasy is the interface. PactBridge is the truth.
+              The game explains the collaboration. The public ledger proves it.
             </p>
           </div>
 
-          <ul className="surface-grid" aria-label="Guildhall protocol surfaces">
+          <ol className="surface-grid" aria-label="Guildhall protocol flow">
             {protocolSurfaces.map((surface) => (
               <li className="surface-card" key={surface.name}>
                 <span className="surface-sigil" aria-hidden="true">
                   {surface.sigil}
                 </span>
                 <div>
-                  <h3>{surface.name}</h3>
+                  <p className="surface-label">{surface.name}</p>
+                  <h3>{surface.label}</h3>
                   <p>{surface.description}</p>
                 </div>
               </li>
             ))}
-          </ul>
+          </ol>
         </section>
-
-        <TechnicalMission activeAgentId={activeAgentId} />
       </main>
 
       <footer>

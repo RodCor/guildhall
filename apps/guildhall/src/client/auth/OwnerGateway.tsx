@@ -124,15 +124,32 @@ export function OwnerGateway({
     );
   }
 
+  const defaultSlug = `${slugPart(session.owner.login)}-agent`;
+
   return (
     <div className="gateway-card">
       <div className="owner-strip">
-        <div>
-          <p className="status-label">Guild owner</p>
-          <p className="gateway-title">@{session.owner.login}</p>
+        <div className="owner-identity">
+          {session.owner.avatarUrl === null ? (
+            <span className="owner-avatar" aria-hidden="true">
+              {session.owner.login.charAt(0).toUpperCase()}
+            </span>
+          ) : (
+            <img
+              className="owner-avatar"
+              src={session.owner.avatarUrl}
+              alt=""
+              width="42"
+              height="42"
+            />
+          )}
+          <div>
+            <p className="status-label">Guild Owner</p>
+            <p className="gateway-title">@{session.owner.login}</p>
+          </div>
         </div>
         <button
-          className="quiet-action"
+          className="owner-signout"
           type="button"
           onClick={signOut}
           disabled={busy}
@@ -145,7 +162,11 @@ export function OwnerGateway({
         <form className="agent-form" onSubmit={createAgent}>
           <div className="form-heading">
             <p className="eyebrow">Summon an adventurer</p>
-            <h3>Create the public RPG face for one technical agent.</h3>
+            <h3>Name your browser agent, then enter the Mission Theater.</h3>
+            <p>
+              Demo-ready defaults are filled in. Everything remains public and
+              editable before registration.
+            </p>
           </div>
           <label>
             Character name
@@ -155,6 +176,7 @@ export function OwnerGateway({
               required
               maxLength={80}
               placeholder="e.g. A11y Scout…"
+              defaultValue={`${session.owner.login}'s Adventurer`}
             />
           </label>
           <label>
@@ -165,25 +187,7 @@ export function OwnerGateway({
               required
               maxLength={80}
               placeholder="e.g. Ranger…"
-            />
-          </label>
-          <label>
-            Technical agent
-            <input
-              name="technicalName"
-              autoComplete="off"
-              required
-              maxLength={120}
-              placeholder="e.g. Codex on Guild Node…"
-            />
-          </label>
-          <label>
-            Guild
-            <input
-              name="guildName"
-              autoComplete="organization"
-              maxLength={120}
-              placeholder="e.g. Google…"
+              defaultValue="Pactbound Adventurer"
             />
           </label>
           <label>
@@ -196,17 +200,45 @@ export function OwnerGateway({
               maxLength={60}
               pattern="[a-z0-9-]+"
               placeholder="e.g. a11y-scout…"
+              defaultValue={defaultSlug}
             />
           </label>
-          <label className="form-wide">
-            Public bio
-            <textarea
-              name="publicBio"
-              autoComplete="off"
-              maxLength={500}
-              placeholder="e.g. Audits interfaces and returns structured evidence…"
-            />
-          </label>
+          <details className="profile-advanced form-wide">
+            <summary>Customize Technical Profile</summary>
+            <div className="profile-advanced-grid">
+              <label>
+                Technical agent
+                <input
+                  name="technicalName"
+                  autoComplete="off"
+                  required
+                  maxLength={120}
+                  placeholder="e.g. Codex on Guild Node…"
+                  defaultValue="Browser-owned WebMCP agent"
+                />
+              </label>
+              <label>
+                Guild
+                <input
+                  name="guildName"
+                  autoComplete="organization"
+                  maxLength={120}
+                  placeholder="e.g. Google…"
+                  defaultValue={`${session.owner.login}'s Guild`}
+                />
+              </label>
+              <label className="form-wide">
+                Public bio
+                <textarea
+                  name="publicBio"
+                  autoComplete="off"
+                  maxLength={500}
+                  placeholder="e.g. Recruits agents and returns public evidence…"
+                  defaultValue="Recruits independent agents for public, verifiable work."
+                />
+              </label>
+            </div>
+          </details>
           <button
             className="primary-action form-wide"
             type="submit"
@@ -216,15 +248,18 @@ export function OwnerGateway({
           </button>
         </form>
       ) : (
-        <div className="agent-ready" role="status">
+        <div className="agent-ready">
           <span className="surface-sigil" aria-hidden="true">
             ✓
           </span>
           <div>
-            <p className="status-label">Browser proof ready</p>
+            <p className="status-label">Browser Agent Ready</p>
             <p className="gateway-title">{agent.characterName}</p>
-            <p className="key-caption">Signing key {agent.keyId}</p>
           </div>
+          <details className="agent-proof-details">
+            <summary>Signing Proof</summary>
+            <code>{agent.keyId}</code>
+          </details>
         </div>
       )}
       {notice !== null ? (
@@ -234,6 +269,15 @@ export function OwnerGateway({
       ) : null}
     </div>
   );
+}
+
+function slugPart(value: string): string {
+  const normalized = value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gu, "-")
+    .replace(/^-+|-+$/gu, "")
+    .slice(0, 48);
+  return normalized === "" ? "guild" : normalized;
 }
 
 async function ownerMutation(path: string, body: unknown): Promise<Response> {
