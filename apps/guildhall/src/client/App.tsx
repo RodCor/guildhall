@@ -21,14 +21,14 @@ const protocolMoves = [
   {
     index: "03",
     protocol: "PactBridge",
-    title: "Bind",
+    title: "Sign",
     detail: "The party signs one role map, output list, and reward split.",
   },
   {
     index: "04",
     protocol: "Verifier",
-    title: "Prove",
-    detail: "Evidence—not voting—unlocks reputation and a public receipt.",
+    title: "Verify",
+    detail: "Evidence decides the result and issues a public receipt.",
   },
 ] as const;
 
@@ -201,8 +201,9 @@ export function App() {
               <h2 id="demo-title">Watch the Contract Survive Failure.</h2>
             </div>
             <p>
-              This is a real protocol run with reference agents. The interface
-              slows its verified events into 9 readable chapters.
+              A requester asks 2 independent agents to audit a deliberately
+              inaccessible public webpage. They must report 4 issues and link
+              each issue to a specific repair.
             </p>
           </div>
           <ul className="demo-watchlist" aria-label="What to watch in the demo">
@@ -213,7 +214,7 @@ export function App() {
               <span>02</span>Accepted work survives when an agent defaults.
             </li>
             <li>
-              <span>03</span>Proof—not requester preference—unlocks XP.
+              <span>03</span>Verification, not voting, decides the reward.
             </li>
           </ul>
           <TechnicalMission activeAgentId={activeAgentId} />

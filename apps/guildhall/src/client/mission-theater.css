@@ -1231,14 +1231,50 @@ main {
   padding: 8px 0 14px;
 }
 
-.hud-step-track::before {
+.hud-progress-lane {
   position: absolute;
   top: 21px;
-  right: 4%;
-  left: 4%;
+  right: calc(100% / 18);
+  left: calc(100% / 18);
   height: 1px;
-  content: "";
   background: rgba(211, 235, 231, 0.12);
+}
+
+.hud-progress-fill,
+.hud-progress-runner {
+  position: absolute;
+  inset: 0 auto auto 0;
+  height: 1px;
+}
+
+.hud-progress-fill {
+  width: 100%;
+  background: var(--hud-aether);
+  box-shadow: 0 0 12px rgba(131, 215, 194, 0.28);
+  transform: scaleX(var(--hud-progress));
+  transform-origin: left center;
+  transition: transform 620ms var(--hud-ease);
+}
+
+.hud-progress-runner {
+  width: 12.5%;
+  transform: translateX(calc(var(--hud-active-index) * 100%));
+  transition: transform 620ms var(--hud-ease);
+}
+
+.hud-progress-orb {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 9px;
+  height: 9px;
+  border: 2px solid #dff8f1;
+  border-radius: 50%;
+  background: var(--hud-aether);
+  box-shadow:
+    0 0 0 4px rgba(131, 215, 194, 0.12),
+    0 0 16px rgba(131, 215, 194, 0.52);
+  transform: translate(-50%, -50%);
 }
 
 .hud-step-track ol {
@@ -1255,6 +1291,9 @@ main {
   justify-items: center;
   gap: 5px;
   color: rgba(169, 191, 186, 0.48);
+  transition:
+    opacity 360ms ease,
+    transform 460ms var(--hud-ease);
 }
 
 .hud-step > span {
@@ -1274,6 +1313,12 @@ main {
   font-size: 0.58rem;
 }
 
+.hud-step-pending {
+  visibility: hidden;
+  opacity: 0;
+  transform: translateY(7px) scale(0.92);
+}
+
 .hud-step-complete {
   color: rgba(131, 215, 194, 0.66);
 }
@@ -1284,6 +1329,12 @@ main {
 
 .hud-step-active {
   color: var(--hud-text);
+  font-weight: 800;
+  animation: step-discover 420ms 500ms var(--hud-ease) both;
+}
+
+.track-ready .hud-step-active {
+  animation-delay: 0ms;
 }
 
 .hud-step-active > span {
@@ -1291,6 +1342,42 @@ main {
   border-color: var(--hud-aether);
   background: var(--hud-aether);
   box-shadow: 0 0 0 5px rgba(131, 215, 194, 0.09);
+}
+
+.track-failure .hud-progress-fill {
+  background: var(--hud-danger);
+  box-shadow: 0 0 12px rgba(223, 120, 109, 0.35);
+}
+
+.track-failure .hud-progress-orb,
+.track-failure .hud-step-active > span {
+  border-color: #ffd9d4;
+  color: #190807;
+  background: var(--hud-danger);
+  box-shadow: 0 0 0 5px rgba(223, 120, 109, 0.13);
+}
+
+.track-failure .hud-step-active {
+  color: #ffaca3;
+}
+
+.track-replacement .hud-progress-runner {
+  animation: recovery-route 2.2s var(--hud-ease) both;
+}
+
+.track-replacement .hud-progress-fill {
+  transform: scaleX(0.75);
+}
+
+.track-replacement .hud-step[data-step="work"] {
+  color: var(--hud-text);
+  font-weight: 800;
+  animation: work-return 2.2s var(--hud-ease) both;
+}
+
+.track-replacement .hud-step-active {
+  color: var(--hud-text);
+  animation: replacement-discover 2.2s var(--hud-ease) both;
 }
 
 .hud-stage-layout {
@@ -1398,6 +1485,68 @@ main {
 
 .mission-shard strong {
   font-size: 0.76rem;
+}
+
+.scene-action {
+  position: absolute;
+  z-index: 9;
+  top: 22%;
+  left: 50%;
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid rgba(131, 215, 194, 0.22);
+  border-radius: 999px;
+  color: #cfe5df;
+  background: rgba(7, 19, 24, 0.88);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.24);
+  font-size: 0.56rem;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  animation: scene-action-enter 520ms var(--hud-ease) both;
+}
+
+.scene-action > span {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: var(--hud-aether);
+  box-shadow: 0 0 10px rgba(131, 215, 194, 0.7);
+}
+
+.scene-action-failure {
+  border-color: rgba(223, 120, 109, 0.4);
+  color: #ffb5ad;
+}
+
+.scene-action-failure > span {
+  background: var(--hud-danger);
+  box-shadow: 0 0 10px rgba(223, 120, 109, 0.72);
+}
+
+.scene-action-replacement {
+  border-color: rgba(130, 155, 227, 0.42);
+}
+
+.scene-action-replacement > span {
+  background: var(--hud-warden);
+  box-shadow: 0 0 10px rgba(130, 155, 227, 0.72);
+}
+
+.aether-stage[data-chapter="publish"] .mission-shard {
+  animation: mission-publish 780ms var(--hud-ease) both;
+}
+
+.aether-stage[data-chapter="recruit"] .node-scout,
+.aether-stage[data-chapter="recruit"] .node-second {
+  animation: agent-connect 720ms var(--hud-ease) both;
+}
+
+.aether-stage[data-chapter="recruit"] .node-second {
+  animation-delay: 150ms;
 }
 
 .protocol-gate {
@@ -1616,6 +1765,23 @@ main {
   transition: opacity 460ms ease;
 }
 
+.aether-trace::before,
+.aether-trace::after {
+  position: absolute;
+  inset: -3px 0 auto;
+  height: 7px;
+  content: "";
+  opacity: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    transparent 58%,
+    rgba(223, 248, 241, 0.92) 82%,
+    transparent 100%
+  );
+  transform: scaleX(0);
+}
+
 .trace-requester {
   top: 52%;
   left: 24%;
@@ -1639,6 +1805,60 @@ main {
 
 .trace-active {
   opacity: 0.72;
+}
+
+.aether-stage[data-chapter="publish"] .trace-requester::after,
+.aether-stage[data-chapter="pact"] .trace-requester::after {
+  transform-origin: left center;
+  animation: trace-sweep 900ms ease-out both;
+}
+
+.aether-stage[data-chapter="recruit"] .trace-scout::after,
+.aether-stage[data-chapter="recruit"] .trace-second::after,
+.aether-stage[data-chapter="pact"] .trace-scout::after,
+.aether-stage[data-chapter="pact"] .trace-second::after,
+.aether-stage[data-chapter="work"] .trace-scout::after,
+.aether-stage[data-chapter="verify"] .trace-scout::after,
+.aether-stage[data-chapter="verify"] .trace-second::after {
+  transform-origin: right center;
+  animation: trace-sweep 980ms ease-out both;
+}
+
+.aether-stage[data-chapter="recruit"] .trace-second::after,
+.aether-stage[data-chapter="verify"] .trace-second::after {
+  animation-delay: 130ms;
+}
+
+.aether-stage[data-chapter="failure"] .trace-second {
+  opacity: 1;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--hud-danger),
+    transparent
+  );
+}
+
+.aether-stage[data-chapter="failure"] .trace-second::after {
+  transform-origin: right center;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    transparent 58%,
+    rgba(255, 172, 163, 0.96) 82%,
+    transparent 100%
+  );
+  animation: trace-fail 920ms ease-out both;
+}
+
+.aether-stage[data-chapter="replacement"] .trace-second::before {
+  transform-origin: left center;
+  animation: trace-sweep 820ms ease-out both;
+}
+
+.aether-stage[data-chapter="replacement"] .trace-second::after {
+  transform-origin: right center;
+  animation: trace-sweep 820ms 900ms ease-out both;
 }
 
 .artifact-token {
@@ -2092,6 +2312,135 @@ main {
   }
 }
 
+@keyframes step-discover {
+  from {
+    opacity: 0;
+    transform: translateY(7px) scale(0.86);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes recovery-route {
+  0% {
+    transform: translateX(500%);
+  }
+  43% {
+    transform: translateX(600%);
+  }
+  100% {
+    transform: translateX(400%);
+  }
+}
+
+@keyframes replacement-discover {
+  0%,
+  34% {
+    opacity: 0;
+    transform: translateY(7px) scale(0.9);
+  }
+  48%,
+  68% {
+    opacity: 1;
+    transform: translateY(0) scale(1.06);
+  }
+  100% {
+    opacity: 0.72;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes work-return {
+  0%,
+  58% {
+    opacity: 0.58;
+    transform: translateY(0) scale(1);
+  }
+  76% {
+    opacity: 1;
+    transform: translateY(-2px) scale(1.06);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes scene-action-enter {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+@keyframes mission-publish {
+  0% {
+    opacity: 0.5;
+    transform: translate(-50%, -9px) scale(0.96);
+  }
+  68% {
+    transform: translate(-50%, 2px) scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+@keyframes agent-connect {
+  from {
+    opacity: 0;
+    transform: translateX(28px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes trace-sweep {
+  0% {
+    opacity: 0;
+    transform: scaleX(0);
+  }
+  35% {
+    opacity: 1;
+  }
+  78% {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scaleX(1);
+  }
+}
+
+@keyframes trace-fail {
+  0% {
+    opacity: 0;
+    transform: scaleX(0);
+  }
+  55% {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+  70% {
+    opacity: 1;
+    transform: scaleX(0.82);
+  }
+  100% {
+    opacity: 0;
+    transform: scaleX(0.82);
+  }
+}
+
 @keyframes pact-lock {
   0% {
     opacity: 0.45;
@@ -2355,7 +2704,7 @@ main {
     display: none;
   }
 
-  .hud-step-track::before {
+  .hud-progress-lane {
     top: 21px;
   }
 
@@ -2499,8 +2848,15 @@ main {
     font-size: 0.48rem;
   }
 
-  .hud-step-track::before {
+  .hud-progress-lane {
     top: 19px;
+  }
+
+  .scene-action {
+    top: 28%;
+    max-width: calc(100% - 32px);
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .aether-stage {
@@ -2537,7 +2893,7 @@ main {
   }
 
   .node-scout {
-    top: 31%;
+    top: 38%;
   }
 
   .node-second {

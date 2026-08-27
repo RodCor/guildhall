@@ -167,7 +167,7 @@ function titleFromEvent(value: string): string {
     .join(" ");
 }
 
-function stringValue(value: unknown, fallback = "—"): string {
+function stringValue(value: unknown, fallback = "Not available"): string {
   return typeof value === "string" && value.length > 0 ? value : fallback;
 }
 

@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 
 import {
   clampReplayIndex,
@@ -13,6 +19,10 @@ import {
   type PublicAgent,
 } from "./types";
 import { runReferenceDemo } from "../webmcp/GuildhallWebMcp";
+import {
+  isReferenceDemoMissionTitle,
+  REFERENCE_DEMO_MISSION_TITLE,
+} from "./referenceDemo";
 
 interface MissionListResponse {
   readonly missions: readonly MissionCard[];
@@ -77,7 +87,7 @@ const DEMO_CHAPTERS: readonly DemoChapter[] = [
     sigil: "R",
   },
   { id: "verify", label: "Verify", protocol: "Verifier", sigil: "✓" },
-  { id: "reward", label: "+XP", protocol: "Receipt", sigil: "+" },
+  { id: "reward", label: "Reward", protocol: "Receipt", sigil: "+" },
 ] as const;
 
 const HUD_STEPS: readonly {
@@ -335,22 +345,6 @@ export function TechnicalMission({
     syncQuery({ event: String(bounded) });
   }
 
-  function goLive() {
-    setPlaying(false);
-    setFollowLive(true);
-    setReplayIndex(eventCount);
-    setPresentationPaused(false);
-    syncQuery({ event: null });
-  }
-
-  function skipPresentation() {
-    setPresentationRunning(false);
-    setPlaying(false);
-    setFollowLive(true);
-    setReplayIndex(eventCount);
-    syncQuery({ event: null });
-  }
-
   async function runLiveQuest() {
     if (activeAgentId === null || demoRunning) return;
     const lifetime = new AbortController();
@@ -411,7 +405,7 @@ export function TechnicalMission({
       <div className="guildglass-casebar">
         <div>
           <p className="eyebrow">Demo Case 001 / Reference Party</p>
-          <h3 id="mission-console-title">Accessibility Dungeon</h3>
+          <h3 id="mission-console-title">Website Accessibility Repair</h3>
         </div>
         <span className={`stream-chip stream-${streamState}`}>
           <span aria-hidden="true" />
@@ -421,8 +415,8 @@ export function TechnicalMission({
 
       {error !== null ? (
         <p className="console-error" role="alert">
-          The live run paused before its next verified event. Return to step 00
-          and retry; any accepted public work remains preserved.
+          The live run paused before its next verified event. Replay the demo;
+          accepted public work remains preserved.
         </p>
       ) : null}
 
@@ -440,7 +434,6 @@ export function TechnicalMission({
           agents={visibleAgents}
           replayIndex={clampReplayIndex(replayIndex, eventCount)}
           playing={playing}
-          followLive={followLive}
           questActive={
             demoRunning ||
             presentationRunning ||
@@ -471,11 +464,6 @@ export function TechnicalMission({
             setFollowLive(false);
             setPresentationPaused(false);
             setPlaying(true);
-          }}
-          onGoLive={goLive}
-          onRunAnother={() => {
-            chooseMission("");
-            setPresentationRunning(false);
           }}
         />
       )}
@@ -657,25 +645,19 @@ function MissionChamber({
   agents,
   replayIndex,
   playing,
-  followLive,
   questActive,
   presentationPaused,
   onTogglePresentation,
   onTogglePlay,
-  onGoLive,
-  onRunAnother,
 }: {
   readonly packet: MissionPacket;
   readonly agents: readonly PublicAgent[];
   readonly replayIndex: number;
   readonly playing: boolean;
-  readonly followLive: boolean;
   readonly questActive: boolean;
   readonly presentationPaused: boolean;
   readonly onTogglePresentation: () => void;
   readonly onTogglePlay: () => void;
-  readonly onGoLive: () => void;
-  readonly onRunAnother: () => void;
 }) {
   const visibleEvents = replaySlice(packet.events, replayIndex);
   const candidate = record(packet.snapshot.candidatePact);
@@ -755,7 +737,7 @@ function MissionChamber({
 
   return (
     <div className={`hud-demo chapter-${chapterId}`}>
-      <HudStepTrack activeIndex={stepIndex} />
+      <HudStepTrack activeIndex={stepIndex} chapterId={chapterId} />
 
       <div className="hud-stage-layout">
         <GuildglassScene
@@ -799,7 +781,7 @@ function MissionChamber({
               type="button"
               onClick={onTogglePlay}
             >
-              Play this case <span aria-hidden="true">→</span>
+              Play Demo <span aria-hidden="true">→</span>
             </button>
           ) : null}
 
@@ -824,23 +806,7 @@ function MissionChamber({
                 className="primary-action"
                 onClick={onTogglePlay}
               >
-                {playing ? "Pause replay" : "Replay case"}
-              </button>
-              {!followLive ? (
-                <button
-                  type="button"
-                  className="quiet-action"
-                  onClick={onGoLive}
-                >
-                  Show outcome
-                </button>
-              ) : null}
-              <button
-                type="button"
-                className="quiet-action"
-                onClick={onRunAnother}
-              >
-                Return to step 00
+                {playing ? "Pause Demo" : "Replay Demo"}
               </button>
             </div>
           ) : null}
@@ -882,19 +848,19 @@ function hudChapterContent(
   switch (chapterId) {
     case "publish":
       return {
-        title: "The requester publishes fixed public terms.",
+        title: "The browser publishes the task.",
         detail:
-          "WebMCP turns browser context into a bounded mission that other agents can discover—without receiving the owner’s model credentials.",
+          "WebMCP sends the public page URL, required outputs, party limit, and verification rules. No model credentials are shared.",
         facts: [
-          { label: "Scope", value: "Public fixture + immutable digest" },
+          { label: "Input", value: "1 public test page" },
           { label: "Party limit", value: "Maximum 2 helpers" },
         ],
       };
     case "recruit":
       return {
-        title: "Two independent agents answer the call.",
+        title: "Scout and Scribe apply for the 2 roles.",
         detail:
-          "Scout and Scribe arrive through their own hosted A2A endpoints and present capability evidence for the open roles.",
+          "Each helper connects through its own A2A endpoint and provides capability evidence for one open role.",
         facts: [
           {
             label: "Party",
@@ -905,22 +871,22 @@ function hudChapterContent(
       };
     case "pact":
       return {
-        title: "Three signatures lock one work pact.",
+        title: "The requester and 2 helpers sign one plan.",
         detail:
-          "The party agrees to the same outputs, dependency order, replacement rule, and reputation split before execution begins.",
+          "All 3 agents sign the output list, dependency order, replacement rule, and reputation split before work starts.",
         facts: [
           {
             label: "Signatures",
             value: `${context.acceptanceCount}/3 matching`,
           },
-          { label: "Negotiation", value: "2 rounds · 1 pact" },
+          { label: "Negotiation", value: "2 rounds, 1 pact" },
         ],
       };
     case "work":
       return {
-        title: "Scout delivers the first independent artifact.",
+        title: "Scout reports 4 accessibility issues.",
         detail:
-          "Its signed accessibility findings lock into the ledger and become the required input for the second role.",
+          "The signed findings are accepted first. The repair role must use this exact artifact as its input.",
         facts: [
           {
             label: "Findings",
@@ -934,9 +900,9 @@ function hudChapterContent(
       };
     case "failure":
       return {
-        title: "Scribe defaults. Completed work survives.",
+        title: "Scribe submits nothing.",
         detail:
-          "The failed role loses its claim, while Scout’s accepted artifact and every signed term remain untouched.",
+          "Scribe loses the role. Scout’s accepted findings and every signed term remain unchanged.",
         facts: [
           { label: "Preserved", value: "Scout artifact accepted" },
           { label: "Contract", value: "Pact digest unchanged" },
@@ -944,9 +910,9 @@ function hudChapterContent(
       };
     case "replacement":
       return {
-        title: "Warden inherits the exact open role.",
+        title: "Warden takes Scribe’s existing role.",
         detail:
-          "A2A recovery binds a new agent to the existing assignment—no renegotiation, discarded work, or extra party seat.",
+          "Warden accepts the same output, dependency, deadline, and reward. The task returns to Work without a new pact.",
         facts: [
           { label: "Transition", value: "Scribe → Warden" },
           {
@@ -957,30 +923,30 @@ function hudChapterContent(
       };
     case "verify":
       return {
-        title: "Deterministic checks prove the handoff.",
+        title: "Guildhall checks both files.",
         detail:
-          "Guildhall verifies signature ownership, dependency order, and the one-to-one link between every finding and repair.",
+          "The verifier checks signature ownership, dependency order, and the one-to-one link between each issue and repair.",
         facts: [
           { label: "Criteria", value: "2/2 passed" },
-          { label: "Attempt", value: "1 · no correction" },
+          { label: "Attempt", value: "1, no correction" },
         ],
       };
     case "reward":
       return {
-        title: "The party earns a signed reputation receipt.",
+        title: "Verified agents receive reputation.",
         detail:
-          "Verified contribution—not voting—updates each public agent record, including the recovery bonus and default outcome.",
+          "The signed receipt gives Scout 50 points, Warden 60 points, and Scribe 0. No vote is involved.",
         facts: [
           { label: "Receipt", value: "+110 XP issued" },
-          { label: "Split", value: "Scout +50 · Warden +60 · Scribe 0" },
+          { label: "Split", value: "Scout 50, Warden 60, Scribe 0" },
         ],
       };
     case "ready":
     default:
       return {
-        title: "One agent needs two independent specialists.",
+        title: "This task needs an audit and a repair plan.",
         detail:
-          "Run a real public protocol case and watch agents recruit, negotiate, recover from failure, and prove the result.",
+          "2 independent agents will inspect 1 public test page and produce 2 linked JSON files.",
         facts: [
           { label: "Safety", value: "Public input only" },
           { label: "Credentials", value: "Owner keys never shared" },
@@ -989,9 +955,31 @@ function hudChapterContent(
   }
 }
 
-function HudStepTrack({ activeIndex }: { readonly activeIndex: number }) {
+function HudStepTrack({
+  activeIndex,
+  chapterId,
+}: {
+  readonly activeIndex: number;
+  readonly chapterId: DemoChapterId;
+}) {
+  const lastIndex = HUD_STEPS.length - 1;
+  const progressStyle = {
+    "--hud-active-index": activeIndex,
+    "--hud-progress": activeIndex / lastIndex,
+  } as CSSProperties;
+
   return (
-    <nav className="hud-step-track" aria-label="Mission story progress">
+    <nav
+      className={`hud-step-track track-${chapterId}`}
+      aria-label="Mission story progress"
+      style={progressStyle}
+    >
+      <span className="hud-progress-lane" aria-hidden="true">
+        <span className="hud-progress-fill" />
+        <span className="hud-progress-runner">
+          <span className="hud-progress-orb" />
+        </span>
+      </span>
       <ol>
         {HUD_STEPS.map((step, index) => {
           const state =
@@ -1004,6 +992,7 @@ function HudStepTrack({ activeIndex }: { readonly activeIndex: number }) {
             <li
               className={`hud-step hud-step-${state}`}
               key={step.id}
+              data-step={step.id}
               aria-current={state === "active" ? "step" : undefined}
             >
               <span>{String(index).padStart(2, "0")}</span>
@@ -1056,8 +1045,13 @@ function GuildglassScene({
 
       <div className="mission-shard">
         <span className="shard-index">CASE 001</span>
-        <strong>Accessibility Dungeon</strong>
-        <small>2 outputs · 2 helpers max</small>
+        <strong>Website Accessibility Repair</strong>
+        <small>2 outputs, maximum 2 helpers</small>
+      </div>
+
+      <div className={`scene-action scene-action-${chapterId}`} key={chapterId}>
+        <span aria-hidden="true" />
+        {sceneActionLabel(chapterId)}
       </div>
 
       <div className={`protocol-gate${chapterIndex >= 1 ? " gate-open" : ""}`}>
@@ -1159,6 +1153,30 @@ function GuildglassScene({
   );
 }
 
+function sceneActionLabel(chapterId: DemoChapterId): string {
+  switch (chapterId) {
+    case "publish":
+      return "Public task sent through WebMCP";
+    case "recruit":
+      return "2 independent agents connected";
+    case "pact":
+      return "3 matching signatures recorded";
+    case "work":
+      return "Scout submitted the findings file";
+    case "failure":
+      return "Scribe missed the required output";
+    case "replacement":
+      return "Warden accepted the role and returned it to Work";
+    case "verify":
+      return "Verifier checking 2 linked files";
+    case "reward":
+      return "Signed reputation receipt issued";
+    case "ready":
+    default:
+      return "Ready to run the public case";
+  }
+}
+
 function HudAgentNode({
   className,
   role,
@@ -1211,10 +1229,7 @@ function MissionBrief({ packet }: { readonly packet: MissionPacket }) {
           <code translate="no">CASE {shortDigest(packet.missionId)}</code>
         </p>
         <h3 id="mission-record-title">
-          {text(
-            definition?.title,
-            "Map and remediate the accessibility dungeon",
-          )}
+          {text(definition?.title, REFERENCE_DEMO_MISSION_TITLE)}
         </h3>
         <p>
           {text(
@@ -1250,7 +1265,7 @@ function MissionBrief({ packet }: { readonly packet: MissionPacket }) {
         <div>
           <dt>Party Rule</dt>
           <dd>
-            {helperMinimum}–{helperMaximum} independent helpers
+            {helperMinimum} to {helperMaximum} independent helpers
           </dd>
         </div>
         <div>
@@ -1799,7 +1814,7 @@ function ProofGroup({
 function MissionLoadingStage() {
   return (
     <div className="hud-demo hud-loading" role="status" aria-live="polite">
-      <HudStepTrack activeIndex={0} />
+      <HudStepTrack activeIndex={0} chapterId="ready" />
       <div className="hud-stage-layout">
         <GuildglassScene
           chapterId="ready"
@@ -1847,7 +1862,7 @@ function EmptyMissionStage({
   });
   return (
     <div className="hud-demo chapter-ready">
-      <HudStepTrack activeIndex={0} />
+      <HudStepTrack activeIndex={0} chapterId="ready" />
       <div className="hud-stage-layout">
         <GuildglassScene
           chapterId="ready"
@@ -1889,7 +1904,7 @@ function EmptyMissionStage({
               onClick={onRun}
               disabled={busy}
             >
-              {busy ? "Opening mission…" : "Run live case"}{" "}
+              {busy ? "Opening Demo…" : "Run Demo"}{" "}
               <span aria-hidden="true">→</span>
             </button>
           )}
@@ -2278,7 +2293,7 @@ function chapterWhyItMatters(chapterId: DemoChapterId): string {
     case "replacement":
       return "The mission recovers without renegotiating scope, discarding accepted work, or adding another helper seat.";
     case "verify":
-      return "Deterministic checks—not requester voting—decide whether the contract was fulfilled.";
+      return "Deterministic checks decide whether the contract was fulfilled. The requester does not vote.";
     case "reward":
       return "Rankings are projections of signed outcomes, including both successful work and post-bind default penalties.";
     case "ready":
@@ -2480,7 +2495,7 @@ async function findResumableReferenceMission(
 ): Promise<string | undefined> {
   for (const mission of missions) {
     if (
-      mission.title !== "Map and remediate the accessibility dungeon" ||
+      !isReferenceDemoMissionTitle(mission.title) ||
       ["Completed", "Expired", "Failed"].includes(mission.displayState)
     ) {
       continue;
@@ -2647,7 +2662,7 @@ function record(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-function text(value: unknown, fallback = "—"): string {
+function text(value: unknown, fallback = "Not available"): string {
   return typeof value === "string" || typeof value === "number"
     ? String(value)
     : fallback;

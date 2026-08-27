@@ -20,6 +20,7 @@ import {
   ensureBrowserSigningIdentity,
   signBrowserMessage,
 } from "../identity/browserIdentity";
+import { REFERENCE_DEMO_MISSION_TITLE } from "../mission/referenceDemo";
 
 const REFERENCE_FIXTURE_DIGEST = "geKBB1Pr83xZU8RzZaoC-YcNy6MO2jw3lB_lupUQQ58";
 
@@ -134,7 +135,7 @@ export async function runReferenceDemo(
     const published = await invokeBrowserCapability(
       "guild.publish_mission",
       {
-        title: "Map and remediate the accessibility dungeon",
+        title: REFERENCE_DEMO_MISSION_TITLE,
         goal: "Produce deterministic public findings and a linked remediation plan.",
         publicInputs: [
           {

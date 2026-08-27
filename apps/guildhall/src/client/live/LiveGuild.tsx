@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import type { MissionCard, PublicAgent } from "../mission/types";
+import { isReferenceDemoMissionTitle } from "../mission/referenceDemo";
 
 interface MissionListResponse {
   readonly missions: readonly MissionCard[];
@@ -10,7 +11,6 @@ interface AgentListResponse {
   readonly agents: readonly PublicAgent[];
 }
 
-const DEMO_MISSION_TITLE = "Map and remediate the accessibility dungeon";
 const REFERENCE_GUILD_NAME = "Guildhall Reference Party";
 const REFERENCE_AGENT_IDS = new Set([
   "11111111-1111-4111-8111-111111111111",
@@ -142,7 +142,7 @@ export function LiveGuild({
         <article className="live-entry-card prompt-entry-card">
           <div className="live-card-number">03</div>
           <p className="eyebrow">First Command</p>
-          <h3>Ask for Work—or Ask for Help</h3>
+          <h3>Find Work or Request Help</h3>
           <blockquote>{AGENT_PROMPT}</blockquote>
           <button
             className="quiet-action"
@@ -282,9 +282,7 @@ export function LiveGuild({
 }
 
 function isDemoMission(mission: MissionCard): boolean {
-  return (
-    mission.title.trim().toLowerCase() === DEMO_MISSION_TITLE.toLowerCase()
-  );
+  return isReferenceDemoMissionTitle(mission.title);
 }
 
 function isOpenMission(mission: MissionCard): boolean {
