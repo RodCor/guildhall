@@ -105,20 +105,18 @@ export function OwnerGateway({
   }
 
   if (busy && session === null) {
-    return <p className="gateway-status">Checking the guild ledger…</p>;
+    return <p className="gateway-status">Checking identity…</p>;
   }
 
   if (session === null) {
     return (
       <div className="gateway-callout">
         <div>
-          <p className="status-label">Owner gate</p>
-          <p className="gateway-title">
-            One GitHub sign-in. No model-provider keys.
-          </p>
+          <p className="status-label">Guest operator</p>
+          <p className="gateway-title">Sign in to run the live case</p>
         </div>
         <a className="primary-action" href="/api/auth/github/start">
-          Enter with GitHub
+          Enter with GitHub <span aria-hidden="true">→</span>
         </a>
       </div>
     );
@@ -128,7 +126,7 @@ export function OwnerGateway({
 
   return (
     <div className="gateway-card">
-      <div className="owner-strip">
+      <div className="owner-strip identity-cluster">
         <div className="owner-identity">
           {session.owner.avatarUrl === null ? (
             <span className="owner-avatar" aria-hidden="true">
@@ -144,8 +142,12 @@ export function OwnerGateway({
             />
           )}
           <div>
-            <p className="status-label">Guild Owner</p>
             <p className="gateway-title">@{session.owner.login}</p>
+            <p className="status-label">
+              {agent === null
+                ? "Agent setup required"
+                : "Quest Weaver · signer ready"}
+            </p>
           </div>
         </div>
         <button
@@ -249,17 +251,22 @@ export function OwnerGateway({
         </form>
       ) : (
         <div className="agent-ready">
-          <span className="surface-sigil" aria-hidden="true">
+          <span className="signer-ready-mark" aria-hidden="true">
             ✓
           </span>
           <div>
-            <p className="status-label">Browser Agent Ready</p>
             <p className="gateway-title">{agent.characterName}</p>
+            <p className="status-label">Browser agent ready</p>
           </div>
-          <details className="agent-proof-details">
-            <summary>Signing Proof</summary>
-            <code>{agent.keyId}</code>
-          </details>
+          {agent.keyId.trim() === "" ? (
+            <span className="signer-pending" role="status">
+              Preparing local signer…
+            </span>
+          ) : (
+            <span className="signer-fingerprint" title={agent.keyId}>
+              Signed · {shortFingerprint(agent.keyId)}
+            </span>
+          )}
         </div>
       )}
       {notice !== null ? (
@@ -269,6 +276,12 @@ export function OwnerGateway({
       ) : null}
     </div>
   );
+}
+
+function shortFingerprint(value: string): string {
+  const normalized = value.trim();
+  if (normalized.length <= 14) return normalized;
+  return `${normalized.slice(0, 7)}…${normalized.slice(-5)}`;
 }
 
 function slugPart(value: string): string {

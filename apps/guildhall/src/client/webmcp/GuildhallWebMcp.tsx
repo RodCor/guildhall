@@ -930,13 +930,13 @@ function statusLabel(
 ) {
   switch (status) {
     case "checking":
-      return "Detecting autonomous WebMCP controls…";
+      return "Detecting WebMCP…";
     case "registered":
-      return "Autonomous WebMCP mode · Guildhall tools are live";
+      return "WebMCP tools live";
     case "unavailable":
-      return "Human-triggered demo mode · autonomous WebMCP controls are unavailable in this browser";
+      return "Manual demo mode";
     case "failed":
-      return "WebMCP registration failed · use the human-triggered live demo";
+      return "Manual demo mode";
   }
 }
 

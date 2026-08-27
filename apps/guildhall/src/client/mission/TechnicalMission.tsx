@@ -80,6 +80,15 @@ const DEMO_CHAPTERS: readonly DemoChapter[] = [
   { id: "reward", label: "+XP", protocol: "Receipt", sigil: "+" },
 ] as const;
 
+const HUD_STEPS: readonly {
+  id: DemoChapterId;
+  label: string;
+  protocol: string;
+}[] = [
+  { id: "ready", label: "Ready", protocol: "Guildhall" },
+  ...DEMO_CHAPTERS,
+];
+
 const DEMO_PHASES: readonly DemoPhase[] = [
   {
     id: "request",
@@ -115,8 +124,10 @@ const DEMO_PHASES: readonly DemoPhase[] = [
 
 export function TechnicalMission({
   activeAgentId,
+  ownerControls,
 }: {
   readonly activeAgentId: string | null;
+  readonly ownerControls: ReactNode;
 }) {
   const query = useMemo(() => new URLSearchParams(window.location.search), []);
   const [missions, setMissions] = useState<readonly MissionCard[]>([]);
@@ -127,15 +138,18 @@ export function TechnicalMission({
     query.get("lens") === "technical" ? "technical" : "story",
   );
   const requestedEvent = query.get("event");
-  const [followLive, setFollowLive] = useState(requestedEvent === null);
+  const [followLive, setFollowLive] = useState(false);
   const [replayIndex, setReplayIndex] = useState(() =>
-    requestedEvent === null ? 0 : Number(requestedEvent),
+    requestedEvent === null || !Number.isFinite(Number(requestedEvent))
+      ? 0
+      : Number(requestedEvent),
   );
   const [playing, setPlaying] = useState(false);
   const [streamState, setStreamState] = useState<StreamState>("connecting");
   const [error, setError] = useState<string | null>(null);
   const [demoRunning, setDemoRunning] = useState(false);
   const [presentationRunning, setPresentationRunning] = useState(false);
+  const [presentationPaused, setPresentationPaused] = useState(false);
 
   useEffect(() => {
     const lifetime = new AbortController();
@@ -149,14 +163,9 @@ export function TechnicalMission({
         if (lifetime.signal.aborted) return;
         setMissions(missionResponse.missions);
         setAgents(agentResponse.agents);
-        setMissionId((current) => {
-          if (current !== "" || missionResponse.missions.length === 0) {
-            return current;
-          }
-          return missionResponse.missions[0]!.missionId;
-        });
-      } catch (cause) {
-        if (!lifetime.signal.aborted) setError(errorMessage(cause));
+      } catch {
+        // The archive is optional context. It must never replace or interrupt
+        // the step-00 demo experience when its catalog is unavailable.
       }
     };
     void refresh();
@@ -256,14 +265,13 @@ export function TechnicalMission({
   }, [eventCount, followLive, presentationRunning]);
 
   useEffect(() => {
-    if (!presentationRunning || !followLive || packet === null) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      setReplayIndex(eventCount);
-      if (packet.receipt !== null && packet.receipt !== undefined) {
-        setPresentationRunning(false);
-      }
+    if (
+      !presentationRunning ||
+      presentationPaused ||
+      !followLive ||
+      packet === null
+    )
       return;
-    }
     const bounded = clampReplayIndex(replayIndex, eventCount);
     if (bounded >= eventCount) {
       if (packet.receipt !== null && packet.receipt !== undefined) {
@@ -277,7 +285,14 @@ export function TechnicalMission({
       setReplayIndex(nextChapterReplayIndex(packet.events, bounded));
     }, delay);
     return () => window.clearTimeout(timeout);
-  }, [eventCount, followLive, packet, presentationRunning, replayIndex]);
+  }, [
+    eventCount,
+    followLive,
+    packet,
+    presentationPaused,
+    presentationRunning,
+    replayIndex,
+  ]);
 
   useEffect(() => {
     if (!playing || eventCount === 0 || packet === null) return;
@@ -298,7 +313,9 @@ export function TechnicalMission({
   function chooseMission(nextMissionId: string) {
     setMissionId(nextMissionId);
     setPacket(null);
-    setFollowLive(true);
+    setFollowLive(false);
+    setReplayIndex(0);
+    setPresentationPaused(false);
     setPlaying(false);
     syncQuery({
       mission: nextMissionId === "" ? null : nextMissionId,
@@ -316,6 +333,7 @@ export function TechnicalMission({
     setPlaying(false);
     setFollowLive(false);
     setReplayIndex(bounded);
+    setPresentationPaused(false);
     syncQuery({ event: String(bounded) });
   }
 
@@ -323,6 +341,7 @@ export function TechnicalMission({
     setPlaying(false);
     setFollowLive(true);
     setReplayIndex(eventCount);
+    setPresentationPaused(false);
     syncQuery({ event: null });
   }
 
@@ -339,6 +358,7 @@ export function TechnicalMission({
     const lifetime = new AbortController();
     setDemoRunning(true);
     setPresentationRunning(true);
+    setPresentationPaused(false);
     setError(null);
     try {
       const resumeMissionId = await findResumableReferenceMission(
@@ -377,6 +397,7 @@ export function TechnicalMission({
     } catch (cause) {
       setError(errorMessage(cause));
       setPresentationRunning(false);
+      setPresentationPaused(false);
     } finally {
       lifetime.abort("demo-finished");
       setDemoRunning(false);
@@ -384,143 +405,123 @@ export function TechnicalMission({
   }
 
   return (
-    <>
-      <section
-        className="mission-console"
-        id="mission-chamber"
-        aria-labelledby="mission-console-title"
-      >
-        <div className="section-heading mission-console-heading">
-          <div>
-            <p className="eyebrow">Live Public Case / 001</p>
-            <h2 id="mission-console-title">Accessibility Dungeon</h2>
-            <p className="mission-intro">
-              A browser requester needs an accessibility audit and a linked
-              remediation plan. Watch independently hosted agents negotiate,
-              sign, deliver, fail, recover, and prove the result.
-            </p>
-          </div>
-          <div className="mission-toolbar">
-            {activeAgentId === null ? (
-              <p className="mission-prerequisite">
-                Enter with GitHub above to start the live quest.
-              </p>
-            ) : (
-              <button
-                className="primary-action mission-primary-action"
-                type="button"
-                disabled={demoRunning || presentationRunning}
-                onClick={() => void runLiveQuest()}
-              >
-                {demoRunning || presentationRunning
-                  ? "Live Case Running…"
-                  : error !== null
-                    ? "Resume Live Case"
-                    : packet?.receipt === null || packet?.receipt === undefined
-                      ? "Run Live Protocol Demo"
-                      : "Run Another Live Case"}
-              </button>
-            )}
-            {demoRunning || presentationRunning ? (
-              <button
-                className="quiet-action mission-skip-action"
-                type="button"
-                onClick={skipPresentation}
-              >
-                Skip Presentation
-              </button>
-            ) : null}
-            <p className="mission-action-note">
-              Human-triggered here; the same registered handler is available for
-              autonomous WebMCP invocation in compatible browsers. No
-              model-provider key is shared.
-            </p>
-            <details className="mission-options">
-              <summary>Past Quests &amp; Connection</summary>
-              <div>
-                <label className="mission-picker">
-                  Mission
-                  <select
-                    name="mission"
-                    value={missionId}
-                    onChange={(event) => chooseMission(event.target.value)}
-                  >
-                    <option value="">Empty theater</option>
-                    {missions.map((mission) => (
-                      <option key={mission.missionId} value={mission.missionId}>
-                        {mission.title} · {mission.displayState}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <span
-                  className={`stream-chip stream-${streamState}`}
-                  role="status"
-                >
-                  <span aria-hidden="true" />
-                  {streamState === "live"
-                    ? "Public ledger connected"
-                    : streamState === "connecting"
-                      ? "Connecting…"
-                      : "Connected by polling"}
-                </span>
-              </div>
-            </details>
-          </div>
+    <section
+      className="guildglass-shell"
+      id="mission-chamber"
+      aria-labelledby="mission-console-title"
+    >
+      <header className="guildglass-header">
+        <a className="hud-wordmark" href="/" aria-label="Guildhall home">
+          <span className="hud-wordmark-mark" aria-hidden="true">
+            G
+          </span>
+          <span>
+            <strong>Guildhall</strong>
+            <small>Autonomous party protocol</small>
+          </span>
+        </a>
+        <div className="hud-header-meta">
+          <span className={`stream-chip stream-${streamState}`}>
+            <span aria-hidden="true" />
+            {streamState === "live" ? "Ledger live" : "Protocol ready"}
+          </span>
+          {ownerControls}
         </div>
+      </header>
 
-        {error !== null ? (
-          <p className="console-error" role="alert">
-            {error}. The mission is preserved; use Resume Live Quest to
-            continue.
-          </p>
-        ) : null}
+      <div className="guildglass-casebar">
+        <div>
+          <p className="eyebrow">Public Case 001</p>
+          <h1 id="mission-console-title">Accessibility Dungeon</h1>
+        </div>
+        <details className="case-menu">
+          <summary aria-label="Open case menu">Case menu</summary>
+          <div className="case-menu-popover">
+            <p>
+              A live WebMCP → A2A → PactBridge protocol run. Public input only;
+              no provider credentials.
+            </p>
+            {missions.length > 0 ? (
+              <label className="mission-picker">
+                Inspect a past case
+                <select
+                  name="mission"
+                  value={missionId}
+                  onChange={(event) => chooseMission(event.target.value)}
+                >
+                  <option value="">Choose a completed case…</option>
+                  {missions.map((mission) => (
+                    <option key={mission.missionId} value={mission.missionId}>
+                      {mission.title} · {mission.displayState}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+          </div>
+        </details>
+      </div>
 
-        {packet === null && missionId !== "" ? (
-          <MissionLoadingStage />
-        ) : packet === null ? (
-          <EmptyMissionStage />
-        ) : (
-          <MissionChamber
-            packet={packet}
-            agents={visibleAgents}
-            replayIndex={clampReplayIndex(replayIndex, eventCount)}
-            playing={playing}
-            followLive={followLive}
-            questActive={demoRunning || presentationRunning}
-            onTogglePlay={() => {
+      {error !== null ? (
+        <p className="console-error" role="alert">
+          {error}. The public mission is preserved and can be resumed.
+        </p>
+      ) : null}
+
+      {packet === null && missionId !== "" ? (
+        <MissionLoadingStage />
+      ) : packet === null ? (
+        <EmptyMissionStage
+          activeAgentId={activeAgentId}
+          busy={demoRunning || presentationRunning}
+          onRun={() => void runLiveQuest()}
+        />
+      ) : (
+        <MissionChamber
+          packet={packet}
+          agents={visibleAgents}
+          replayIndex={clampReplayIndex(replayIndex, eventCount)}
+          playing={playing}
+          followLive={followLive}
+          questActive={
+            demoRunning ||
+            presentationRunning ||
+            playing ||
+            (presentationPaused && !followLive)
+          }
+          presentationPaused={presentationPaused}
+          onTogglePresentation={() => {
+            if (!followLive) {
               if (playing) {
                 setPlaying(false);
-                return;
+                setPresentationPaused(true);
+              } else {
+                setPlaying(true);
+                setPresentationPaused(false);
               }
-
-              if (replayIndex >= eventCount) seek(0);
-              setFollowLive(false);
-              setPlaying(true);
-            }}
-            onGoLive={goLive}
-          />
-        )}
-      </section>
-
-      <details className="guild-explorer" id="explore-guild">
-        <summary>
-          <span>
-            <strong>Explore the Public Guild</strong>
-            <small>Quest board, rankings, and character sheets</small>
-          </span>
-          <span aria-hidden="true">＋</span>
-        </summary>
-        <div className="guild-explorer-content">
-          <GuildBoard missions={missions} selectedMissionId={missionId} />
-          <AgentHall
-            agents={visibleAgents}
-            lens={lens}
-            onLensChange={chooseLens}
-          />
-        </div>
-      </details>
-    </>
+              return;
+            }
+            setPresentationPaused((current) => !current);
+          }}
+          onTogglePlay={() => {
+            if (playing) {
+              setPlaying(false);
+              setPresentationPaused(true);
+              return;
+            }
+            if (replayIndex >= eventCount) seek(0);
+            setFollowLive(false);
+            setPresentationPaused(false);
+            setPlaying(true);
+          }}
+          onGoLive={goLive}
+          onRunAnother={() => {
+            chooseMission("");
+            setPresentationRunning(false);
+          }}
+        />
+      )}
+    </section>
   );
 }
 
@@ -700,8 +701,11 @@ function MissionChamber({
   playing,
   followLive,
   questActive,
+  presentationPaused,
+  onTogglePresentation,
   onTogglePlay,
   onGoLive,
+  onRunAnother,
 }: {
   readonly packet: MissionPacket;
   readonly agents: readonly PublicAgent[];
@@ -709,17 +713,17 @@ function MissionChamber({
   readonly playing: boolean;
   readonly followLive: boolean;
   readonly questActive: boolean;
+  readonly presentationPaused: boolean;
+  readonly onTogglePresentation: () => void;
   readonly onTogglePlay: () => void;
   readonly onGoLive: () => void;
+  readonly onRunAnother: () => void;
 }) {
   const visibleEvents = replaySlice(packet.events, replayIndex);
   const candidate = record(packet.snapshot.candidatePact);
   const pact = record(candidate?.pact);
   const receipt = record(packet.receipt);
   const chapterId = missionChapterId(visibleEvents);
-  const narrative = chapterNarrative(chapterId, visibleEvents, packet);
-  const verifiedReward =
-    receipt !== null && receiptUnlocked(packet.events, replayIndex);
   const agentById = useMemo(
     () => new Map(agents.map((agent) => [agent.agentId, agent])),
     [agents],
@@ -773,7 +777,7 @@ function MissionChamber({
   const remediationCount = arrayOfRecords(
     record(remediationArtifact?.content)?.steps,
   ).length;
-  const evidenceFacts = chapterEvidenceFacts(chapterId, {
+  const chapterFacts = chapterEvidenceFacts(chapterId, {
     acceptanceCount,
     applicationCount,
     artifactCount,
@@ -781,226 +785,446 @@ function MissionChamber({
     findingCount,
     remediationCount,
   });
+  const content = hudChapterContent(chapterId, {
+    acceptanceCount,
+    applicationCount,
+    artifactCount,
+    findingCount,
+    remediationCount,
+    eventCount: visibleEvents.length,
+  });
+  const stepIndex = HUD_STEPS.findIndex((step) => step.id === chapterId);
 
   return (
-    <div className={`chamber-shell chapter-${chapterId}`}>
-      <MissionBrief packet={packet} />
-      <MissionJourney activeChapter={chapterId} />
+    <div className={`hud-demo chapter-${chapterId}`}>
+      <HudStepTrack activeIndex={stepIndex} />
 
-      <div className="mission-theater">
-        <section className="party-table" aria-labelledby="party-table-title">
-          <div className="party-table-heading">
-            <div>
-              <p className="eyebrow">Party &amp; Work Orders</p>
-              <h3 id="party-table-title">3 signatures. 2 exact outputs.</h3>
-            </div>
+      <div className="hud-stage-layout">
+        <GuildglassScene
+          chapterId={chapterId}
+          requesterName={requester?.characterName ?? "Browser Agent"}
+          scoutName={scout.characterName}
+          secondName={
+            replacementBound ? warden.characterName : scribe.characterName
+          }
+          scoutPresent={scoutPresent}
+          secondPresent={secondHelperPresent}
+          pactBound={pactBound}
+          pactUnchanged={scribeDefaulted}
+          replacementBound={replacementBound}
+          artifactCount={artifactCount}
+          findingCount={findingCount}
+          remediationCount={remediationCount}
+        />
+
+        <article className="hud-narration" key={chapterId}>
+          <div className="hud-step-kicker">
+            <span>{String(stepIndex).padStart(2, "0")}</span>
+            <code translate="no">
+              {HUD_STEPS[stepIndex]?.protocol ?? "Guildhall"}
+            </code>
           </div>
-
-          <div className="party-stage" data-chapter={chapterId}>
-            <AgentSeat
-              role="Requester"
-              sigil="✦"
-              characterName={requester?.characterName ?? "Browser Agent"}
-              characterClass={
-                requester?.characterClass ?? "WebMCP Quest Caller"
-              }
-              technicalName={requester?.technicalName ?? "Browser-owned agent"}
-              capability="guild.publish_mission"
-              action={
-                receiptIssued
-                  ? "Mission proven"
-                  : pactBound
-                    ? "Pact signed"
-                    : visibleTypes.has("mission_published")
-                      ? "Quest published"
-                      : "Ready to publish"
-              }
-              assignment="Publish immutable public terms"
-              output="Signed mission definition"
-              dependency="Public-safe input only"
-              tone={receiptIssued ? "complete" : "requester"}
-              present
-            />
-
-            <PactSeal
-              pactDigest={text(candidate?.pactDigest, "")}
-              acceptanceCount={acceptanceCount}
-              bound={pactBound}
-              unchanged={scribeDefaulted}
-            />
-
-            <div className="helper-party" aria-label="Selected helper agents">
-              <AgentSeat
-                role="Helper Seat 1"
-                sigil="⌖"
-                characterName={scoutPresent ? scout.characterName : "Open Seat"}
-                characterClass={
-                  scoutPresent ? scout.characterClass : "Awaiting an agent"
-                }
-                technicalName={
-                  scoutPresent ? scout.technicalName : "No agent selected"
-                }
-                capability="accessibility-audit"
-                action={
-                  artifactCount >= 1
-                    ? "Artifact accepted"
-                    : executionStarted
-                      ? "Auditing the fixture"
-                      : pactBound
-                        ? "Role bound"
-                        : scoutPresent
-                          ? "Capability matched"
-                          : "Waiting for A2A"
-                }
-                {...(scoutSlot?.assignment === undefined
-                  ? {}
-                  : { assignment: scoutSlot.assignment })}
-                output={`${scoutSlot?.outputs[0] ?? "Findings JSON"} · ${formatNumber(scoutSlot?.points ?? 50)} XP`}
-                dependency="Bounded public fixture"
-                result={
-                  findingCount > 0
-                    ? `${findingCount} findings accepted`
-                    : "Output not accepted yet"
-                }
-                tone={artifactCount >= 1 ? "complete" : "scout"}
-                present={scoutPresent}
-              />
-              <AgentSeat
-                role="Helper Seat 2"
-                sigil={replacementBound ? "⬡" : "✎"}
-                characterName={
-                  !secondHelperPresent
-                    ? "Open Seat"
-                    : replacementBound
-                      ? warden.characterName
-                      : scribe.characterName
-                }
-                characterClass={
-                  !secondHelperPresent
-                    ? "Awaiting an agent"
-                    : replacementBound
-                      ? warden.characterClass
-                      : scribe.characterClass
-                }
-                technicalName={
-                  !secondHelperPresent
-                    ? "No agent selected"
-                    : replacementBound
-                      ? warden.technicalName
-                      : scribe.technicalName
-                }
-                capability="remediation-planning"
-                action={
-                  replacementBound && artifactCount >= 2
-                    ? "Recovery delivered"
-                    : replacementBound
-                      ? "Replacement bound"
-                      : scribeDefaulted
-                        ? "Defaulted after binding"
-                        : executionStarted
-                          ? "Planning remediation"
-                          : pactBound
-                            ? "Role bound"
-                            : secondHelperPresent
-                              ? "Capability matched"
-                              : "Waiting for A2A"
-                }
-                {...(secondSlot?.assignment === undefined
-                  ? {}
-                  : { assignment: secondSlot.assignment })}
-                output={`${secondSlot?.outputs[0] ?? "Remediation JSON"} · ${formatNumber(secondSlot?.points ?? 50)} XP`}
-                dependency="Accepted Scout findings"
-                result={
-                  remediationCount > 0
-                    ? `${remediationCount} linked fixes accepted`
-                    : scribeDefaulted && !replacementBound
-                      ? "No artifact delivered"
-                      : "Output not accepted yet"
-                }
-                replacedFrom={replacementBound ? scribe.characterName : null}
-                tone={
-                  replacementBound && artifactCount >= 2
-                    ? "complete"
-                    : replacementBound
-                      ? "recovery"
-                      : scribeDefaulted
-                        ? "danger"
-                        : "scribe"
-                }
-                present={secondHelperPresent}
-              />
-            </div>
-          </div>
-
-          <InvariantBar
-            pactBound={pactBound}
-            pactUnchanged={scribeDefaulted}
-            acceptanceCount={acceptanceCount}
-            artifactCount={artifactCount}
-            eventCount={visibleEvents.length}
-            totalEventCount={packet.events.length}
-            rewardIssued={receiptIssued}
-          />
-        </section>
-
-        <aside
-          className={`guild-announcer chapter-brief brief-${narrative.tone}`}
-          aria-live="polite"
-          aria-atomic="true"
-        >
-          <div className="announcer-chapter">
-            <span>{demoPhaseLabel(chapterId)}</span>
-            <code translate="no">{narrative.protocolAction}</code>
-          </div>
-          <p className="eyebrow">Current Public Event</p>
-          <h3>{narrative.title}</h3>
-          <p>{narrative.detail}</p>
-          <dl className="evidence-delta">
-            {evidenceFacts.map((fact) => (
+          <h2>{content.title}</h2>
+          <p>{content.detail}</p>
+          <dl className="hud-facts">
+            {content.facts.slice(0, 2).map((fact) => (
               <div key={fact.label}>
                 <dt>{fact.label}</dt>
                 <dd>{fact.value}</dd>
               </div>
             ))}
           </dl>
-          <div className="chapter-why">
-            <strong>Why This Matters</strong>
-            <p>{chapterWhyItMatters(chapterId)}</p>
-          </div>
-          {questActive ? (
-            <p className="live-operation">
-              <span aria-hidden="true" />
-              Following verified public events
-            </p>
+
+          {chapterId === "ready" && !questActive && packet.events.length > 0 ? (
+            <button
+              className="primary-action run-case-action"
+              type="button"
+              onClick={onTogglePlay}
+            >
+              Play this case <span aria-hidden="true">→</span>
+            </button>
           ) : null}
-        </aside>
+
+          {questActive ? (
+            <button
+              className="pause-action"
+              type="button"
+              aria-pressed={presentationPaused}
+              onClick={onTogglePresentation}
+            >
+              <span aria-hidden="true">{presentationPaused ? "▶" : "Ⅱ"}</span>
+              {presentationPaused
+                ? "Resume presentation"
+                : "Pause presentation"}
+            </button>
+          ) : null}
+
+          {chapterId === "reward" ? (
+            <div className="completion-actions">
+              <button
+                type="button"
+                className="primary-action"
+                onClick={onTogglePlay}
+              >
+                {playing ? "Pause replay" : "Replay case"}
+              </button>
+              {!followLive ? (
+                <button
+                  type="button"
+                  className="quiet-action"
+                  onClick={onGoLive}
+                >
+                  Show outcome
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="quiet-action"
+                onClick={onRunAnother}
+              >
+                Return to step 00
+              </button>
+            </div>
+          ) : null}
+        </article>
       </div>
 
-      <div className="theater-payoff">
-        {chapterId === "verify" || chapterId === "reward" ? (
-          <RewardChest
-            receipt={receipt}
-            artifacts={packet.artifacts ?? []}
-            unlocked={verifiedReward}
+      <p
+        className="sr-only"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        Step {stepIndex} of 8: {content.title}. {chapterFacts[0]?.value ?? ""}
+      </p>
+
+      {isTerminal && chapterId === "reward" ? (
+        <div className="completion-proof">
+          <TechnicalInspector
+            packet={packet}
+            pact={pact}
+            visibleEvents={visibleEvents}
           />
-        ) : null}
-        {isTerminal ? (
-          <ReplayControls
-            eventCount={packet.events.length}
-            replayIndex={replayIndex}
-            playing={playing}
-            followLive={followLive}
-            onTogglePlay={onTogglePlay}
-            onGoLive={onGoLive}
-          />
-        ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+interface HudContent {
+  readonly title: string;
+  readonly detail: string;
+  readonly facts: readonly ChapterEvidenceFact[];
+}
+
+function hudChapterContent(
+  chapterId: DemoChapterId,
+  context: ChapterEvidenceContext,
+): HudContent {
+  switch (chapterId) {
+    case "publish":
+      return {
+        title: "The requester publishes fixed public terms.",
+        detail:
+          "WebMCP turns browser context into a bounded mission that other agents can discover—without receiving the owner’s model credentials.",
+        facts: [
+          { label: "Scope", value: "Public fixture + immutable digest" },
+          { label: "Party limit", value: "Maximum 2 helpers" },
+        ],
+      };
+    case "recruit":
+      return {
+        title: "Two independent agents answer the call.",
+        detail:
+          "Scout and Scribe arrive through their own hosted A2A endpoints and present capability evidence for the open roles.",
+        facts: [
+          {
+            label: "Party",
+            value: `${Math.min(context.applicationCount, 2)}/2 helpers`,
+          },
+          { label: "Ownership", value: "Independently hosted" },
+        ],
+      };
+    case "pact":
+      return {
+        title: "Three signatures lock one work pact.",
+        detail:
+          "The party agrees to the same outputs, dependency order, replacement rule, and reputation split before execution begins.",
+        facts: [
+          {
+            label: "Signatures",
+            value: `${context.acceptanceCount}/3 matching`,
+          },
+          { label: "Negotiation", value: "2 rounds · 1 pact" },
+        ],
+      };
+    case "work":
+      return {
+        title: "Scout delivers the first independent artifact.",
+        detail:
+          "Its signed accessibility findings lock into the ledger and become the required input for the second role.",
+        facts: [
+          {
+            label: "Findings",
+            value: `${context.findingCount || 4} verified issues`,
+          },
+          {
+            label: "Artifacts",
+            value: `${Math.min(context.artifactCount, 2)}/2 accepted`,
+          },
+        ],
+      };
+    case "failure":
+      return {
+        title: "Scribe defaults. Completed work survives.",
+        detail:
+          "The failed role loses its claim, while Scout’s accepted artifact and every signed term remain untouched.",
+        facts: [
+          { label: "Preserved", value: "Scout artifact accepted" },
+          { label: "Contract", value: "Pact digest unchanged" },
+        ],
+      };
+    case "replacement":
+      return {
+        title: "Warden inherits the exact open role.",
+        detail:
+          "A2A recovery binds a new agent to the existing assignment—no renegotiation, discarded work, or extra party seat.",
+        facts: [
+          { label: "Transition", value: "Scribe → Warden" },
+          {
+            label: "Recovery",
+            value: `${context.remediationCount || 4} linked fixes`,
+          },
+        ],
+      };
+    case "verify":
+      return {
+        title: "Deterministic checks prove the handoff.",
+        detail:
+          "Guildhall verifies signature ownership, dependency order, and the one-to-one link between every finding and repair.",
+        facts: [
+          { label: "Criteria", value: "2/2 passed" },
+          { label: "Attempt", value: "1 · no correction" },
+        ],
+      };
+    case "reward":
+      return {
+        title: "The party earns a signed reputation receipt.",
+        detail:
+          "Verified contribution—not voting—updates each public agent record, including the recovery bonus and default outcome.",
+        facts: [
+          { label: "Receipt", value: "+110 XP issued" },
+          { label: "Split", value: "Scout +50 · Warden +60 · Scribe 0" },
+        ],
+      };
+    case "ready":
+    default:
+      return {
+        title: "One agent needs two independent specialists.",
+        detail:
+          "Run a real public protocol case and watch agents recruit, negotiate, recover from failure, and prove the result.",
+        facts: [
+          { label: "Safety", value: "Public input only" },
+          { label: "Credentials", value: "Owner keys never shared" },
+        ],
+      };
+  }
+}
+
+function HudStepTrack({ activeIndex }: { readonly activeIndex: number }) {
+  return (
+    <nav className="hud-step-track" aria-label="Mission story progress">
+      <ol>
+        {HUD_STEPS.map((step, index) => {
+          const state =
+            index < activeIndex
+              ? "complete"
+              : index === activeIndex
+                ? "active"
+                : "pending";
+          return (
+            <li
+              className={`hud-step hud-step-${state}`}
+              key={step.id}
+              aria-current={state === "active" ? "step" : undefined}
+            >
+              <span>{String(index).padStart(2, "0")}</span>
+              <small>{step.label}</small>
+            </li>
+          );
+        })}
+      </ol>
+    </nav>
+  );
+}
+
+function GuildglassScene({
+  chapterId,
+  requesterName,
+  scoutName,
+  secondName,
+  scoutPresent,
+  secondPresent,
+  pactBound,
+  pactUnchanged,
+  replacementBound,
+  artifactCount,
+  findingCount,
+  remediationCount,
+}: {
+  readonly chapterId: DemoChapterId;
+  readonly requesterName: string;
+  readonly scoutName: string;
+  readonly secondName: string;
+  readonly scoutPresent: boolean;
+  readonly secondPresent: boolean;
+  readonly pactBound: boolean;
+  readonly pactUnchanged: boolean;
+  readonly replacementBound: boolean;
+  readonly artifactCount: number;
+  readonly findingCount: number;
+  readonly remediationCount: number;
+}) {
+  const chapterIndex = HUD_STEPS.findIndex((step) => step.id === chapterId);
+  const isFailure = chapterId === "failure";
+  const isVerifying = chapterId === "verify" || chapterId === "reward";
+  const isReward = chapterId === "reward";
+
+  return (
+    <div className="aether-stage" data-chapter={chapterId} aria-hidden="true">
+      <div className="aether-depth" />
+      <div className="aether-orbit orbit-one" />
+      <div className="aether-orbit orbit-two" />
+
+      <div className="mission-shard">
+        <span className="shard-index">CASE 001</span>
+        <strong>Accessibility Dungeon</strong>
+        <small>2 outputs · 2 helpers max</small>
       </div>
 
-      <TechnicalInspector
-        packet={packet}
-        pact={pact}
-        visibleEvents={visibleEvents}
+      <div className={`protocol-gate${chapterIndex >= 1 ? " gate-open" : ""}`}>
+        <span>W</span>
+        <small>WebMCP</small>
+      </div>
+
+      <div
+        className={`aether-trace trace-requester${chapterIndex >= 1 ? " trace-active" : ""}`}
       />
+      <div
+        className={`aether-trace trace-scout${scoutPresent ? " trace-active" : ""}`}
+      />
+      <div
+        className={`aether-trace trace-second${secondPresent ? " trace-active" : ""}`}
+      />
+
+      <HudAgentNode
+        className="node-requester"
+        role="Requester"
+        name={requesterName}
+        sigil="✦"
+        state={isReward ? "verified" : chapterIndex >= 1 ? "active" : "ready"}
+      />
+      <HudAgentNode
+        className="node-scout"
+        role="Audit role"
+        name={scoutPresent ? scoutName : "Open seat"}
+        sigil="⌖"
+        state={
+          artifactCount >= 1 ? "verified" : scoutPresent ? "active" : "empty"
+        }
+      />
+      <HudAgentNode
+        className="node-second"
+        role="Remediation role"
+        name={secondPresent ? secondName : "Open seat"}
+        sigil={replacementBound ? "⬡" : "✎"}
+        state={
+          isFailure
+            ? "failed"
+            : artifactCount >= 2
+              ? "verified"
+              : replacementBound
+                ? "replacement"
+                : secondPresent
+                  ? "active"
+                  : "empty"
+        }
+      />
+
+      <div
+        className={`pact-core${pactBound ? " pact-core-bound" : ""}${pactUnchanged ? " pact-core-preserved" : ""}`}
+      >
+        <span className="pact-ring pact-ring-outer" />
+        <span className="pact-ring pact-ring-inner" />
+        <strong>
+          {pactBound ? (pactUnchanged ? "LOCKED" : "BOUND") : "PACT"}
+        </strong>
+        <small>{pactBound ? "3/3" : "0/3"}</small>
+      </div>
+
+      <div
+        className={`artifact-token findings-token${artifactCount >= 1 ? " artifact-visible" : ""}`}
+      >
+        <span>01</span>
+        <strong>FINDINGS</strong>
+        <small>{findingCount || 4} issues</small>
+      </div>
+      <div
+        className={`artifact-token fixes-token${artifactCount >= 2 ? " artifact-visible" : ""}`}
+      >
+        <span>02</span>
+        <strong>FIXES</strong>
+        <small>{remediationCount || 4} linked</small>
+      </div>
+
+      <div
+        className={`verification-plane${isVerifying ? " verification-visible" : ""}`}
+      >
+        <div>
+          <span>✓</span>
+          <strong>Ownership</strong>
+          <small>signatures match</small>
+        </div>
+        <div>
+          <span>✓</span>
+          <strong>Dependency</strong>
+          <small>4 → 4 linked</small>
+        </div>
+      </div>
+
+      <div className={`receipt-bloom${isReward ? " receipt-visible" : ""}`}>
+        <span>VERIFIED RECEIPT</span>
+        <strong>+110</strong>
+        <small>REPUTATION XP</small>
+      </div>
+    </div>
+  );
+}
+
+function HudAgentNode({
+  className,
+  role,
+  name,
+  sigil,
+  state,
+}: {
+  readonly className: string;
+  readonly role: string;
+  readonly name: string;
+  readonly sigil: string;
+  readonly state:
+    "ready" | "empty" | "active" | "failed" | "replacement" | "verified";
+}) {
+  return (
+    <div className={`hud-agent-node ${className} node-${state}`}>
+      <span className="hud-agent-sigil">{sigil}</span>
+      <span className="hud-agent-copy">
+        <small>{role}</small>
+        <strong>{name}</strong>
+      </span>
+      <span className="node-state">
+        {state === "verified" ? "✓" : state === "failed" ? "!" : ""}
+      </span>
     </div>
   );
 }
@@ -1616,43 +1840,102 @@ function ProofGroup({
 
 function MissionLoadingStage() {
   return (
-    <div className="empty-theater" role="status" aria-live="polite">
-      <MissionJourney activeChapter="ready" />
-      <div className="empty-stage-card loading-stage-card">
-        <span className="empty-stage-rune" aria-hidden="true">
-          ◌
-        </span>
-        <div>
-          <p className="eyebrow">Opening the Public Ledger</p>
-          <h3>Preparing the mission theater…</h3>
-          <p>
-            The party and proof will appear without revealing a fake replay.
-          </p>
-        </div>
+    <div className="hud-demo hud-loading" role="status" aria-live="polite">
+      <HudStepTrack activeIndex={0} />
+      <div className="hud-stage-layout">
+        <GuildglassScene
+          chapterId="ready"
+          requesterName="Browser Agent"
+          scoutName="Open seat"
+          secondName="Open seat"
+          scoutPresent={false}
+          secondPresent={false}
+          pactBound={false}
+          pactUnchanged={false}
+          replacementBound={false}
+          artifactCount={0}
+          findingCount={0}
+          remediationCount={0}
+        />
+        <article className="hud-narration">
+          <div className="hud-step-kicker">
+            <span>00</span>
+            <code>Guildhall</code>
+          </div>
+          <h2>Opening the public ledger…</h2>
+          <p>The case will begin at its first verified event.</p>
+        </article>
       </div>
     </div>
   );
 }
 
-function EmptyMissionStage() {
+function EmptyMissionStage({
+  activeAgentId,
+  busy,
+  onRun,
+}: {
+  readonly activeAgentId: string | null;
+  readonly busy: boolean;
+  readonly onRun: () => void;
+}) {
+  const content = hudChapterContent("ready", {
+    acceptanceCount: 0,
+    applicationCount: 0,
+    artifactCount: 0,
+    eventCount: 0,
+    findingCount: 0,
+    remediationCount: 0,
+  });
   return (
-    <div className="empty-theater">
-      <MissionJourney activeChapter="ready" />
-      <div className="empty-stage-card">
-        <div className="empty-party-preview" aria-hidden="true">
-          <span className="preview-requester">✦</span>
-          <span className="preview-connection" />
-          <span>1</span>
-          <span>2</span>
-        </div>
-        <div>
-          <p className="eyebrow">The Party Table Is Ready</p>
-          <h3>Start the quest to call 2 independent agents.</h3>
-          <p>
-            The screen will follow real public events from WebMCP publication
-            through A2A recovery and a signed reputation receipt.
-          </p>
-        </div>
+    <div className="hud-demo chapter-ready">
+      <HudStepTrack activeIndex={0} />
+      <div className="hud-stage-layout">
+        <GuildglassScene
+          chapterId="ready"
+          requesterName="Browser Agent"
+          scoutName="Open seat"
+          secondName="Open seat"
+          scoutPresent={false}
+          secondPresent={false}
+          pactBound={false}
+          pactUnchanged={false}
+          replacementBound={false}
+          artifactCount={0}
+          findingCount={0}
+          remediationCount={0}
+        />
+        <article className="hud-narration">
+          <div className="hud-step-kicker">
+            <span>00</span>
+            <code translate="no">Guildhall</code>
+          </div>
+          <h2>{content.title}</h2>
+          <p>{content.detail}</p>
+          <dl className="hud-facts">
+            {content.facts.map((fact) => (
+              <div key={fact.label}>
+                <dt>{fact.label}</dt>
+                <dd>{fact.value}</dd>
+              </div>
+            ))}
+          </dl>
+          {activeAgentId === null ? (
+            <p className="ready-guidance">
+              Sign in above to let your browser agent call the party.
+            </p>
+          ) : (
+            <button
+              className="primary-action run-case-action"
+              type="button"
+              onClick={onRun}
+              disabled={busy}
+            >
+              {busy ? "Opening mission…" : "Run live case"}{" "}
+              <span aria-hidden="true">→</span>
+            </button>
+          )}
+        </article>
       </div>
     </div>
   );
