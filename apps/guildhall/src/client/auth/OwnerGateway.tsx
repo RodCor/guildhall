@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { createPortal } from "react-dom";
 
 import {
   createBrowserSigningIdentity,
@@ -141,6 +142,12 @@ export function OwnerGateway({
     }
   }, [onAgentChange, onSessionResolved]);
 
+  useEffect(() => {
+    if (notice === null) return;
+    const timeoutId = window.setTimeout(() => setNotice(null), 6_000);
+    return () => window.clearTimeout(timeoutId);
+  }, [notice]);
+
   function selectAgent(agent: AgentSummary | null, ownerId?: string) {
     setActiveAgentId(agent?.agentId ?? null);
     onAgentChange(
@@ -210,7 +217,7 @@ export function OwnerGateway({
       selectAgent(registered);
       setManagerMode("closed");
       setNotice(
-        `${registered.characterName} is connected. Its private signing key stays in this browser.`,
+        `${registered.characterName} connected. Signing key saved locally.`,
       );
     } catch (error) {
       if (identity !== null && !serverCreated) {
@@ -256,7 +263,7 @@ export function OwnerGateway({
       if (updated.agentId === activeAgentId) selectAgent(updated);
       setManagerMode("list");
       setEditingAgentId(null);
-      setNotice(`${updated.characterName}'s public profile was updated.`);
+      setNotice(`${updated.characterName}'s profile updated.`);
     } catch (error) {
       setFormError(errorMessage(error, "Profile update failed."));
     } finally {
@@ -353,11 +360,27 @@ export function OwnerGateway({
         </button>
       </div>
 
-      {notice !== null ? (
-        <p className="gateway-status" role="status" aria-live="polite">
-          {notice}
-        </p>
-      ) : null}
+      {notice === null
+        ? null
+        : createPortal(
+            <div
+              className="gateway-toast"
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+            >
+              <span className="gateway-toast-mark" aria-hidden="true" />
+              <p>{notice}</p>
+              <button
+                type="button"
+                onClick={() => setNotice(null)}
+                aria-label="Dismiss notification"
+              >
+                ×
+              </button>
+            </div>,
+            document.body,
+          )}
 
       {managerMode === "closed" ? null : (
         <AgentManagerDialog
@@ -389,7 +412,7 @@ export function OwnerGateway({
             const selected = agents.find((agent) => agent.agentId === agentId);
             if (selected !== undefined) {
               selectAgent(selected);
-              setNotice(`${selected.characterName} is now the active agent.`);
+              setNotice(`${selected.characterName} is active.`);
             }
           }}
           onCreate={createAgent}

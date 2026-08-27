@@ -1117,18 +1117,59 @@ section.live-guild-section {
   font-size: 0.7rem;
 }
 
-.gateway-card > .gateway-status {
+.gateway-toast {
   position: fixed;
   z-index: 120;
-  right: 20px;
-  bottom: 20px;
-  max-width: min(420px, calc(100vw - 40px));
-  padding: 11px 14px;
+  right: 14px;
+  bottom: 14px;
+  max-width: min(300px, calc(100vw - 28px));
+  display: grid;
+  grid-template-columns: 6px minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 7px 7px 10px;
   border: 1px solid var(--hud-edge-bright);
-  border-radius: 12px 12px 12px 4px;
+  border-radius: 10px 10px 10px 3px;
   color: var(--hud-text);
   background: rgba(9, 23, 29, 0.96);
-  box-shadow: 0 18px 52px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.36);
+}
+
+.gateway-toast-mark {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--hud-aether);
+  box-shadow: 0 0 0 3px rgba(131, 215, 194, 0.08);
+}
+
+.gateway-toast p {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 0.64rem;
+  font-weight: 400;
+  line-height: 1.35;
+}
+
+.gateway-toast button {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  color: var(--hud-muted);
+  background: transparent;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.gateway-toast button:hover {
+  color: var(--hud-text);
+  background: rgba(131, 215, 194, 0.08);
 }
 
 .agent-manager-trigger {
