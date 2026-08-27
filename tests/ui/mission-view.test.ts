@@ -6,6 +6,7 @@ import {
   mergeMissionPacket,
   missionChapterId,
   nextChapterReplayIndex,
+  spectatorReplayMissionId,
 } from "../../apps/guildhall/src/client/mission/TechnicalMission";
 import {
   referenceAgents,
@@ -113,6 +114,28 @@ describe("mission chamber view model", () => {
     expect(chapterStateLabel("failure")).toBe("Role Default");
     expect(chapterStateLabel("replacement")).toBe("Recovery");
     expect(chapterStateLabel("reward")).toBe("Verified Receipt");
+  });
+
+  it("selects only a completed reference ledger for spectator replay", () => {
+    expect(
+      spectatorReplayMissionId([
+        {
+          missionId: "open-reference",
+          title: "Audit and repair an inaccessible public webpage",
+          displayState: "Executing",
+        },
+        {
+          missionId: "completed-unrelated",
+          title: "Review a public SDK",
+          displayState: "Completed",
+        },
+        {
+          missionId: "completed-reference",
+          title: "Audit and repair an inaccessible public webpage",
+          displayState: "Completed",
+        },
+      ]),
+    ).toBe("completed-reference");
   });
 });
 

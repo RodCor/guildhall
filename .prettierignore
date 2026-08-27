@@ -3,3 +3,4 @@ dist
 node_modules
 pnpm-lock.yaml
 coverage
+apps/guildhall/public/_headers

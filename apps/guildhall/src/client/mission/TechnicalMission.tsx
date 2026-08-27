@@ -141,8 +141,10 @@ const DEMO_PHASES: readonly DemoPhase[] = [
 
 export function TechnicalMission({
   activeAgentId,
+  identityResolved,
 }: {
   readonly activeAgentId: string | null;
+  readonly identityResolved: boolean;
 }) {
   const query = useMemo(() => new URLSearchParams(window.location.search), []);
   const [missions, setMissions] = useState<readonly MissionCard[]>([]);
@@ -165,6 +167,9 @@ export function TechnicalMission({
   const [demoRunning, setDemoRunning] = useState(false);
   const [presentationRunning, setPresentationRunning] = useState(false);
   const [presentationPaused, setPresentationPaused] = useState(false);
+  const [spectatorReplayId, setSpectatorReplayId] = useState<string | null>(
+    null,
+  );
 
   useEffect(() => {
     const lifetime = new AbortController();
@@ -272,6 +277,41 @@ export function TechnicalMission({
   useEffect(() => {
     syncQuery({ mission: missionId === "" ? null : missionId });
   }, [missionId]);
+
+  useEffect(() => {
+    if (
+      !identityResolved ||
+      activeAgentId !== null ||
+      missionId !== "" ||
+      spectatorReplayId !== null
+    ) {
+      return;
+    }
+    const replayMissionId = spectatorReplayMissionId(missions);
+    if (replayMissionId === null) return;
+    setSpectatorReplayId(replayMissionId);
+    setMissionId(replayMissionId);
+    setPacket(null);
+    setReplayIndex(0);
+    setFollowLive(false);
+  }, [activeAgentId, identityResolved, missionId, missions, spectatorReplayId]);
+
+  useEffect(() => {
+    if (
+      activeAgentId === null ||
+      spectatorReplayId === null ||
+      missionId !== spectatorReplayId
+    ) {
+      return;
+    }
+    setSpectatorReplayId(null);
+    setMissionId("");
+    setPacket(null);
+    setReplayIndex(0);
+    setFollowLive(false);
+    setPlaying(false);
+    setPresentationPaused(false);
+  }, [activeAgentId, missionId, spectatorReplayId]);
 
   const eventCount = packet?.events.length ?? 0;
   useEffect(() => {
@@ -2644,6 +2684,18 @@ export function nextChapterReplayIndex(
     if (missionChapterId(events.slice(0, next)) !== currentChapter) return next;
   }
   return events.length;
+}
+
+export function spectatorReplayMissionId(
+  missions: readonly MissionCard[],
+): string | null {
+  return (
+    missions.find(
+      (mission) =>
+        isReferenceDemoMissionTitle(mission.title) &&
+        mission.displayState.toLowerCase() === "completed",
+    )?.missionId ?? null
+  );
 }
 
 function replayChapterDelay(

@@ -497,7 +497,8 @@ describe("GitHub ownership and Guild Node identity", () => {
         headers: { Cookie: owner.cookie },
       },
     );
-    expect(endedSession.status).toBe(401);
+    expect(endedSession.status).toBe(200);
+    expect(await endedSession.json()).toEqual({ authenticated: false });
     const blockedOwnerMutation = await worker.fetch(
       `https://guildhall.test/api/agents/${agent.agentId}/pairing`,
       { method: "POST", headers: owner.headers, body: "{}" },

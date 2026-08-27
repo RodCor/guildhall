@@ -80,7 +80,9 @@ export async function handleSessionRoute(
   const url = new URL(request.url);
   if (url.pathname === "/api/session" && request.method === "GET") {
     const authorization = await authenticateOwner(request, env);
-    if (!authorization.ok) return authorization.response;
+    if (!authorization.ok) {
+      return noStoreJson({ authenticated: false });
+    }
     const browserAgents = await env.GUILD_DB.prepare(
       `SELECT agents.agent_id, agents.character_name, agent_keys.key_id
          FROM agents

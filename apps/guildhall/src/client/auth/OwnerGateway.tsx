@@ -3,6 +3,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { ensureBrowserSigningIdentity } from "../identity/browserIdentity";
 
 interface OwnerSession {
+  readonly authenticated: true;
   readonly owner: {
     readonly login: string;
     readonly avatarUrl: string | null;
@@ -18,8 +19,10 @@ interface AgentSummary {
 
 export function OwnerGateway({
   onAgentChange,
+  onSessionResolved,
 }: {
   readonly onAgentChange: (agentId: string | null) => void;
+  readonly onSessionResolved: (resolved: boolean) => void;
 }) {
   const [session, setSession] = useState<OwnerSession | null>(null);
   const [agent, setAgent] = useState<AgentSummary | null>(null);
@@ -33,24 +36,37 @@ export function OwnerGateway({
         if (!active) return;
         if (!response.ok) {
           setSession(null);
+          onAgentChange(null);
           return;
         }
-        const restored = (await response.json()) as OwnerSession;
+        const restored = (await response.json()) as
+          OwnerSession | { readonly authenticated: false };
+        if (!restored.authenticated) {
+          setSession(null);
+          onAgentChange(null);
+          return;
+        }
         setSession(restored);
         const browserAgent = restored.agents[0] ?? null;
         setAgent(browserAgent);
         onAgentChange(browserAgent?.agentId ?? null);
       })
       .catch(() => {
-        if (active) setSession(null);
+        if (active) {
+          setSession(null);
+          onAgentChange(null);
+        }
       })
       .finally(() => {
-        if (active) setBusy(false);
+        if (active) {
+          setBusy(false);
+          onSessionResolved(true);
+        }
       });
     return () => {
       active = false;
     };
-  }, [onAgentChange]);
+  }, [onAgentChange, onSessionResolved]);
 
   async function signOut() {
     setBusy(true);
@@ -105,7 +121,11 @@ export function OwnerGateway({
   }
 
   if (busy && session === null) {
-    return <p className="gateway-status">Checking identity…</p>;
+    return (
+      <p className="gateway-status" role="status" aria-live="polite">
+        Checking identity…
+      </p>
+    );
   }
 
   if (session === null) {

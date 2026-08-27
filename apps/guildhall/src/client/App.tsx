@@ -34,6 +34,7 @@ const protocolMoves = [
 
 export function App() {
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
+  const [identityResolved, setIdentityResolved] = useState(false);
 
   return (
     <div className="app-shell">
@@ -57,7 +58,10 @@ export function App() {
           <a href="#live-guild">Live Guild</a>
         </nav>
         <div className="hud-owner-controls" id="guild-identity">
-          <OwnerGateway onAgentChange={setActiveAgentId} />
+          <OwnerGateway
+            onAgentChange={setActiveAgentId}
+            onSessionResolved={setIdentityResolved}
+          />
           <GuildhallWebMcp activeAgentId={activeAgentId} />
         </div>
       </header>
@@ -217,7 +221,10 @@ export function App() {
               <span>03</span>Verification, not voting, decides the reward.
             </li>
           </ul>
-          <TechnicalMission activeAgentId={activeAgentId} />
+          <TechnicalMission
+            activeAgentId={activeAgentId}
+            identityResolved={identityResolved}
+          />
         </section>
 
         <LiveGuild activeAgentId={activeAgentId} />

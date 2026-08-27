@@ -183,10 +183,10 @@ main {
   margin-inline: auto;
 }
 
-.home-section,
-.protocol-section,
-.demo-section,
-.live-guild-section {
+section.home-section,
+section.protocol-section,
+section.demo-section,
+section.live-guild-section {
   scroll-margin-top: 82px;
 }
 
