@@ -1227,39 +1227,45 @@ main {
 }
 
 .hud-step-track {
+  --hud-branch-drop: 58px;
+  --hud-lane-inset: calc(100% / 14);
   position: relative;
-  padding: 8px 0 14px;
+  min-height: 112px;
+  padding: 8px 0 16px;
 }
 
-.hud-progress-lane {
+.hud-main-lane {
   position: absolute;
   top: 21px;
-  right: calc(100% / 18);
-  left: calc(100% / 18);
+  right: var(--hud-lane-inset);
+  left: var(--hud-lane-inset);
   height: 1px;
   background: rgba(211, 235, 231, 0.12);
 }
 
-.hud-progress-fill,
-.hud-progress-runner {
+.hud-main-progress-fill,
+.hud-main-runner {
   position: absolute;
   inset: 0 auto auto 0;
   height: 1px;
 }
 
-.hud-progress-fill {
+.hud-main-progress-fill {
   width: 100%;
   background: var(--hud-aether);
   box-shadow: 0 0 12px rgba(131, 215, 194, 0.28);
-  transform: scaleX(var(--hud-progress));
+  transform: scaleX(var(--hud-main-progress));
   transform-origin: left center;
-  transition: transform 620ms var(--hud-ease);
+  transition: transform 1600ms linear;
 }
 
-.hud-progress-runner {
-  width: 12.5%;
-  transform: translateX(calc(var(--hud-active-index) * 100%));
-  transition: transform 620ms var(--hud-ease);
+.hud-main-runner {
+  width: calc(100% / 6);
+  opacity: 1;
+  transform: translateX(calc(var(--hud-main-index) * 100%));
+  transition:
+    opacity 160ms ease,
+    transform 1600ms linear;
 }
 
 .hud-progress-orb {
@@ -1277,13 +1283,72 @@ main {
   transform: translate(-50%, -50%);
 }
 
-.hud-step-track ol {
+.hud-main-steps {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(9, minmax(0, 1fr));
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+.hud-branch-visual {
+  position: absolute;
+  top: 21px;
+  right: var(--hud-lane-inset);
+  left: var(--hud-lane-inset);
+  height: var(--hud-branch-drop);
+  opacity: 0;
+  transition: opacity 420ms ease;
+}
+
+.hud-branch-map {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.branch-path {
+  fill: none;
+  stroke: rgba(211, 235, 231, 0.13);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.hud-branch-runner {
+  position: absolute;
+  top: 0;
+  left: calc(100% * 4 / 6);
+  width: calc(100% / 6);
+  height: 1px;
+  opacity: 0;
+}
+
+.hud-branch-steps {
+  position: absolute;
+  top: 66px;
+  right: var(--hud-lane-inset);
+  left: var(--hud-lane-inset);
+  height: 36px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hud-branch-step {
+  position: absolute;
+  top: 0;
+  translate: -50% 0;
+}
+
+.hud-branch-step[data-step="failure"] {
+  left: calc(100% * 4 / 6);
+}
+
+.hud-branch-step[data-step="replacement"] {
+  left: calc(100% * 5 / 6);
 }
 
 .hud-step {
@@ -1330,7 +1395,7 @@ main {
 .hud-step-active {
   color: var(--hud-text);
   font-weight: 800;
-  animation: step-discover 420ms 500ms var(--hud-ease) both;
+  animation: step-discover 420ms 1550ms var(--hud-ease) both;
 }
 
 .track-ready .hud-step-active {
@@ -1344,12 +1409,44 @@ main {
   box-shadow: 0 0 0 5px rgba(131, 215, 194, 0.09);
 }
 
-.track-failure .hud-progress-fill {
-  background: var(--hud-danger);
-  box-shadow: 0 0 12px rgba(223, 120, 109, 0.35);
+.track-failure .hud-main-runner,
+.track-replacement .hud-main-runner {
+  opacity: 0;
 }
 
-.track-failure .hud-progress-orb,
+.track-failure .hud-branch-visual,
+.track-replacement .hud-branch-visual,
+.track-verify .hud-branch-visual,
+.track-reward .hud-branch-visual {
+  opacity: 1;
+}
+
+.track-failure .branch-path-failure,
+.track-replacement .branch-path-failure {
+  stroke: rgba(223, 120, 109, 0.72);
+}
+
+.track-replacement .branch-path-replace,
+.track-replacement .branch-path-return {
+  stroke: rgba(130, 155, 227, 0.72);
+}
+
+.track-verify .branch-path,
+.track-reward .branch-path {
+  stroke: rgba(131, 215, 194, 0.38);
+}
+
+.track-failure .hud-branch-runner {
+  opacity: 1;
+  animation: branch-to-failure 2s linear both;
+}
+
+.track-replacement .hud-branch-runner {
+  opacity: 1;
+  animation: recovery-branch-route 5s linear both;
+}
+
+.track-failure .hud-branch-runner .hud-progress-orb,
 .track-failure .hud-step-active > span {
   border-color: #ffd9d4;
   color: #190807;
@@ -1359,25 +1456,26 @@ main {
 
 .track-failure .hud-step-active {
   color: #ffaca3;
+  animation-delay: 1950ms;
 }
 
-.track-replacement .hud-progress-runner {
-  animation: recovery-route 2.2s var(--hud-ease) both;
-}
-
-.track-replacement .hud-progress-fill {
-  transform: scaleX(0.75);
+.track-replacement .hud-branch-runner .hud-progress-orb,
+.track-replacement .hud-step-active > span {
+  border-color: #dce4ff;
+  color: #07101f;
+  background: var(--hud-warden);
+  box-shadow: 0 0 0 5px rgba(130, 155, 227, 0.14);
 }
 
 .track-replacement .hud-step[data-step="work"] {
   color: var(--hud-text);
   font-weight: 800;
-  animation: work-return 2.2s var(--hud-ease) both;
+  animation: work-return 5s linear both;
 }
 
 .track-replacement .hud-step-active {
   color: var(--hud-text);
-  animation: replacement-discover 2.2s var(--hud-ease) both;
+  animation: replacement-discover 5s linear both;
 }
 
 .hud-stage-layout {
@@ -2323,26 +2421,41 @@ main {
   }
 }
 
-@keyframes recovery-route {
+@keyframes branch-to-failure {
   0% {
-    transform: translateX(500%);
-  }
-  43% {
-    transform: translateX(600%);
+    transform: translate(0, 0);
   }
   100% {
-    transform: translateX(400%);
+    transform: translate(0, var(--hud-branch-drop));
+  }
+}
+
+@keyframes recovery-branch-route {
+  0% {
+    transform: translate(0, var(--hud-branch-drop));
+  }
+  45% {
+    transform: translate(100%, var(--hud-branch-drop));
+  }
+  64% {
+    transform: translate(78%, 34px);
+  }
+  82% {
+    transform: translate(42%, 12px);
+  }
+  100% {
+    transform: translate(0, 0);
   }
 }
 
 @keyframes replacement-discover {
   0%,
-  34% {
+  43% {
     opacity: 0;
     transform: translateY(7px) scale(0.9);
   }
-  48%,
-  68% {
+  49%,
+  78% {
     opacity: 1;
     transform: translateY(0) scale(1.06);
   }
@@ -2354,11 +2467,11 @@ main {
 
 @keyframes work-return {
   0%,
-  58% {
+  82% {
     opacity: 0.58;
     transform: translateY(0) scale(1);
   }
-  76% {
+  92% {
     opacity: 1;
     transform: translateY(-2px) scale(1.06);
   }
@@ -2701,10 +2814,10 @@ main {
   }
 
   .hud-step small {
-    display: none;
+    font-size: 0.5rem;
   }
 
-  .hud-progress-lane {
+  .hud-main-lane {
     top: 21px;
   }
 
@@ -2848,8 +2961,13 @@ main {
     font-size: 0.48rem;
   }
 
-  .hud-progress-lane {
+  .hud-main-lane,
+  .hud-branch-visual {
     top: 19px;
+  }
+
+  .hud-step small {
+    font-size: 0.46rem;
   }
 
   .scene-action {

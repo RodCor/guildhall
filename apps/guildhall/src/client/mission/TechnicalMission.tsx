@@ -37,7 +37,7 @@ type StreamState = "connecting" | "live" | "polling";
 
 const CATALOG_REFRESH_MS = 10_000;
 const STREAM_FALLBACK_MS = 15_000;
-const REPLAY_STEP_MS = 1_650;
+const REPLAY_STEP_MS = 3_000;
 
 const numberFormatter = new Intl.NumberFormat(undefined, {
   maximumFractionDigits: 2,
@@ -98,6 +98,13 @@ const HUD_STEPS: readonly {
   { id: "ready", label: "Ready", protocol: "Guildhall" },
   ...DEMO_CHAPTERS,
 ];
+
+const MAIN_HUD_STEPS = HUD_STEPS.filter(
+  (step) => step.id !== "failure" && step.id !== "replacement",
+);
+const BRANCH_HUD_STEPS = HUD_STEPS.filter(
+  (step) => step.id === "failure" || step.id === "replacement",
+);
 
 const DEMO_PHASES: readonly DemoPhase[] = [
   {
@@ -737,7 +744,7 @@ function MissionChamber({
 
   return (
     <div className={`hud-demo chapter-${chapterId}`}>
-      <HudStepTrack activeIndex={stepIndex} chapterId={chapterId} />
+      <HudStepTrack chapterId={chapterId} />
 
       <div className="hud-stage-layout">
         <GuildglassScene
@@ -955,18 +962,20 @@ function hudChapterContent(
   }
 }
 
-function HudStepTrack({
-  activeIndex,
-  chapterId,
-}: {
-  readonly activeIndex: number;
-  readonly chapterId: DemoChapterId;
-}) {
-  const lastIndex = HUD_STEPS.length - 1;
+function HudStepTrack({ chapterId }: { readonly chapterId: DemoChapterId }) {
+  const chapterIndex = HUD_STEPS.findIndex((step) => step.id === chapterId);
+  const mainIndex = mainTimelineIndex(chapterId);
+  const lastMainIndex = MAIN_HUD_STEPS.length - 1;
   const progressStyle = {
-    "--hud-active-index": activeIndex,
-    "--hud-progress": activeIndex / lastIndex,
+    "--hud-main-index": mainIndex,
+    "--hud-main-progress": mainIndex / lastMainIndex,
   } as CSSProperties;
+
+  function stepState(stepId: DemoChapterId): "complete" | "active" | "pending" {
+    const stepIndex = HUD_STEPS.findIndex((step) => step.id === stepId);
+    if (stepId === chapterId) return "active";
+    return stepIndex < chapterIndex ? "complete" : "pending";
+  }
 
   return (
     <nav
@@ -974,20 +983,33 @@ function HudStepTrack({
       aria-label="Mission story progress"
       style={progressStyle}
     >
-      <span className="hud-progress-lane" aria-hidden="true">
-        <span className="hud-progress-fill" />
-        <span className="hud-progress-runner">
+      <span className="hud-main-lane" aria-hidden="true">
+        <span className="hud-main-progress-fill" />
+        <span className="hud-main-runner">
           <span className="hud-progress-orb" />
         </span>
       </span>
-      <ol>
-        {HUD_STEPS.map((step, index) => {
-          const state =
-            index < activeIndex
-              ? "complete"
-              : index === activeIndex
-                ? "active"
-                : "pending";
+      <span className="hud-branch-visual" aria-hidden="true">
+        <svg
+          className="hud-branch-map"
+          viewBox="0 0 600 58"
+          preserveAspectRatio="none"
+        >
+          <path className="branch-path branch-path-failure" d="M400 0 V58" />
+          <path className="branch-path branch-path-replace" d="M400 58 H500" />
+          <path
+            className="branch-path branch-path-return"
+            d="M500 58 Q460 12 400 0"
+          />
+        </svg>
+        <span className="hud-branch-runner">
+          <span className="hud-progress-orb" />
+        </span>
+      </span>
+      <ol className="hud-main-steps">
+        {MAIN_HUD_STEPS.map((step) => {
+          const state = stepState(step.id);
+          const index = HUD_STEPS.findIndex((item) => item.id === step.id);
           return (
             <li
               className={`hud-step hud-step-${state}`}
@@ -1001,8 +1023,32 @@ function HudStepTrack({
           );
         })}
       </ol>
+      <ol className="hud-branch-steps" aria-label="Failure recovery branch">
+        {BRANCH_HUD_STEPS.map((step) => {
+          const state = stepState(step.id);
+          const index = HUD_STEPS.findIndex((item) => item.id === step.id);
+          return (
+            <li
+              className={`hud-step hud-branch-step hud-step-${state}`}
+              key={step.id}
+              data-step={step.id}
+              aria-current={state === "active" ? "step" : undefined}
+            >
+              <span>{String(index).padStart(2, "0")}</span>
+              <small>{step.label}</small>
+            </li>
+          );
+        })}
+      </ol>
     </nav>
   );
+}
+
+function mainTimelineIndex(chapterId: DemoChapterId): number {
+  if (chapterId === "failure" || chapterId === "replacement") {
+    return MAIN_HUD_STEPS.findIndex((step) => step.id === "work");
+  }
+  return MAIN_HUD_STEPS.findIndex((step) => step.id === chapterId);
 }
 
 function GuildglassScene({
@@ -1814,7 +1860,7 @@ function ProofGroup({
 function MissionLoadingStage() {
   return (
     <div className="hud-demo hud-loading" role="status" aria-live="polite">
-      <HudStepTrack activeIndex={0} chapterId="ready" />
+      <HudStepTrack chapterId="ready" />
       <div className="hud-stage-layout">
         <GuildglassScene
           chapterId="ready"
@@ -1862,7 +1908,7 @@ function EmptyMissionStage({
   });
   return (
     <div className="hud-demo chapter-ready">
-      <HudStepTrack activeIndex={0} chapterId="ready" />
+      <HudStepTrack chapterId="ready" />
       <div className="hud-stage-layout">
         <GuildglassScene
           chapterId="ready"
@@ -2474,11 +2520,13 @@ function replayChapterDelay(
   replayIndex: number,
 ): number {
   const chapter = missionChapterId(events.slice(0, replayIndex));
-  return chapter === "failure" || chapter === "replacement"
-    ? 2_500
-    : chapter === "reward"
-      ? 3_000
-      : REPLAY_STEP_MS;
+  return chapter === "failure"
+    ? 3_800
+    : chapter === "replacement"
+      ? 5_800
+      : chapter === "reward"
+        ? 3_600
+        : REPLAY_STEP_MS;
 }
 
 function agentDisplayName(agentId: string): string {
