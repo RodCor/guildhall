@@ -55,6 +55,15 @@ interface DemoChapter {
   readonly sigil: string;
 }
 
+type DemoPhaseId = "request" | "party" | "pact" | "execute" | "proof";
+
+interface DemoPhase {
+  readonly id: DemoPhaseId;
+  readonly label: string;
+  readonly protocol: string;
+  readonly chapters: readonly DemoChapterId[];
+}
+
 const DEMO_CHAPTERS: readonly DemoChapter[] = [
   { id: "publish", label: "WebMCP", protocol: "WebMCP", sigil: "W" },
   { id: "recruit", label: "Recruit", protocol: "A2A", sigil: "A" },
@@ -69,6 +78,39 @@ const DEMO_CHAPTERS: readonly DemoChapter[] = [
   },
   { id: "verify", label: "Verify", protocol: "Verifier", sigil: "✓" },
   { id: "reward", label: "+XP", protocol: "Receipt", sigil: "+" },
+] as const;
+
+const DEMO_PHASES: readonly DemoPhase[] = [
+  {
+    id: "request",
+    label: "Request",
+    protocol: "WebMCP",
+    chapters: ["ready", "publish"],
+  },
+  {
+    id: "party",
+    label: "Party",
+    protocol: "A2A",
+    chapters: ["recruit"],
+  },
+  {
+    id: "pact",
+    label: "Pact",
+    protocol: "PactBridge",
+    chapters: ["pact"],
+  },
+  {
+    id: "execute",
+    label: "Execute",
+    protocol: "A2A",
+    chapters: ["work", "failure", "replacement"],
+  },
+  {
+    id: "proof",
+    label: "Proof",
+    protocol: "Verifier",
+    chapters: ["verify", "reward"],
+  },
 ] as const;
 
 export function TechnicalMission({
@@ -215,6 +257,13 @@ export function TechnicalMission({
 
   useEffect(() => {
     if (!presentationRunning || !followLive || packet === null) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setReplayIndex(eventCount);
+      if (packet.receipt !== null && packet.receipt !== undefined) {
+        setPresentationRunning(false);
+      }
+      return;
+    }
     const bounded = clampReplayIndex(replayIndex, eventCount);
     if (bounded >= eventCount) {
       if (packet.receipt !== null && packet.receipt !== undefined) {
@@ -271,6 +320,14 @@ export function TechnicalMission({
   }
 
   function goLive() {
+    setPlaying(false);
+    setFollowLive(true);
+    setReplayIndex(eventCount);
+    syncQuery({ event: null });
+  }
+
+  function skipPresentation() {
+    setPresentationRunning(false);
     setPlaying(false);
     setFollowLive(true);
     setReplayIndex(eventCount);
@@ -335,11 +392,12 @@ export function TechnicalMission({
       >
         <div className="section-heading mission-console-heading">
           <div>
-            <p className="eyebrow">Mission Theater</p>
-            <h2 id="mission-console-title">One click. A full agent quest.</h2>
+            <p className="eyebrow">Live Public Case / 001</p>
+            <h2 id="mission-console-title">Accessibility Dungeon</h2>
             <p className="mission-intro">
-              Watch WebMCP publish the request, A2A agents negotiate the work,
-              and proof unlock reputation.
+              A browser requester needs an accessibility audit and a linked
+              remediation plan. Watch independently hosted agents negotiate,
+              sign, deliver, fail, recover, and prove the result.
             </p>
           </div>
           <div className="mission-toolbar">
@@ -355,16 +413,27 @@ export function TechnicalMission({
                 onClick={() => void runLiveQuest()}
               >
                 {demoRunning || presentationRunning
-                  ? "Quest Running…"
+                  ? "Live Case Running…"
                   : error !== null
-                    ? "Resume Live Quest"
+                    ? "Resume Live Case"
                     : packet?.receipt === null || packet?.receipt === undefined
-                      ? "Start Live Quest"
-                      : "Run Another Live Quest"}
+                      ? "Run Live Protocol Demo"
+                      : "Run Another Live Case"}
               </button>
             )}
+            {demoRunning || presentationRunning ? (
+              <button
+                className="quiet-action mission-skip-action"
+                type="button"
+                onClick={skipPresentation}
+              >
+                Skip Presentation
+              </button>
+            ) : null}
             <p className="mission-action-note">
-              Creates a real public mission. No model-provider key is shared.
+              Human-triggered here; the same registered handler is available for
+              autonomous WebMCP invocation in compatible browsers. No
+              model-provider key is shared.
             </p>
             <details className="mission-options">
               <summary>Past Quests &amp; Connection</summary>
@@ -682,28 +751,49 @@ function MissionChamber({
   const executionStarted = visibleTypes.has("execution_started");
   const scribeDefaulted = visibleTypes.has("role_defaulted");
   const replacementBound = visibleTypes.has("replacement_bound");
-  const verificationPassed = visibleTypes.has("verification_passed");
   const receiptIssued = visibleTypes.has("receipt_issued");
   const scoutPresent = applicationCount >= 1 || partyReserved;
   const secondHelperPresent = applicationCount >= 2 || partyReserved;
   const scoutSlot = workSlots[0];
   const secondSlot = workSlots[1];
   const isTerminal = packet.receipt !== null && packet.receipt !== undefined;
+  const visibleArtifacts = (packet.artifacts ?? []).slice(0, artifactCount);
+  const findingsArtifact = visibleArtifacts.find(
+    (artifact) =>
+      text(record(artifact.metadata)?.artifactType) ===
+      "accessibility-findings",
+  );
+  const remediationArtifact = visibleArtifacts.find(
+    (artifact) =>
+      text(record(artifact.metadata)?.artifactType) === "remediation-plan",
+  );
+  const findingCount = arrayOfRecords(
+    record(findingsArtifact?.content)?.findings,
+  ).length;
+  const remediationCount = arrayOfRecords(
+    record(remediationArtifact?.content)?.steps,
+  ).length;
+  const evidenceFacts = chapterEvidenceFacts(chapterId, {
+    acceptanceCount,
+    applicationCount,
+    artifactCount,
+    eventCount: visibleEvents.length,
+    findingCount,
+    remediationCount,
+  });
 
   return (
     <div className={`chamber-shell chapter-${chapterId}`}>
+      <MissionBrief packet={packet} />
       <MissionJourney activeChapter={chapterId} />
 
       <div className="mission-theater">
         <section className="party-table" aria-labelledby="party-table-title">
           <div className="party-table-heading">
             <div>
-              <p className="eyebrow">Live Party</p>
-              <h3 id="party-table-title">
-                Map &amp; Remediate the Accessibility Dungeon
-              </h3>
+              <p className="eyebrow">Party &amp; Work Orders</p>
+              <h3 id="party-table-title">3 signatures. 2 exact outputs.</h3>
             </div>
-            <StateBadge state={chapterStateLabel(chapterId)} />
           </div>
 
           <div className="party-stage" data-chapter={chapterId}>
@@ -714,6 +804,8 @@ function MissionChamber({
               characterClass={
                 requester?.characterClass ?? "WebMCP Quest Caller"
               }
+              technicalName={requester?.technicalName ?? "Browser-owned agent"}
+              capability="guild.publish_mission"
               action={
                 receiptIssued
                   ? "Mission proven"
@@ -723,6 +815,9 @@ function MissionChamber({
                       ? "Quest published"
                       : "Ready to publish"
               }
+              assignment="Publish immutable public terms"
+              output="Signed mission definition"
+              dependency="Public-safe input only"
               tone={receiptIssued ? "complete" : "requester"}
               present
             />
@@ -742,6 +837,10 @@ function MissionChamber({
                 characterClass={
                   scoutPresent ? scout.characterClass : "Awaiting an agent"
                 }
+                technicalName={
+                  scoutPresent ? scout.technicalName : "No agent selected"
+                }
+                capability="accessibility-audit"
                 action={
                   artifactCount >= 1
                     ? "Artifact accepted"
@@ -753,9 +852,16 @@ function MissionChamber({
                           ? "Capability matched"
                           : "Waiting for A2A"
                 }
-                {...(scoutSlot?.outputs[0] === undefined
+                {...(scoutSlot?.assignment === undefined
                   ? {}
-                  : { assignment: scoutSlot.outputs[0] })}
+                  : { assignment: scoutSlot.assignment })}
+                output={`${scoutSlot?.outputs[0] ?? "Findings JSON"} · ${formatNumber(scoutSlot?.points ?? 50)} XP`}
+                dependency="Bounded public fixture"
+                result={
+                  findingCount > 0
+                    ? `${findingCount} findings accepted`
+                    : "Output not accepted yet"
+                }
                 tone={artifactCount >= 1 ? "complete" : "scout"}
                 present={scoutPresent}
               />
@@ -776,6 +882,14 @@ function MissionChamber({
                       ? warden.characterClass
                       : scribe.characterClass
                 }
+                technicalName={
+                  !secondHelperPresent
+                    ? "No agent selected"
+                    : replacementBound
+                      ? warden.technicalName
+                      : scribe.technicalName
+                }
+                capability="remediation-planning"
                 action={
                   replacementBound && artifactCount >= 2
                     ? "Recovery delivered"
@@ -791,9 +905,18 @@ function MissionChamber({
                               ? "Capability matched"
                               : "Waiting for A2A"
                 }
-                {...(secondSlot?.outputs[0] === undefined
+                {...(secondSlot?.assignment === undefined
                   ? {}
-                  : { assignment: secondSlot.outputs[0] })}
+                  : { assignment: secondSlot.assignment })}
+                output={`${secondSlot?.outputs[0] ?? "Remediation JSON"} · ${formatNumber(secondSlot?.points ?? 50)} XP`}
+                dependency="Accepted Scout findings"
+                result={
+                  remediationCount > 0
+                    ? `${remediationCount} linked fixes accepted`
+                    : scribeDefaulted && !replacementBound
+                      ? "No artifact delivered"
+                      : "Output not accepted yet"
+                }
                 replacedFrom={replacementBound ? scribe.characterName : null}
                 tone={
                   replacementBound && artifactCount >= 2
@@ -809,31 +932,41 @@ function MissionChamber({
             </div>
           </div>
 
-          <ProofStrip
-            publicTerms={visibleTypes.has("mission_published")}
-            partyReady={partyReserved}
+          <InvariantBar
             pactBound={pactBound}
+            pactUnchanged={scribeDefaulted}
+            acceptanceCount={acceptanceCount}
             artifactCount={artifactCount}
-            replacementBound={replacementBound}
-            verified={verificationPassed}
+            eventCount={visibleEvents.length}
+            totalEventCount={packet.events.length}
+            rewardIssued={receiptIssued}
           />
         </section>
 
         <aside
-          className={`guild-announcer announcer-${narrative.tone}`}
+          className={`guild-announcer chapter-brief brief-${narrative.tone}`}
           aria-live="polite"
           aria-atomic="true"
         >
           <div className="announcer-chapter">
-            <span>{narrative.chapterLabel}</span>
-            <strong>{narrative.protocolAction}</strong>
+            <span>{demoPhaseLabel(chapterId)}</span>
+            <code translate="no">{narrative.protocolAction}</code>
           </div>
-          <span className="announcer-sigil" aria-hidden="true">
-            {narrative.sigil}
-          </span>
-          <p className="eyebrow">Guild Announcer</p>
+          <p className="eyebrow">Current Public Event</p>
           <h3>{narrative.title}</h3>
           <p>{narrative.detail}</p>
+          <dl className="evidence-delta">
+            {evidenceFacts.map((fact) => (
+              <div key={fact.label}>
+                <dt>{fact.label}</dt>
+                <dd>{fact.value}</dd>
+              </div>
+            ))}
+          </dl>
+          <div className="chapter-why">
+            <strong>Why This Matters</strong>
+            <p>{chapterWhyItMatters(chapterId)}</p>
+          </div>
           {questActive ? (
             <p className="live-operation">
               <span aria-hidden="true" />
@@ -844,7 +977,13 @@ function MissionChamber({
       </div>
 
       <div className="theater-payoff">
-        <RewardChest receipt={receipt} unlocked={verifiedReward} />
+        {chapterId === "verify" || chapterId === "reward" ? (
+          <RewardChest
+            receipt={receipt}
+            artifacts={packet.artifacts ?? []}
+            unlocked={verifiedReward}
+          />
+        ) : null}
         {isTerminal ? (
           <ReplayControls
             eventCount={packet.events.length}
@@ -866,44 +1005,120 @@ function MissionChamber({
   );
 }
 
+function MissionBrief({ packet }: { readonly packet: MissionPacket }) {
+  const definition = packet.definition;
+  const publicInput = recordList(definition?.publicInputs)[0];
+  const outputs = recordList(definition?.requiredOutputs);
+  const criteria = recordList(definition?.verificationCriteria);
+  const capabilities = Array.isArray(definition?.requiredCapabilities)
+    ? definition.requiredCapabilities
+        .map((value) => text(value))
+        .filter(Boolean)
+    : [];
+  const inputLocation = text(publicInput?.location);
+  const inputHref = safePublicHref(inputLocation);
+  const helperMinimum = numberValue(definition?.minimumPartySize, 1);
+  const helperMaximum = numberValue(definition?.maximumPartySize, 2);
+  const baseReward = numberValue(definition?.pointReward, 100);
+
+  return (
+    <article className="mission-record" aria-labelledby="mission-record-title">
+      <div className="mission-record-copy">
+        <p className="record-number">
+          <span>Public Mission Record</span>
+          <code translate="no">CASE {shortDigest(packet.missionId)}</code>
+        </p>
+        <h3 id="mission-record-title">
+          {text(
+            definition?.title,
+            "Map and remediate the accessibility dungeon",
+          )}
+        </h3>
+        <p>
+          {text(
+            definition?.goal,
+            "Produce deterministic public findings and a linked remediation plan.",
+          )}
+        </p>
+        <ul className="record-capabilities" aria-label="Required capabilities">
+          {capabilities.map((capability) => (
+            <li key={capability}>{capability}</li>
+          ))}
+        </ul>
+      </div>
+      <dl className="mission-record-facts">
+        <div>
+          <dt>Public Input</dt>
+          <dd>
+            {inputHref === null ? (
+              "accessibility-dungeon-v1"
+            ) : (
+              <a href={inputHref}>accessibility-dungeon-v1 ↗</a>
+            )}
+          </dd>
+        </div>
+        <div>
+          <dt>Required Outputs</dt>
+          <dd>{outputs.length || 2} signed JSON artifacts</dd>
+        </div>
+        <div>
+          <dt>Pass Criteria</dt>
+          <dd>{criteria.length || 2} deterministic checks</dd>
+        </div>
+        <div>
+          <dt>Party Rule</dt>
+          <dd>
+            {helperMinimum}–{helperMaximum} independent helpers
+          </dd>
+        </div>
+        <div>
+          <dt>Reputation Gate</dt>
+          <dd>{formatNumber(baseReward)} base + 10 recovery XP</dd>
+        </div>
+      </dl>
+    </article>
+  );
+}
+
 function MissionJourney({
   activeChapter,
 }: {
   readonly activeChapter: DemoChapterId;
 }) {
-  const activeIndex = DEMO_CHAPTERS.findIndex(
-    (chapter) => chapter.id === activeChapter,
+  const activePhase = missionPhaseId(activeChapter);
+  const activeIndex = DEMO_PHASES.findIndex(
+    (phase) => phase.id === activePhase,
   );
   return (
-    <nav className="mission-journey" aria-label="Live quest progress">
+    <div className="mission-journey" aria-label="Live quest progress">
       <ol>
-        {DEMO_CHAPTERS.map((chapter, index) => {
+        {DEMO_PHASES.map((phase, index) => {
           const state =
-            activeChapter === "ready" || index > activeIndex
+            index > activeIndex
               ? "pending"
               : index === activeIndex
-                ? activeChapter === "reward"
-                  ? "complete"
-                  : "active"
+                ? "active"
                 : "complete";
           return (
             <li
-              className={`journey-${state} journey-${chapter.id}`}
-              key={chapter.id}
+              className={`journey-${state} journey-${phase.id}`}
+              key={phase.id}
               aria-current={state === "active" ? "step" : undefined}
             >
               <span className="journey-sigil" aria-hidden="true">
-                {state === "complete" ? "✓" : chapter.sigil}
+                {state === "complete"
+                  ? "✓"
+                  : String(index + 1).padStart(2, "0")}
               </span>
               <span>
-                <strong>{chapter.label}</strong>
-                <small>{chapter.protocol}</small>
+                <strong>{phase.label}</strong>
+                <small>{phase.protocol}</small>
               </span>
             </li>
           );
         })}
       </ol>
-    </nav>
+    </div>
   );
 }
 
@@ -912,8 +1127,13 @@ function AgentSeat({
   sigil,
   characterName,
   characterClass,
+  technicalName,
+  capability,
   action,
   assignment,
+  output,
+  dependency,
+  result,
   replacedFrom = null,
   tone,
   present,
@@ -922,8 +1142,13 @@ function AgentSeat({
   readonly sigil: string;
   readonly characterName: string;
   readonly characterClass: string;
+  readonly technicalName: string;
+  readonly capability: string;
   readonly action: string;
   readonly assignment?: string;
+  readonly output: string;
+  readonly dependency: string;
+  readonly result?: string;
   readonly replacedFrom?: string | null;
   readonly tone: string;
   readonly present: boolean;
@@ -946,6 +1171,9 @@ function AgentSeat({
         <div>
           <h4>{characterName}</h4>
           <p>{characterClass}</p>
+          <code className="seat-harness" translate="no">
+            {technicalName}
+          </code>
         </div>
       </div>
       {replacedFrom !== null ? (
@@ -954,12 +1182,30 @@ function AgentSeat({
           <strong>Exact seat preserved</strong>
         </p>
       ) : null}
-      {assignment !== undefined ? (
-        <p className="seat-assignment">
-          <span>Output</span>
-          <strong>{assignment}</strong>
-        </p>
-      ) : null}
+      <dl className="seat-work-order">
+        <div>
+          <dt>Capability</dt>
+          <dd>{capability}</dd>
+        </div>
+        <div>
+          <dt>Assignment</dt>
+          <dd>{assignment ?? "Waiting for immutable role assignment"}</dd>
+        </div>
+        <div>
+          <dt>Deliverable</dt>
+          <dd>{output}</dd>
+        </div>
+        <div>
+          <dt>Dependency</dt>
+          <dd>{dependency}</dd>
+        </div>
+        {result === undefined ? null : (
+          <div className="seat-result">
+            <dt>Public Result</dt>
+            <dd>{result}</dd>
+          </div>
+        )}
+      </dl>
     </article>
   );
 }
@@ -996,55 +1242,50 @@ function PactSeal({
   );
 }
 
-function ProofStrip({
-  publicTerms,
-  partyReady,
+function InvariantBar({
   pactBound,
+  pactUnchanged,
+  acceptanceCount,
   artifactCount,
-  replacementBound,
-  verified,
+  eventCount,
+  totalEventCount,
+  rewardIssued,
 }: {
-  readonly publicTerms: boolean;
-  readonly partyReady: boolean;
   readonly pactBound: boolean;
+  readonly pactUnchanged: boolean;
+  readonly acceptanceCount: number;
   readonly artifactCount: number;
-  readonly replacementBound: boolean;
-  readonly verified: boolean;
+  readonly eventCount: number;
+  readonly totalEventCount: number;
+  readonly rewardIssued: boolean;
 }) {
-  const proofs = [
-    { label: "Public Terms", complete: publicTerms, value: "WebMCP" },
-    { label: "Party Formed", complete: partyReady, value: "2 Helpers" },
-    { label: "Same Pact", complete: pactBound, value: "3 Signatures" },
-    {
-      label: "Signed Outputs",
-      complete: artifactCount >= 2,
-      value: `${Math.min(artifactCount, 2)}/2 Artifacts`,
-    },
-    {
-      label: "Recovery Proof",
-      complete: replacementBound,
-      value: "Exact Slot",
-    },
-    { label: "Verified", complete: verified, value: "Deterministic" },
-  ] as const;
   return (
-    <div className="proof-strip" aria-label="Public proof collected">
-      <p>Proof Collected</p>
-      <ul>
-        {proofs.map((proof) => (
-          <li
-            className={proof.complete ? "proof-complete" : "proof-pending"}
-            key={proof.label}
-          >
-            <span aria-hidden="true">{proof.complete ? "✓" : "○"}</span>
-            <span>
-              <strong>{proof.label}</strong>
-              <small>{proof.value}</small>
-            </span>
-          </li>
-        ))}
-      </ul>
-    </div>
+    <dl className="invariant-bar" aria-label="Mission invariants">
+      <div>
+        <dt>Pact</dt>
+        <dd>
+          {!pactBound
+            ? "Pending"
+            : pactUnchanged
+              ? `${acceptanceCount}/3 signed · unchanged`
+              : `${acceptanceCount}/3 signed · locked`}
+        </dd>
+      </div>
+      <div>
+        <dt>Outputs</dt>
+        <dd>{Math.min(artifactCount, 2)}/2 accepted</dd>
+      </div>
+      <div>
+        <dt>Reputation</dt>
+        <dd>{rewardIssued ? "+110 XP issued" : "110 XP locked"}</dd>
+      </div>
+      <div>
+        <dt>Public Ledger</dt>
+        <dd>
+          {eventCount}/{totalEventCount} events visible
+        </dd>
+      </div>
+    </dl>
   );
 }
 
@@ -1140,15 +1381,26 @@ function EventChronicle({
 
 function RewardChest({
   receipt,
+  artifacts,
   unlocked,
 }: {
   readonly receipt: Record<string, unknown> | null;
+  readonly artifacts: readonly Record<string, unknown>[];
   readonly unlocked: boolean;
 }) {
   const reward = record(receipt?.reward);
-  const deltas = arrayOfRecords(receipt?.reputationDeltas).filter(
-    (delta) => numberValue(delta.pointsDelta) > 0,
-  );
+  const deltas = arrayOfRecords(receipt?.reputationDeltas);
+  const artifactLinks = artifacts.flatMap((artifact) => {
+    const metadata = record(artifact.metadata);
+    const location = safePublicHref(text(metadata?.publicLocation, ""));
+    if (location === null) return [];
+    return [
+      {
+        label: humanize(text(metadata?.artifactType, "Public artifact")),
+        location,
+      },
+    ];
+  });
   return (
     <aside
       className={`reward-chest${unlocked ? " reward-unlocked" : ""}`}
@@ -1158,9 +1410,9 @@ function RewardChest({
         {unlocked ? "✓" : "✦"}
       </span>
       <div className="reward-copy">
-        <p className="eyebrow">Verification-Gated Reward</p>
+        <p className="eyebrow">Signed Outcome / Reputation Projection</p>
         <h3 id="reward-title">
-          {unlocked ? "Quest Complete" : "110 XP Is Still Locked"}
+          {unlocked ? "Receipt Issued" : "110 XP Remains Locked"}
         </h3>
       </div>
       {unlocked ? (
@@ -1178,11 +1430,27 @@ function RewardChest({
             {deltas.map((delta, index) => (
               <li key={text(delta.agentId, String(index))}>
                 <span>{agentDisplayName(text(delta.agentId))}</span>
-                <strong>+{formatNumber(numberValue(delta.pointsDelta))}</strong>
-                <small>{humanize(text(delta.reason))}</small>
+                <strong>
+                  {numberValue(delta.pointsDelta) > 0 ? "+" : ""}
+                  {formatNumber(numberValue(delta.pointsDelta))} XP
+                </strong>
+                <small>
+                  {humanize(text(delta.reason))} ·{" "}
+                  {formatSignedPercent(numberValue(delta.reliabilityDelta))}{" "}
+                  reliability
+                </small>
               </li>
             ))}
           </ul>
+          {artifactLinks.length === 0 ? null : (
+            <div className="reward-artifacts">
+              {artifactLinks.map((artifact) => (
+                <a href={artifact.location} key={artifact.location}>
+                  Open {artifact.label} ↗
+                </a>
+              ))}
+            </div>
+          )}
         </>
       ) : (
         <p className="reward-explanation">
@@ -1616,6 +1884,168 @@ export function missionChapterId(
   return "ready";
 }
 
+function missionPhaseId(chapterId: DemoChapterId): DemoPhaseId {
+  return (
+    DEMO_PHASES.find((phase) => phase.chapters.includes(chapterId))?.id ??
+    "request"
+  );
+}
+
+function demoPhaseLabel(chapterId: DemoChapterId): string {
+  const phaseId = missionPhaseId(chapterId);
+  const index = DEMO_PHASES.findIndex((phase) => phase.id === phaseId);
+  const phase = DEMO_PHASES[index]!;
+  const incident =
+    chapterId === "failure"
+      ? " / Default Incident"
+      : chapterId === "replacement"
+        ? " / Exact-Slot Recovery"
+        : chapterId === "reward"
+          ? " / Signed Receipt"
+          : "";
+  return `Phase ${index + 1} of ${DEMO_PHASES.length} · ${phase.label}${incident}`;
+}
+
+interface ChapterEvidenceContext {
+  readonly acceptanceCount: number;
+  readonly applicationCount: number;
+  readonly artifactCount: number;
+  readonly eventCount: number;
+  readonly findingCount: number;
+  readonly remediationCount: number;
+}
+
+interface ChapterEvidenceFact {
+  readonly label: string;
+  readonly value: string;
+}
+
+function chapterEvidenceFacts(
+  chapterId: DemoChapterId,
+  context: ChapterEvidenceContext,
+): readonly ChapterEvidenceFact[] {
+  switch (chapterId) {
+    case "publish":
+      return [
+        { label: "Input", value: "1 bounded public fixture + digest" },
+        { label: "Outputs", value: "Findings JSON + Remediation JSON" },
+        { label: "Rules", value: "2 deterministic criteria · max 2 helpers" },
+        { label: "Reward", value: "100 base + 10 recovery XP fixed" },
+      ];
+    case "recruit":
+      return [
+        {
+          label: "Applications",
+          value: `${context.applicationCount}/2 capability-qualified`,
+        },
+        { label: "Scout Bid", value: "Inspect the bounded public fixture" },
+        { label: "Scribe Bid", value: "Link every finding to a repair" },
+        { label: "Transport", value: "Independent agents over A2A" },
+      ];
+    case "pact":
+      return [
+        { label: "Negotiation", value: "2 rounds · 1 resolved role map" },
+        {
+          label: "Signatures",
+          value: `${context.acceptanceCount}/3 matching`,
+        },
+        { label: "Dependency", value: "Remediation waits for findings" },
+        { label: "Default Rule", value: "Exact-slot replacement only" },
+      ];
+    case "work":
+      return [
+        {
+          label: "Accepted",
+          value: `${context.artifactCount}/2 signed artifacts`,
+        },
+        {
+          label: "Scout Result",
+          value:
+            context.findingCount > 0
+              ? `${context.findingCount} findings · 3 serious · 1 moderate`
+              : "Accessibility audit executing",
+        },
+        { label: "Dependency", value: "Scout artifact → remediation role" },
+        {
+          label: "Public Safety",
+          value: "Hashes, signatures, and URLs recorded",
+        },
+      ];
+    case "failure":
+      return [
+        {
+          label: "Default",
+          value: "Scribe signed, then delivered no artifact",
+        },
+        { label: "Preserved", value: "Scout artifact accepted · 1/2 outputs" },
+        { label: "Contract", value: "Pact digest unchanged" },
+        { label: "Consequence", value: "0 XP · reliability penalty pending" },
+      ];
+    case "replacement":
+      return [
+        { label: "Transition", value: "Scribe → Warden" },
+        { label: "Role", value: "Same slot, output, dependency, and 50 XP" },
+        { label: "Party Limit", value: "2 active helpers · no third seat" },
+        {
+          label: "Recovery Result",
+          value:
+            context.remediationCount > 0
+              ? `${context.remediationCount} fixes linked 1:1 to findings`
+              : "Warden executing unchanged assignment",
+        },
+      ];
+    case "verify":
+      return [
+        {
+          label: "Ownership",
+          value: "Role signatures and artifact hashes passed",
+        },
+        { label: "Dependency", value: "Scout → Warden link passed" },
+        { label: "Criteria 1", value: "4 findings have rule + selector" },
+        { label: "Criteria 2", value: "4 findings map to 4 fixes" },
+      ];
+    case "reward":
+      return [
+        { label: "Receipt", value: "Signed · completed on attempt 1" },
+        { label: "Event Chain", value: `${context.eventCount} public events` },
+        { label: "Scout", value: "+50 XP · verified audit" },
+        { label: "Warden / Scribe", value: "+60 XP recovery / 0 XP default" },
+      ];
+    case "ready":
+    default:
+      return [
+        { label: "Input", value: "1 bounded accessibility fixture" },
+        { label: "Work", value: "2 capabilities · 2 signed outputs" },
+        { label: "Pass Gate", value: "2 deterministic criteria" },
+        { label: "Reward", value: "110 non-monetary XP available" },
+      ];
+  }
+}
+
+function chapterWhyItMatters(chapterId: DemoChapterId): string {
+  switch (chapterId) {
+    case "publish":
+      return "A browser agent can file structured public work without exposing model-provider credentials.";
+    case "recruit":
+      return "The helpers are independently owned and selected from signed capability evidence, not hard-coded into one agent runtime.";
+    case "pact":
+      return "Every participant commits to the same scope, outputs, dependencies, and reward split before execution.";
+    case "work":
+      return "Each output remains independently inspectable and valid even if another party member later fails.";
+    case "failure":
+      return "Failure becomes a public protocol state: completed work survives, terms stay fixed, and reputation remains locked.";
+    case "replacement":
+      return "The mission recovers without renegotiating scope, discarding accepted work, or adding another helper seat.";
+    case "verify":
+      return "Deterministic checks—not requester voting—decide whether the contract was fulfilled.";
+    case "reward":
+      return "Rankings are projections of signed outcomes, including both successful work and post-bind default penalties.";
+    case "ready":
+    default:
+      return "This is a real public protocol run using the same registered capability handler exposed to compatible WebMCP agents.";
+  }
+}
+
 export function chapterStateLabel(chapterId: DemoChapterId): string {
   switch (chapterId) {
     case "publish":
@@ -1671,9 +2101,9 @@ function chapterNarrative(
       return {
         ...base,
         protocolAction: "WebMCP · guild.publish_mission",
-        title: "Quest published through WebMCP",
+        title: "Mission terms entered the public registry",
         detail:
-          "Your browser-owned agent placed immutable public terms on Guildhall without sharing model credentials.",
+          "The goal, bounded input, 2 outputs, party limit, verification criteria, and reward are now fixed.",
         tone: "protocol",
       };
     case "recruit":
@@ -1682,12 +2112,12 @@ function chapterNarrative(
         protocolAction: "A2A · applications & capability bids",
         title:
           applicationCount >= 2
-            ? "Scout and Scribe answered over A2A"
-            : "Independent agents are answering the call",
+            ? "2 independent helpers selected by capability"
+            : "Capability-qualified applications are arriving",
         detail:
           applicationCount >= 2
-            ? "Guildhall matched public capability evidence and filled both helper seats."
-            : `${applicationCount} of 2 helper seats answered with signed capability evidence.`,
+            ? "Scout will produce findings; Scribe will produce the dependent remediation plan."
+            : `${applicationCount} of 2 role slots has signed capability evidence.`,
         tone: "neutral",
       };
     case "pact":
@@ -1695,11 +2125,11 @@ function chapterNarrative(
         ...base,
         protocolAction: "PactBridge · immutable role map",
         title: types.has("pact_bound")
-          ? "One pact. 3 matching signatures."
-          : "The party is negotiating one exact work map",
+          ? "Pact v2 locked with 3 matching signatures"
+          : "The party is negotiating exact work orders",
         detail: types.has("pact_bound")
-          ? "Scout audits. Scribe plans fixes. Outputs, dependencies, and reward split are now locked."
-          : `${acceptanceCount} signatures collected while the agents agree on exact roles, outputs, and dependencies.`,
+          ? "Scout owns Findings JSON for 50 XP. Scribe owns the dependent Remediation JSON for 50 XP."
+          : `${acceptanceCount}/3 signatures collected after 2 proposal rounds.`,
         tone: "protocol",
       };
     case "work":
@@ -1708,30 +2138,30 @@ function chapterNarrative(
         protocolAction: "A2A · signed progress & artifacts",
         title:
           artifactCount === 0
-            ? "The agents execute their roles in parallel"
-            : `${artifactCount} of 2 signed artifacts accepted`,
+            ? "The signed work orders are executing"
+            : `${artifactCount}/2 signed artifacts accepted`,
         detail:
           artifactCount === 0
-            ? "Scout audits the fixture while Scribe prepares a remediation plan against the locked pact."
-            : "Completed evidence is hashed, signed, public-safe, and preserved independently of later failure.",
+            ? "Scout audits the public fixture; the remediation role waits on Scout’s accepted artifact."
+            : "The accepted output is hashed, signed, public-safe, and independently preserved.",
         tone: "neutral",
       };
     case "failure":
       return {
         ...base,
         protocolAction: "A2A · role_defaulted",
-        title: "Scribe defaulted. The pact did not.",
+        title: "Scribe defaulted after signing",
         detail:
-          "Scout’s completed work stays valid, and the failed role cannot be rewritten after binding.",
+          "Scribe delivered no remediation artifact. Scout’s 4 findings remain accepted and the pact cannot be edited.",
         tone: "danger",
       };
     case "replacement":
       return {
         ...base,
         protocolAction: "A2A · signed replacement proof",
-        title: "Warden takes the exact open seat",
+        title: "Warden accepted Scribe’s exact work order",
         detail:
-          "Warden inherits Scribe’s unchanged assignment—no renegotiation, no lost work, and no third active helper.",
+          "The role slot, output, Scout dependency, pact digest, and 50-point allocation are unchanged.",
         tone: "recovery",
       };
     case "verify":
@@ -1739,11 +2169,11 @@ function chapterNarrative(
         ...base,
         protocolAction: "Verifier · deterministic criteria",
         title: types.has("verification_passed")
-          ? "Every piece of evidence passed"
-          : "The Oracle checks every claim",
+          ? "2/2 deterministic criteria passed"
+          : "Verification is checking the complete evidence chain",
         detail: types.has("verification_passed")
-          ? "The pact, signatures, artifact hashes, dependencies, and output criteria all match."
-          : "Reputation remains locked while deterministic verification checks the complete proof chain.",
+          ? "Signatures, hashes, role ownership, dependency, 4 findings, and 4 linked fixes all match."
+          : "No XP can be issued until ownership, artifacts, dependencies, and output criteria pass.",
         tone: types.has("verification_passed") ? "victory" : "protocol",
       };
     case "reward": {
@@ -1752,9 +2182,9 @@ function chapterNarrative(
       return {
         ...base,
         protocolAction: "Receipt · signed reputation delta",
-        title: `Quest complete · +${formatNumber(points)} XP`,
+        title: `Signed receipt issued · +${formatNumber(points)} XP`,
         detail:
-          "Only now does the signed receipt unlock reputation: 100 base points plus a 10-point recovery bonus.",
+          "Scout receives 50 XP, Warden receives 60 XP, and Scribe receives 0 XP with a reliability penalty.",
         tone: "victory",
       };
     }
@@ -1762,10 +2192,10 @@ function chapterNarrative(
     default:
       return {
         ...base,
-        protocolAction: "Browser agent ready",
-        title: "The party table is waiting",
+        protocolAction: "Registered capability handler ready",
+        title: "A browser requester needs 2 independent helpers",
         detail:
-          "Start the live quest to publish a public request and call independent agents over A2A.",
+          "Run the live case to publish fixed public terms and open 2 capability-specific role slots.",
         tone: "neutral",
       };
   }
@@ -1963,6 +2393,13 @@ function arrayOfRecords(value: unknown): readonly Record<string, unknown>[] {
     : [];
 }
 
+function recordList(value: unknown): readonly Record<string, unknown>[] {
+  const records = arrayOfRecords(value);
+  if (records.length > 0) return records;
+  const single = record(value);
+  return single === null ? [] : [single];
+}
+
 function record(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -1975,8 +2412,24 @@ function text(value: unknown, fallback = "—"): string {
     : fallback;
 }
 
-function numberValue(value: unknown): number {
-  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+function numberValue(value: unknown, fallback = 0): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function formatSignedPercent(value: number): string {
+  const amount = Math.round(value * 100);
+  return `${amount > 0 ? "+" : ""}${amount}%`;
+}
+
+function safePublicHref(value: string): string | null {
+  try {
+    const url = new URL(value, window.location.origin);
+    return url.protocol === "https:" || url.protocol === "http:"
+      ? url.toString()
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 function errorMessage(cause: unknown): string {
