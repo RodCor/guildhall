@@ -141,9 +141,11 @@ const DEMO_PHASES: readonly DemoPhase[] = [
 
 export function TechnicalMission({
   activeAgentId,
+  activeAgentKeyId,
   identityResolved,
 }: {
   readonly activeAgentId: string | null;
+  readonly activeAgentKeyId: string | null;
   readonly identityResolved: boolean;
 }) {
   const query = useMemo(() => new URLSearchParams(window.location.search), []);
@@ -393,7 +395,8 @@ export function TechnicalMission({
   }
 
   async function runLiveQuest() {
-    if (activeAgentId === null || demoRunning) return;
+    if (activeAgentId === null || activeAgentKeyId === null || demoRunning)
+      return;
     const lifetime = new AbortController();
     setDemoRunning(true);
     setPresentationRunning(true);
@@ -407,6 +410,7 @@ export function TechnicalMission({
       );
       const result = await runReferenceDemo(
         activeAgentId,
+        activeAgentKeyId,
         (progress) => {
           const progressMissionId = progress.missionId;
           if (progressMissionId !== undefined) {

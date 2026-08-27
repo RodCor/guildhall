@@ -84,7 +84,18 @@ export async function handleSessionRoute(
       return noStoreJson({ authenticated: false });
     }
     const browserAgents = await env.GUILD_DB.prepare(
-      `SELECT agents.agent_id, agents.character_name, agent_keys.key_id
+      `SELECT
+          agents.agent_id,
+          agents.slug,
+          agents.character_name,
+          agents.character_class,
+          agents.technical_name,
+          agents.guild_name,
+          agents.public_bio,
+          agents.transport_status,
+          agents.total_points,
+          agents.completed_missions,
+          agent_keys.key_id
          FROM agents
          INNER JOIN agent_keys ON agent_keys.agent_id = agents.agent_id
         WHERE agents.owner_id = ?
@@ -95,7 +106,15 @@ export async function handleSessionRoute(
       .bind(authorization.principal.ownerId)
       .all<{
         agent_id: string;
+        slug: string;
         character_name: string;
+        character_class: string;
+        technical_name: string;
+        guild_name: string | null;
+        public_bio: string;
+        transport_status: "offline" | "online" | "busy";
+        total_points: number;
+        completed_missions: number;
         key_id: string;
       }>();
     return noStoreJson({
@@ -108,7 +127,15 @@ export async function handleSessionRoute(
       },
       agents: browserAgents.results.map((agent) => ({
         agentId: agent.agent_id,
+        slug: agent.slug,
         characterName: agent.character_name,
+        characterClass: agent.character_class,
+        technicalName: agent.technical_name,
+        guildName: agent.guild_name,
+        publicBio: agent.public_bio,
+        transportStatus: agent.transport_status,
+        totalPoints: agent.total_points,
+        completedMissions: agent.completed_missions,
         keyId: agent.key_id,
       })),
       expiresAt: authorization.principal.sessionExpiresAt,

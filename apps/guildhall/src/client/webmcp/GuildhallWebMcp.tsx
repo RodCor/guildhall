@@ -44,8 +44,10 @@ export interface ReferenceDemoResult {
 
 export function GuildhallWebMcp({
   activeAgentId,
+  activeAgentKeyId,
 }: {
   readonly activeAgentId: string | null;
+  readonly activeAgentKeyId: string | null;
 }) {
   const [status, setStatus] = useState<
     "checking" | "registered" | "unavailable" | "failed"
@@ -70,6 +72,7 @@ export function GuildhallWebMcp({
           input,
           context,
           activeAgentId,
+          activeAgentKeyId,
         );
       },
       reconcile: async ({ commandId }) => {
@@ -92,7 +95,7 @@ export function GuildhallWebMcp({
       );
     });
     return () => lifetime.abort("page-or-agent-lifetime-ended");
-  }, [activeAgentId]);
+  }, [activeAgentId, activeAgentKeyId]);
 
   return (
     <p
@@ -110,6 +113,7 @@ export function GuildhallWebMcp({
 /** Manual judge control that calls the same browser capability handlers as WebMCP. */
 export async function runReferenceDemo(
   activeAgentId: string,
+  activeAgentKeyId: string,
   onProgress: (progress: ReferenceDemoProgress) => void,
   signal: AbortSignal,
   resumeMissionId?: string,
@@ -191,6 +195,7 @@ export async function runReferenceDemo(
       },
       demoContext("guild.publish_mission", signal),
       activeAgentId,
+      activeAgentKeyId,
     );
     missionId = requiredString(published, "missionId");
     packet = await inspectDemoMission(missionId, activeAgentId, signal);
@@ -214,6 +219,7 @@ export async function runReferenceDemo(
       { missionId },
       demoContext("guild.rally_reference_party", signal),
       activeAgentId,
+      activeAgentKeyId,
     );
     packet = await waitForDemoMission(
       missionId,
@@ -243,6 +249,7 @@ export async function runReferenceDemo(
       },
       demoContext("guild.propose_allocation", signal),
       activeAgentId,
+      activeAgentKeyId,
     );
     packet = await inspectDemoMission(missionId, activeAgentId, signal);
   }
@@ -258,6 +265,7 @@ export async function runReferenceDemo(
       { missionId },
       demoContext("guild.rally_reference_party", signal),
       activeAgentId,
+      activeAgentKeyId,
     );
     packet = await waitForDemoMission(
       missionId,
@@ -293,6 +301,7 @@ export async function runReferenceDemo(
       },
       demoContext("guild.accept_pact", signal),
       activeAgentId,
+      activeAgentKeyId,
     );
   }
 
@@ -549,6 +558,7 @@ async function invokeBrowserCapability(
   input: Readonly<Record<string, unknown>>,
   context: CapabilityInvocationContext,
   activeAgentId: string | null,
+  activeAgentKeyId: string | null = null,
 ): Promise<Record<string, unknown>> {
   switch (action) {
     case "guild.get_profile":
@@ -588,7 +598,9 @@ async function invokeBrowserCapability(
         context.signal,
       );
     case "guild.apply_to_mission": {
-      const identity = await ensureBrowserSigningIdentity();
+      const identity = await ensureBrowserSigningIdentity(
+        requireActiveKey(activeAgentKeyId),
+      );
       return sendCommand(
         input,
         {
@@ -616,7 +628,9 @@ async function invokeBrowserCapability(
       );
     case "guild.propose_allocation": {
       const negotiationStep = requiredString(input, "negotiationStep");
-      const identity = await ensureBrowserSigningIdentity();
+      const identity = await ensureBrowserSigningIdentity(
+        requireActiveKey(activeAgentKeyId),
+      );
       if (negotiationStep === "capability-bid") {
         return sendCommand(
           input,
@@ -675,7 +689,9 @@ async function invokeBrowserCapability(
       );
     }
     case "guild.accept_pact": {
-      const identity = await ensureBrowserSigningIdentity();
+      const identity = await ensureBrowserSigningIdentity(
+        requireActiveKey(activeAgentKeyId),
+      );
       const pactDigest = requiredString(input, "pactDigest");
       return sendCommand(
         input,
@@ -715,7 +731,9 @@ async function invokeBrowserCapability(
         activeAgentId,
       );
     case "guild.submit_artifact": {
-      const identity = await ensureBrowserSigningIdentity();
+      const identity = await ensureBrowserSigningIdentity(
+        requireActiveKey(activeAgentKeyId),
+      );
       const artifact = requiredRecord(input, "artifact");
       const missionId = requiredString(input, "missionId");
       const producingAgentId = requireActiveAgent(activeAgentId);
@@ -948,6 +966,15 @@ function requireActiveAgent(agentId: string | null): string {
     );
   }
   return agentId;
+}
+
+function requireActiveKey(keyId: string | null): string {
+  if (keyId === null) {
+    throw new Error(
+      "Select an agent with a local browser signer before invoking this action",
+    );
+  }
+  return keyId;
 }
 
 function query(

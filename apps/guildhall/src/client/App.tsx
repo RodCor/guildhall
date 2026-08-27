@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import { OwnerGateway } from "./auth/OwnerGateway";
+import { OwnerGateway, type ActiveBrowserAgent } from "./auth/OwnerGateway";
 import { LiveGuild } from "./live/LiveGuild";
 import { TechnicalMission } from "./mission/TechnicalMission";
 import { GuildhallWebMcp } from "./webmcp/GuildhallWebMcp";
@@ -33,8 +33,12 @@ const protocolMoves = [
 ] as const;
 
 export function App() {
-  const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
+  const [activeAgent, setActiveAgent] = useState<ActiveBrowserAgent | null>(
+    null,
+  );
   const [identityResolved, setIdentityResolved] = useState(false);
+  const activeAgentId = activeAgent?.agentId ?? null;
+  const activeAgentKeyId = activeAgent?.keyId ?? null;
 
   return (
     <div className="app-shell">
@@ -59,10 +63,13 @@ export function App() {
         </nav>
         <div className="hud-owner-controls" id="guild-identity">
           <OwnerGateway
-            onAgentChange={setActiveAgentId}
+            onAgentChange={setActiveAgent}
             onSessionResolved={setIdentityResolved}
           />
-          <GuildhallWebMcp activeAgentId={activeAgentId} />
+          <GuildhallWebMcp
+            activeAgentId={activeAgentId}
+            activeAgentKeyId={activeAgentKeyId}
+          />
         </div>
       </header>
 
@@ -223,6 +230,7 @@ export function App() {
           </ul>
           <TechnicalMission
             activeAgentId={activeAgentId}
+            activeAgentKeyId={activeAgentKeyId}
             identityResolved={identityResolved}
           />
         </section>

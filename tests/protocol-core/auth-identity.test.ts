@@ -197,6 +197,130 @@ describe("GitHub ownership and Guild Node identity", () => {
     };
     expect(agent.autonomy).toEqual({ enabled: false, version: 1 });
 
+    const secondBrowserPair = await ed25519Pair();
+    const secondBrowserJwk = await crypto.subtle.exportKey(
+      "jwk",
+      secondBrowserPair.publicKey,
+    );
+    const secondBrowserKeyId = await deriveEd25519KeyId(
+      "browser",
+      secondBrowserJwk,
+    );
+    const secondAgentCreated = await worker.fetch(
+      "https://guildhall.test/api/agents",
+      {
+        method: "POST",
+        headers: owner.headers,
+        body: JSON.stringify({
+          slug: "protocol-scribe",
+          characterName: "Protocol Scribe",
+          characterClass: "Artificer",
+          technicalName: "Second Browser Agent",
+          guildName: "Guildhall Tests",
+          publicBio: "A distinct browser-owned signing identity.",
+          key: {
+            keyId: secondBrowserKeyId,
+            publicJwk: secondBrowserJwk,
+            source: "browser",
+          },
+        }),
+      },
+    );
+    expect(secondAgentCreated.status).toBe(201);
+    const secondAgent = (await secondAgentCreated.json()) as {
+      agentId: string;
+      keyId: string;
+    };
+    expect(secondAgent.agentId).not.toBe(agent.agentId);
+    expect(secondAgent.keyId).toBe(secondBrowserKeyId);
+
+    const twoAgentSession = await worker.fetch(
+      "https://guildhall.test/api/session",
+      { headers: { Cookie: owner.cookie } },
+    );
+    expect(twoAgentSession.status).toBe(200);
+    expect(await twoAgentSession.json()).toMatchObject({
+      authenticated: true,
+      agents: [
+        {
+          agentId: agent.agentId,
+          slug: "identity-ranger",
+          characterName: "Identity Ranger",
+          characterClass: "Ranger",
+          technicalName: "Guild Node Test Harness",
+          keyId: browserKeyId,
+        },
+        {
+          agentId: secondAgent.agentId,
+          slug: "protocol-scribe",
+          characterName: "Protocol Scribe",
+          keyId: secondBrowserKeyId,
+        },
+      ],
+    });
+
+    const updatedProfile = await worker.fetch(
+      `https://guildhall.test/api/agents/${agent.agentId}`,
+      {
+        method: "PATCH",
+        headers: owner.headers,
+        body: JSON.stringify({
+          slug: "identity-ranger-edited",
+          characterName: "Identity Ranger Prime",
+          characterClass: "Ranger",
+          technicalName: "Edited Browser Agent",
+          guildName: "Guildhall Tests",
+          publicBio: "An owner-edited public agent profile.",
+        }),
+      },
+    );
+    expect(updatedProfile.status).toBe(200);
+    expect(await updatedProfile.json()).toMatchObject({
+      agentId: agent.agentId,
+      slug: "identity-ranger-edited",
+      characterName: "Identity Ranger Prime",
+      technicalName: "Edited Browser Agent",
+      keyId: browserKeyId,
+    });
+
+    const duplicateHandle = await worker.fetch(
+      `https://guildhall.test/api/agents/${secondAgent.agentId}`,
+      {
+        method: "PATCH",
+        headers: owner.headers,
+        body: JSON.stringify({
+          slug: "identity-ranger-edited",
+          characterName: "Protocol Scribe",
+          characterClass: "Artificer",
+          technicalName: "Second Browser Agent",
+          guildName: "Guildhall Tests",
+          publicBio: "A distinct browser-owned signing identity.",
+        }),
+      },
+    );
+    expect(duplicateHandle.status).toBe(409);
+    expect(await duplicateHandle.json()).toMatchObject({
+      error: "PROFILE_HANDLE_TAKEN",
+    });
+
+    const otherOwner = await loginOwner(7303, "other-profile-owner");
+    const crossOwnerEdit = await worker.fetch(
+      `https://guildhall.test/api/agents/${agent.agentId}`,
+      {
+        method: "PATCH",
+        headers: otherOwner.headers,
+        body: JSON.stringify({
+          slug: "stolen-profile",
+          characterName: "Stolen Profile",
+          characterClass: "Rogue",
+          technicalName: "Unauthorized Browser Agent",
+          guildName: "Other Guild",
+          publicBio: "This mutation must not cross the owner boundary.",
+        }),
+      },
+    );
+    expect(crossOwnerEdit.status).toBe(404);
+
     const pairingStart = await worker.fetch(
       `https://guildhall.test/api/agents/${agent.agentId}/pairing`,
       { method: "POST", headers: owner.headers, body: "{}" },

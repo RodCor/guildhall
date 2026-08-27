@@ -1117,6 +1117,348 @@ section.live-guild-section {
   font-size: 0.7rem;
 }
 
+.gateway-card > .gateway-status {
+  position: fixed;
+  z-index: 120;
+  right: 20px;
+  bottom: 20px;
+  max-width: min(420px, calc(100vw - 40px));
+  padding: 11px 14px;
+  border: 1px solid var(--hud-edge-bright);
+  border-radius: 12px 12px 12px 4px;
+  color: var(--hud-text);
+  background: rgba(9, 23, 29, 0.96);
+  box-shadow: 0 18px 52px rgba(0, 0, 0, 0.4);
+}
+
+.agent-manager-trigger {
+  min-width: 0;
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 9px;
+  border: 1px solid var(--hud-edge);
+  border-radius: 12px 12px 12px 4px;
+  color: var(--hud-text);
+  background: rgba(131, 215, 194, 0.05);
+  cursor: pointer;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease;
+}
+
+.agent-manager-trigger:hover {
+  border-color: var(--hud-edge-bright);
+  background: rgba(131, 215, 194, 0.1);
+}
+
+.agent-manager-trigger > span:nth-child(2) {
+  min-width: 0;
+  text-align: left;
+}
+
+.agent-manager-trigger strong,
+.agent-manager-trigger small {
+  max-width: 150px;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-manager-trigger strong {
+  font-size: 0.7rem;
+}
+
+.agent-manager-trigger small {
+  margin-top: 2px;
+  color: var(--hud-muted);
+  font-size: 0.54rem;
+}
+
+.agent-manager-dialog {
+  width: min(880px, calc(100vw - 32px));
+  max-width: none;
+  max-height: calc(100svh - 32px);
+  margin: auto;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--hud-edge-bright);
+  border-radius: 24px 24px 24px 8px;
+  color: var(--hud-text);
+  background: rgba(8, 20, 26, 0.98);
+  box-shadow: 0 36px 130px rgba(0, 0, 0, 0.72);
+}
+
+.agent-manager-dialog::backdrop {
+  background: rgba(1, 7, 10, 0.78);
+  backdrop-filter: blur(8px);
+}
+
+.agent-manager-shell {
+  max-height: calc(100svh - 34px);
+  padding: 24px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.agent-manager-heading,
+.agent-manager-actions,
+.agent-connection-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.agent-manager-heading {
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--hud-edge);
+}
+
+.agent-manager-heading .eyebrow,
+.agent-manager-heading h2,
+.agent-manager-intro,
+.agent-manager-actions p {
+  margin: 0;
+}
+
+.agent-manager-heading h2 {
+  margin-top: 5px;
+  font-size: clamp(1.4rem, 4vw, 2rem);
+  text-wrap: balance;
+}
+
+.dialog-close {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  flex: 0 0 42px;
+  place-items: center;
+  border: 1px solid var(--hud-edge);
+  border-radius: 50%;
+  color: var(--hud-muted);
+  background: transparent;
+  font-size: 1.25rem;
+  cursor: pointer;
+}
+
+.dialog-close:hover {
+  border-color: var(--hud-edge-bright);
+  color: var(--hud-text);
+}
+
+.agent-manager-intro {
+  max-width: 680px;
+  padding: 18px 0;
+  color: var(--hud-muted);
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+
+.agent-connection-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-connection-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 18px;
+  padding: 16px;
+  border: 1px solid var(--hud-edge);
+  border-radius: 16px 16px 16px 5px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.agent-connection-list li[data-active] {
+  border-color: rgba(131, 215, 194, 0.48);
+  background: rgba(131, 215, 194, 0.065);
+}
+
+.agent-connection-copy {
+  min-width: 0;
+}
+
+.agent-connection-copy > div {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.agent-connection-copy strong,
+.agent-connection-copy span,
+.agent-connection-copy p,
+.agent-connection-copy small {
+  overflow-wrap: anywhere;
+}
+
+.agent-connection-copy strong {
+  font-size: 0.92rem;
+}
+
+.agent-connection-copy span,
+.agent-connection-copy small,
+.agent-connection-copy p {
+  color: var(--hud-muted);
+  font-size: 0.65rem;
+}
+
+.agent-connection-copy p {
+  margin: 5px 0 3px;
+}
+
+.agent-connection-copy small {
+  display: block;
+}
+
+.agent-connection-copy .signer-fingerprint {
+  max-width: none;
+  margin-top: 7px;
+}
+
+.agent-connection-stats {
+  display: flex;
+  gap: 14px;
+  margin: 0;
+  text-align: right;
+}
+
+.agent-connection-stats div {
+  min-width: 62px;
+}
+
+.agent-connection-stats dt {
+  color: var(--hud-muted);
+  font-size: 0.52rem;
+  text-transform: uppercase;
+}
+
+.agent-connection-stats dd {
+  margin: 3px 0 0;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.85rem;
+}
+
+.agent-connection-actions {
+  justify-content: flex-end;
+}
+
+.agent-connection-actions .quiet-action,
+.active-agent-action,
+.text-action {
+  min-height: 38px;
+  padding: 8px 11px;
+  border-radius: 9px;
+  font-size: 0.65rem;
+}
+
+.active-agent-action {
+  border: 1px solid rgba(156, 221, 160, 0.4);
+  color: var(--hud-verified);
+  background: rgba(156, 221, 160, 0.08);
+}
+
+.text-action {
+  border: 0;
+  color: var(--hud-muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.text-action:hover {
+  color: var(--hud-text);
+}
+
+.agent-manager-actions {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--hud-edge);
+}
+
+.agent-manager-actions p {
+  color: var(--hud-muted);
+  font-size: 0.68rem;
+}
+
+.agent-profile-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  padding-top: 20px;
+}
+
+.agent-profile-form .form-wide {
+  grid-column: 1 / -1;
+}
+
+.agent-profile-form label {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  color: var(--hud-muted);
+  font-size: 0.67rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.agent-profile-form input,
+.agent-profile-form textarea {
+  width: 100%;
+  border: 1px solid var(--hud-edge);
+  border-radius: 10px;
+  padding: 11px 12px;
+  color: var(--hud-text);
+  background: rgba(2, 10, 14, 0.72);
+  font: inherit;
+  font-size: 0.8rem;
+  text-transform: none;
+}
+
+.agent-profile-form textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.agent-profile-form label > small,
+.agent-form-explainer {
+  color: var(--hud-muted);
+  font-size: 0.63rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.5;
+  text-transform: none;
+}
+
+.agent-form-explainer {
+  max-width: 700px;
+  margin: 0 0 2px;
+}
+
+.agent-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.agent-form-error {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 124, 124, 0.36);
+  border-radius: 10px;
+  color: #ffb1b1;
+  background: rgba(255, 82, 82, 0.08);
+  font-size: 0.72rem;
+}
+
 .guildglass-casebar {
   min-height: 76px;
   display: flex;
@@ -3110,6 +3452,19 @@ section.live-guild-section {
     font-size: 0.66rem;
   }
 
+  .agent-manager-trigger strong,
+  .agent-manager-trigger small {
+    max-width: 105px;
+  }
+
+  .agent-connection-list li {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .agent-connection-actions {
+    grid-column: 1 / -1;
+  }
+
   .guildglass-casebar {
     min-height: 66px;
     padding: 8px 14px;
@@ -3185,6 +3540,59 @@ section.live-guild-section {
 }
 
 @media (max-width: 540px) {
+  .owner-identity {
+    display: none;
+  }
+
+  .agent-manager-trigger {
+    min-height: 40px;
+    padding-inline: 8px;
+  }
+
+  .agent-manager-trigger .signer-ready-mark,
+  .agent-manager-trigger small {
+    display: none;
+  }
+
+  .agent-manager-dialog {
+    width: calc(100vw - 16px);
+    max-height: calc(100svh - 16px);
+    border-radius: 18px 18px 18px 6px;
+  }
+
+  .agent-manager-shell {
+    max-height: calc(100svh - 18px);
+    padding: 16px;
+  }
+
+  .agent-connection-list li,
+  .agent-profile-form {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-connection-stats {
+    justify-content: flex-start;
+    text-align: left;
+  }
+
+  .agent-connection-actions,
+  .agent-manager-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .agent-connection-actions > *,
+  .agent-manager-actions .primary-action,
+  .agent-form-actions > * {
+    flex: 1;
+    text-align: center;
+  }
+
+  .agent-form-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
   .site-shell-header .webmcp-readiness {
     display: none;
   }

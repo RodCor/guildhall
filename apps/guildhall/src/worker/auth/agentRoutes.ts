@@ -22,6 +22,8 @@ import {
   revokeAgentKey,
   revokeScopedCredential,
   setAutonomyPolicy,
+  updateOwnedAgent,
+  type AgentProfile,
   type PublicRedactionCategory,
 } from "../repositories/index.js";
 import type { GuildhallEnv } from "../types.js";
@@ -130,6 +132,9 @@ export async function handleAgentRoute(
     );
   }
   const agentMatch = AGENT_ROUTE.exec(url.pathname);
+  if (agentMatch !== null && request.method === "PATCH") {
+    return updateAgentProfile(request, env, decodeURIComponent(agentMatch[1]!));
+  }
   if (agentMatch !== null && request.method === "GET") {
     return getOwnedAgent(request, env, decodeURIComponent(agentMatch[1]!));
   }
@@ -166,26 +171,49 @@ async function registerBrowserAgent(
   }
 
   const now = new Date().toISOString();
-  const agent = await createAgent(env.GUILD_DB, {
-    agentId: crypto.randomUUID(),
-    ownerId: owner.principal.ownerId,
-    ...profile,
-    createdAt: now,
-  });
-  const registeredKey = await registerAgentKey(env.GUILD_DB, {
-    keyId: key.keyId,
-    ownerId: owner.principal.ownerId,
-    agentId: agent.agentId,
-    publicJwk: canonicalJwk,
-    source: "browser",
-    createdAt: now,
-  });
-  if (registeredKey === null) return invalid("public key");
+  let agent: Awaited<ReturnType<typeof createAgent>>;
+  try {
+    agent = await createAgent(env.GUILD_DB, {
+      agentId: crypto.randomUUID(),
+      ownerId: owner.principal.ownerId,
+      ...profile,
+      createdAt: now,
+    });
+  } catch (error) {
+    if (isUniqueConstraint(error)) return profileConflict();
+    throw error;
+  }
+
+  let registeredKey: Awaited<ReturnType<typeof registerAgentKey>>;
+  try {
+    registeredKey = await registerAgentKey(env.GUILD_DB, {
+      keyId: key.keyId,
+      ownerId: owner.principal.ownerId,
+      agentId: agent.agentId,
+      publicJwk: canonicalJwk,
+      source: "browser",
+      createdAt: now,
+    });
+  } catch (error) {
+    await discardUnconnectedAgent(
+      env.GUILD_DB,
+      owner.principal.ownerId,
+      agent.agentId,
+    );
+    if (isUniqueConstraint(error)) return signerConflict();
+    throw error;
+  }
+  if (registeredKey === null) {
+    await discardUnconnectedAgent(
+      env.GUILD_DB,
+      owner.principal.ownerId,
+      agent.agentId,
+    );
+    return invalid("public key");
+  }
   return noStoreJson(
     {
-      agentId: agent.agentId,
-      characterName: agent.characterName,
-      keyId: registeredKey.keyId,
+      ...ownedAgentResponse(agent, registeredKey.keyId),
       autonomy: { enabled: false, version: 1 },
     },
     { status: 201 },
@@ -207,6 +235,48 @@ async function getOwnedAgent(
   return agent === null
     ? noStoreJson({ error: "AGENT_NOT_FOUND" }, { status: 404 })
     : noStoreJson({ agent });
+}
+
+async function updateAgentProfile(
+  request: Request,
+  env: GuildhallEnv,
+  agentId: string,
+): Promise<Response> {
+  const owner = await authorizeOwnerMutation(request, env);
+  if (!owner.ok) return owner.response;
+  const profile = parseAgentProfile(await readJsonRecord(request));
+  if (profile === null) return invalid("agent profile");
+  const scan = scanPublicPayload(profile);
+  if (!scan.safe) return unsafe(scan);
+
+  let agent: Awaited<ReturnType<typeof updateOwnedAgent>>;
+  try {
+    agent = await updateOwnedAgent(env.GUILD_DB, {
+      ownerId: owner.principal.ownerId,
+      agentId,
+      ...profile,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    if (isUniqueConstraint(error)) return profileConflict();
+    throw error;
+  }
+  if (agent === null) {
+    return noStoreJson({ error: "AGENT_NOT_FOUND" }, { status: 404 });
+  }
+  const browserKey = (await listAgentKeys(env.GUILD_DB, agentId)).find(
+    (key) => key.source === "browser" && key.status === "active",
+  );
+  if (browserKey === undefined) {
+    return noStoreJson(
+      {
+        error: "BROWSER_SIGNER_NOT_FOUND",
+        message: "This agent has no active browser signer",
+      },
+      { status: 409 },
+    );
+  }
+  return noStoreJson(ownedAgentResponse(agent, browserKey.keyId));
 }
 
 async function startPairing(
@@ -904,6 +974,65 @@ function invalid(subject: string): Response {
     { error: "INVALID_REQUEST", message: `Invalid ${subject}` },
     { status: 400 },
   );
+}
+
+function profileConflict(): Response {
+  return noStoreJson(
+    {
+      error: "PROFILE_HANDLE_TAKEN",
+      message: "Choose a different public handle",
+    },
+    { status: 409 },
+  );
+}
+
+function signerConflict(): Response {
+  return noStoreJson(
+    {
+      error: "SIGNER_ALREADY_CONNECTED",
+      message: "Create this agent with a fresh local signer",
+    },
+    { status: 409 },
+  );
+}
+
+async function discardUnconnectedAgent(
+  database: D1Database,
+  ownerId: string,
+  agentId: string,
+): Promise<void> {
+  await database
+    .prepare(
+      `DELETE FROM agents
+       WHERE agent_id = ? AND owner_id = ?
+         AND NOT EXISTS (
+           SELECT 1 FROM agent_keys WHERE agent_keys.agent_id = agents.agent_id
+         )`,
+    )
+    .bind(agentId, ownerId)
+    .run();
+}
+
+function isUniqueConstraint(error: unknown): boolean {
+  return (
+    error instanceof Error && error.message.includes("UNIQUE constraint failed")
+  );
+}
+
+function ownedAgentResponse(agent: AgentProfile, keyId: string) {
+  return {
+    agentId: agent.agentId,
+    slug: agent.slug,
+    characterName: agent.characterName,
+    characterClass: agent.characterClass,
+    technicalName: agent.technicalName,
+    guildName: agent.guildName,
+    publicBio: agent.publicBio,
+    transportStatus: agent.transportStatus,
+    totalPoints: agent.totalPoints,
+    completedMissions: agent.completedMissions,
+    keyId,
+  };
 }
 
 function unsafe(

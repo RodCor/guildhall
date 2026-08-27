@@ -9,29 +9,68 @@ export interface BrowserSigningIdentity {
 }
 
 interface StoredIdentity {
-  readonly id: typeof PRIMARY_RECORD;
+  readonly id: string;
   readonly keyId: string;
   readonly publicJwk: JsonWebKey;
   readonly privateKey: CryptoKey;
 }
 
-export async function ensureBrowserSigningIdentity(): Promise<BrowserSigningIdentity> {
+export async function ensureBrowserSigningIdentity(
+  expectedKeyId?: string,
+): Promise<BrowserSigningIdentity> {
   const database = await openIdentityDatabase();
   try {
-    const existing = await readIdentity(database);
+    const recordId = expectedKeyId ?? PRIMARY_RECORD;
+    const existing = await readIdentity(database, recordId);
     if (existing !== null) {
       return existing;
     }
 
-    const pair = (await crypto.subtle.generateKey({ name: "Ed25519" }, false, [
-      "sign",
-      "verify",
-    ])) as CryptoKeyPair;
-    const publicJwk = await crypto.subtle.exportKey("jwk", pair.publicKey);
-    const keyId = await deriveBrowserKeyId(publicJwk);
-    const identity = { keyId, publicJwk, privateKey: pair.privateKey };
-    await writeIdentity(database, identity);
+    if (expectedKeyId !== undefined) {
+      const legacy = await readIdentity(database, PRIMARY_RECORD);
+      if (legacy?.keyId === expectedKeyId) {
+        await writeIdentity(database, expectedKeyId, legacy);
+        return legacy;
+      }
+      throw new Error("This browser does not hold the selected agent signer");
+    }
+
+    const identity = await generateIdentity();
+    await writeIdentity(database, PRIMARY_RECORD, identity);
     return identity;
+  } finally {
+    database.close();
+  }
+}
+
+export async function createBrowserSigningIdentity(): Promise<BrowserSigningIdentity> {
+  const identity = await generateIdentity();
+  const database = await openIdentityDatabase();
+  try {
+    await writeIdentity(database, identity.keyId, identity);
+    return identity;
+  } finally {
+    database.close();
+  }
+}
+
+export async function hasBrowserSigningIdentity(
+  keyId: string,
+): Promise<boolean> {
+  try {
+    await ensureBrowserSigningIdentity(keyId);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function removeBrowserSigningIdentity(
+  keyId: string,
+): Promise<void> {
+  const database = await openIdentityDatabase();
+  try {
+    await deleteIdentity(database, keyId);
   } finally {
     database.close();
   }
@@ -100,10 +139,11 @@ function openIdentityDatabase(): Promise<IDBDatabase> {
 
 function readIdentity(
   database: IDBDatabase,
+  recordId: string,
 ): Promise<BrowserSigningIdentity | null> {
   return new Promise((resolve, reject) => {
     const transaction = database.transaction(STORE_NAME, "readonly");
-    const request = transaction.objectStore(STORE_NAME).get(PRIMARY_RECORD);
+    const request = transaction.objectStore(STORE_NAME).get(recordId);
     request.onsuccess = () => {
       const value = request.result as StoredIdentity | undefined;
       resolve(
@@ -123,12 +163,13 @@ function readIdentity(
 
 function writeIdentity(
   database: IDBDatabase,
+  recordId: string,
   identity: BrowserSigningIdentity,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const transaction = database.transaction(STORE_NAME, "readwrite");
     transaction.objectStore(STORE_NAME).put({
-      id: PRIMARY_RECORD,
+      id: recordId,
       ...identity,
     } satisfies StoredIdentity);
     transaction.oncomplete = () => resolve();
@@ -137,6 +178,31 @@ function writeIdentity(
     transaction.onabort = () =>
       reject(new Error("Browser identity storage was aborted"));
   });
+}
+
+function deleteIdentity(
+  database: IDBDatabase,
+  recordId: string,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction(STORE_NAME, "readwrite");
+    transaction.objectStore(STORE_NAME).delete(recordId);
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () =>
+      reject(new Error("Browser identity could not be removed"));
+    transaction.onabort = () =>
+      reject(new Error("Browser identity removal was aborted"));
+  });
+}
+
+async function generateIdentity(): Promise<BrowserSigningIdentity> {
+  const pair = (await crypto.subtle.generateKey({ name: "Ed25519" }, false, [
+    "sign",
+    "verify",
+  ])) as CryptoKeyPair;
+  const publicJwk = await crypto.subtle.exportKey("jwk", pair.publicKey);
+  const keyId = await deriveBrowserKeyId(publicJwk);
+  return { keyId, publicJwk, privateKey: pair.privateKey };
 }
 
 function encodeBase64Url(value: Uint8Array): string {

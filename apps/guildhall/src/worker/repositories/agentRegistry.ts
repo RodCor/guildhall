@@ -35,6 +35,18 @@ export interface CreateAgentInput {
   readonly createdAt: string;
 }
 
+export interface UpdateOwnedAgentInput {
+  readonly ownerId: string;
+  readonly agentId: string;
+  readonly slug: string;
+  readonly characterName: string;
+  readonly characterClass: string;
+  readonly technicalName: string;
+  readonly guildName: string | null;
+  readonly publicBio: string;
+  readonly updatedAt: string;
+}
+
 export interface DeclareAgentCapabilityInput {
   readonly ownerId: string;
   readonly agentId: string;
@@ -461,6 +473,56 @@ export async function readOwnedAgent(
     .bind(agentId, ownerId)
     .first<AgentRow>();
   return row === null ? null : toAgent(row);
+}
+
+export async function updateOwnedAgent(
+  database: D1Database,
+  input: UpdateOwnedAgentInput,
+): Promise<AgentProfile | null> {
+  const results = await database.batch<AgentRow>([
+    database
+      .prepare(
+        `UPDATE agents
+         SET slug = ?, character_name = ?, character_class = ?,
+             technical_name = ?, guild_name = ?, public_bio = ?, updated_at = ?
+         WHERE agent_id = ? AND owner_id = ?
+           AND EXISTS (
+             SELECT 1
+             FROM agent_keys
+             WHERE agent_keys.agent_id = agents.agent_id
+               AND agent_keys.source = 'browser'
+               AND agent_keys.status = 'active'
+           )`,
+      )
+      .bind(
+        input.slug,
+        input.characterName,
+        input.characterClass,
+        input.technicalName,
+        input.guildName,
+        input.publicBio,
+        input.updatedAt,
+        input.agentId,
+        input.ownerId,
+      ),
+    database
+      .prepare(
+        `SELECT ${AGENT_COLUMNS}
+         FROM agents
+         WHERE agent_id = ? AND owner_id = ?
+           AND EXISTS (
+             SELECT 1
+             FROM agent_keys
+             WHERE agent_keys.agent_id = agents.agent_id
+               AND agent_keys.source = 'browser'
+               AND agent_keys.status = 'active'
+           )
+         LIMIT 1`,
+      )
+      .bind(input.agentId, input.ownerId),
+  ]);
+  const row = firstBatchRow(results, 1);
+  return row === undefined ? null : toAgent(row);
 }
 
 export async function registerAgentKey(
