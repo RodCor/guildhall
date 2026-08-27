@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import { createPortal } from "react-dom";
 
 import {
@@ -36,6 +43,10 @@ export interface ActiveBrowserAgent {
   readonly keyId: string;
 }
 
+export interface OwnerGatewayHandle {
+  readonly openIdentityControl: () => void;
+}
+
 type ManagerMode = "closed" | "list" | "create" | "edit";
 
 const CHARACTER_CLASSES = [
@@ -54,13 +65,13 @@ const CHARACTER_CLASSES = [
   "Wizard",
 ] as const;
 
-export function OwnerGateway({
-  onAgentChange,
-  onSessionResolved,
-}: {
-  readonly onAgentChange: (agent: ActiveBrowserAgent | null) => void;
-  readonly onSessionResolved: (resolved: boolean) => void;
-}) {
+export const OwnerGateway = forwardRef<
+  OwnerGatewayHandle,
+  {
+    readonly onAgentChange: (agent: ActiveBrowserAgent | null) => void;
+    readonly onSessionResolved: (resolved: boolean) => void;
+  }
+>(function OwnerGateway({ onAgentChange, onSessionResolved }, ref) {
   const [session, setSession] = useState<OwnerSession | null>(null);
   const [agents, setAgents] = useState<readonly AgentSummary[]>([]);
   const [localSignerKeyIds, setLocalSignerKeyIds] = useState<
@@ -77,6 +88,7 @@ export function OwnerGateway({
     agents.find((candidate) => candidate.agentId === activeAgentId) ?? null;
   const editingAgent =
     agents.find((candidate) => candidate.agentId === editingAgentId) ?? null;
+  const isAuthenticated = session !== null;
 
   useEffect(() => {
     let active = true;
@@ -147,6 +159,20 @@ export function OwnerGateway({
     const timeoutId = window.setTimeout(() => setNotice(null), 6_000);
     return () => window.clearTimeout(timeoutId);
   }, [notice]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      openIdentityControl() {
+        if (!isAuthenticated) {
+          window.location.assign("/api/auth/github/start");
+          return;
+        }
+        openManager(agents.length === 0 ? "create" : "list");
+      },
+    }),
+    [agents.length, isAuthenticated],
+  );
 
   function selectAgent(agent: AgentSummary | null, ownerId?: string) {
     setActiveAgentId(agent?.agentId ?? null);
@@ -421,7 +447,7 @@ export function OwnerGateway({
       )}
     </div>
   );
-}
+});
 
 function AgentManagerDialog({
   mode,

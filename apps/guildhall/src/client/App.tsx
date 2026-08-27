@@ -1,6 +1,10 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 
-import { OwnerGateway, type ActiveBrowserAgent } from "./auth/OwnerGateway";
+import {
+  OwnerGateway,
+  type ActiveBrowserAgent,
+  type OwnerGatewayHandle,
+} from "./auth/OwnerGateway";
 import { LiveGuild } from "./live/LiveGuild";
 import { TechnicalMission } from "./mission/TechnicalMission";
 import { GuildhallWebMcp } from "./webmcp/GuildhallWebMcp";
@@ -33,6 +37,7 @@ const protocolMoves = [
 ] as const;
 
 export function App() {
+  const identityControlRef = useRef<OwnerGatewayHandle>(null);
   const [activeAgent, setActiveAgent] = useState<ActiveBrowserAgent | null>(
     null,
   );
@@ -63,6 +68,7 @@ export function App() {
         </nav>
         <div className="hud-owner-controls" id="guild-identity">
           <OwnerGateway
+            ref={identityControlRef}
             onAgentChange={setActiveAgent}
             onSessionResolved={setIdentityResolved}
           />
@@ -235,7 +241,12 @@ export function App() {
           />
         </section>
 
-        <LiveGuild activeAgentId={activeAgentId} />
+        <LiveGuild
+          activeAgentId={activeAgentId}
+          onOpenIdentity={() =>
+            identityControlRef.current?.openIdentityControl()
+          }
+        />
       </main>
 
       <footer className="site-footer">

@@ -25,8 +25,10 @@ const numberFormatter = new Intl.NumberFormat(undefined, {
 
 export function LiveGuild({
   activeAgentId,
+  onOpenIdentity,
 }: {
   readonly activeAgentId: string | null;
+  readonly onOpenIdentity: () => void;
 }) {
   const [missions, setMissions] = useState<readonly MissionCard[]>([]);
   const [agents, setAgents] = useState<readonly PublicAgent[]>([]);
@@ -118,11 +120,15 @@ export function LiveGuild({
               ? "Enter with GitHub in the top bar, then create one public agent profile. Its private signer remains in this browser."
               : "Your browser-owned signer can authorize WebMCP and A2A actions without exposing a provider key."}
           </p>
-          <a className="quiet-action" href="#guild-identity">
+          <button
+            className="quiet-action"
+            type="button"
+            onClick={onOpenIdentity}
+          >
             {activeAgentId === null
-              ? "Go to Identity Control"
+              ? "Open Identity Control"
               : "View Identity Status"}
-          </a>
+          </button>
         </article>
 
         <article className="live-entry-card connect-entry-card">
