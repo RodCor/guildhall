@@ -124,10 +124,8 @@ const DEMO_PHASES: readonly DemoPhase[] = [
 
 export function TechnicalMission({
   activeAgentId,
-  ownerControls,
 }: {
   readonly activeAgentId: string | null;
-  readonly ownerControls: ReactNode;
 }) {
   const query = useMemo(() => new URLSearchParams(window.location.search), []);
   const [missions, setMissions] = useState<readonly MissionCard[]>([]);
@@ -410,61 +408,21 @@ export function TechnicalMission({
       id="mission-chamber"
       aria-labelledby="mission-console-title"
     >
-      <header className="guildglass-header">
-        <a className="hud-wordmark" href="/" aria-label="Guildhall home">
-          <span className="hud-wordmark-mark" aria-hidden="true">
-            G
-          </span>
-          <span>
-            <strong>Guildhall</strong>
-            <small>Autonomous party protocol</small>
-          </span>
-        </a>
-        <div className="hud-header-meta">
-          <span className={`stream-chip stream-${streamState}`}>
-            <span aria-hidden="true" />
-            {streamState === "live" ? "Ledger live" : "Protocol ready"}
-          </span>
-          {ownerControls}
-        </div>
-      </header>
-
       <div className="guildglass-casebar">
         <div>
-          <p className="eyebrow">Public Case 001</p>
-          <h1 id="mission-console-title">Accessibility Dungeon</h1>
+          <p className="eyebrow">Demo Case 001 / Reference Party</p>
+          <h3 id="mission-console-title">Accessibility Dungeon</h3>
         </div>
-        <details className="case-menu">
-          <summary aria-label="Open case menu">Case menu</summary>
-          <div className="case-menu-popover">
-            <p>
-              A live WebMCP → A2A → PactBridge protocol run. Public input only;
-              no provider credentials.
-            </p>
-            {missions.length > 0 ? (
-              <label className="mission-picker">
-                Inspect a past case
-                <select
-                  name="mission"
-                  value={missionId}
-                  onChange={(event) => chooseMission(event.target.value)}
-                >
-                  <option value="">Choose a completed case…</option>
-                  {missions.map((mission) => (
-                    <option key={mission.missionId} value={mission.missionId}>
-                      {mission.title} · {mission.displayState}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
-          </div>
-        </details>
+        <span className={`stream-chip stream-${streamState}`}>
+          <span aria-hidden="true" />
+          {streamState === "live" ? "Verified Ledger Live" : "Protocol Ready"}
+        </span>
       </div>
 
       {error !== null ? (
         <p className="console-error" role="alert">
-          {error}. The public mission is preserved and can be resumed.
+          The live run paused before its next verified event. Return to step 00
+          and retry; any accepted public work remains preserved.
         </p>
       ) : null}
 
@@ -824,7 +782,7 @@ function MissionChamber({
               {HUD_STEPS[stepIndex]?.protocol ?? "Guildhall"}
             </code>
           </div>
-          <h2>{content.title}</h2>
+          <h4>{content.title}</h4>
           <p>{content.detail}</p>
           <dl className="hud-facts">
             {content.facts.slice(0, 2).map((fact) => (
@@ -1862,7 +1820,7 @@ function MissionLoadingStage() {
             <span>00</span>
             <code>Guildhall</code>
           </div>
-          <h2>Opening the public ledger…</h2>
+          <h4>Opening the public ledger…</h4>
           <p>The case will begin at its first verified event.</p>
         </article>
       </div>
@@ -1910,7 +1868,7 @@ function EmptyMissionStage({
             <span>00</span>
             <code translate="no">Guildhall</code>
           </div>
-          <h2>{content.title}</h2>
+          <h4>{content.title}</h4>
           <p>{content.detail}</p>
           <dl className="hud-facts">
             {content.facts.map((fact) => (
