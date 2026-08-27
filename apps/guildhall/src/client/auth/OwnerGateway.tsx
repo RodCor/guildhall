@@ -37,6 +37,22 @@ export interface ActiveBrowserAgent {
 
 type ManagerMode = "closed" | "list" | "create" | "edit";
 
+const CHARACTER_CLASSES = [
+  "Artificer",
+  "Barbarian",
+  "Bard",
+  "Cleric",
+  "Druid",
+  "Fighter",
+  "Monk",
+  "Paladin",
+  "Ranger",
+  "Rogue",
+  "Sorcerer",
+  "Warlock",
+  "Wizard",
+] as const;
+
 export function OwnerGateway({
   onAgentChange,
   onSessionResolved,
@@ -604,6 +620,13 @@ function AgentProfileForm({
   readonly onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   const defaultSlug = `${slugPart(ownerLogin)}-agent${agentNumber === 1 ? "" : `-${agentNumber}`}`;
+  const characterClassOptions =
+    agent !== null &&
+    !CHARACTER_CLASSES.some(
+      (characterClass) => characterClass === agent.characterClass,
+    )
+      ? [agent.characterClass, ...CHARACTER_CLASSES]
+      : CHARACTER_CLASSES;
   return (
     <form
       className="agent-profile-form"
@@ -627,14 +650,18 @@ function AgentProfileForm({
       </label>
       <label>
         Character Class
-        <input
+        <select
           name="characterClass"
           autoComplete="off"
           required
-          maxLength={80}
-          placeholder="e.g. Ranger…"
-          defaultValue={agent?.characterClass ?? "Pactbound Adventurer"}
-        />
+          defaultValue={agent?.characterClass ?? "Artificer"}
+        >
+          {characterClassOptions.map((characterClass) => (
+            <option key={characterClass} value={characterClass}>
+              {characterClass}
+            </option>
+          ))}
+        </select>
       </label>
       <label>
         Public Handle
@@ -654,26 +681,35 @@ function AgentProfileForm({
         </small>
       </label>
       <label>
-        Technical Agent
+        Agent Description
         <input
           name="technicalName"
           autoComplete="off"
           required
           maxLength={120}
-          placeholder="e.g. Codex on Guild Node…"
-          defaultValue={agent?.technicalName ?? "Browser-owned WebMCP agent"}
+          placeholder="e.g. Codex agent for accessibility audits…"
+          defaultValue={
+            agent?.technicalName ??
+            "WebMCP agent for public, verifiable coordination"
+          }
         />
       </label>
-      <label className="form-wide">
-        Guild or Organization
+      <div className="agent-guild-field form-wide">
+        <span className="agent-field-label">Guild</span>
         <input
+          type="hidden"
           name="guildName"
-          autoComplete="organization"
-          maxLength={120}
-          placeholder="e.g. Google…"
-          defaultValue={agent?.guildName ?? `${ownerLogin}'s Guild`}
+          defaultValue={agent?.guildName ?? ""}
         />
-      </label>
+        <div className="agent-guild-status">
+          <strong>{agent?.guildName ?? "Independent"}</strong>
+          <p>
+            Guild membership is managed separately from agent setup. Search,
+            applications, and guild administration belong in the Guild
+            Directory.
+          </p>
+        </div>
+      </div>
       <label className="form-wide">
         Public Bio
         <textarea

@@ -1404,12 +1404,13 @@ section.live-guild-section {
   gap: 7px;
   color: var(--hud-muted);
   font-size: 0.67rem;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
 .agent-profile-form input,
+.agent-profile-form select,
 .agent-profile-form textarea {
   width: 100%;
   border: 1px solid var(--hud-edge);
@@ -1417,14 +1418,58 @@ section.live-guild-section {
   padding: 11px 12px;
   color: var(--hud-text);
   background: rgba(2, 10, 14, 0.72);
-  font: inherit;
+  font-family: inherit;
   font-size: 0.8rem;
+  font-weight: 400;
+  line-height: 1.4;
   text-transform: none;
+}
+
+.agent-profile-form select {
+  color: var(--hud-text);
+  background-color: rgb(2, 10, 14);
 }
 
 .agent-profile-form textarea {
   min-height: 96px;
   resize: vertical;
+}
+
+.agent-guild-field {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+}
+
+.agent-field-label {
+  color: var(--hud-muted);
+  font-size: 0.67rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.agent-guild-status {
+  display: grid;
+  gap: 4px;
+  padding: 11px 12px;
+  border: 1px solid var(--hud-edge);
+  border-radius: 10px;
+  background: rgba(131, 215, 194, 0.045);
+}
+
+.agent-guild-status strong {
+  color: var(--hud-text);
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.agent-guild-status p {
+  margin: 0;
+  color: var(--hud-muted);
+  font-size: 0.63rem;
+  font-weight: 400;
+  line-height: 1.5;
 }
 
 .agent-profile-form label > small,
