@@ -1051,6 +1051,134 @@ function mainTimelineIndex(chapterId: DemoChapterId): number {
   return MAIN_HUD_STEPS.findIndex((step) => step.id === chapterId);
 }
 
+type SceneRoute = "requester" | "scout" | "second";
+type ScenePacketDirection = "outbound" | "inbound" | "stalled";
+type ScenePacketTone = "default" | "danger" | "recovery" | "reward";
+
+interface ScenePacket {
+  readonly label: string;
+  readonly direction: ScenePacketDirection;
+  readonly tone?: ScenePacketTone;
+  readonly delayMs?: number;
+}
+
+function scenePackets(
+  chapterId: DemoChapterId,
+  route: SceneRoute,
+): readonly ScenePacket[] {
+  switch (chapterId) {
+    case "publish":
+      return route === "requester"
+        ? [{ label: "TASK", direction: "outbound", delayMs: 280 }]
+        : [];
+    case "recruit":
+      if (route === "scout") {
+        return [{ label: "APPLY", direction: "inbound", delayMs: 520 }];
+      }
+      return route === "second"
+        ? [{ label: "APPLY", direction: "inbound", delayMs: 760 }]
+        : [];
+    case "pact":
+      if (route === "requester") {
+        return [{ label: "SIGN", direction: "outbound", delayMs: 180 }];
+      }
+      return [
+        {
+          label: "SIGN",
+          direction: "inbound",
+          delayMs: route === "scout" ? 360 : 540,
+        },
+      ];
+    case "work":
+      return route === "scout"
+        ? [{ label: "FINDINGS", direction: "inbound", delayMs: 360 }]
+        : [];
+    case "failure":
+      return route === "second"
+        ? [
+            {
+              label: "TIMEOUT",
+              direction: "stalled",
+              tone: "danger",
+              delayMs: 320,
+            },
+          ]
+        : [];
+    case "replacement":
+      return route === "second"
+        ? [
+            {
+              label: "ROLE",
+              direction: "outbound",
+              tone: "recovery",
+              delayMs: 260,
+            },
+            {
+              label: "FIXES",
+              direction: "inbound",
+              tone: "recovery",
+              delayMs: 1_480,
+            },
+          ]
+        : [];
+    case "reward":
+      if (route === "scout") {
+        return [
+          {
+            label: "+50 REP",
+            direction: "outbound",
+            tone: "reward",
+            delayMs: 940,
+          },
+        ];
+      }
+      return route === "second"
+        ? [
+            {
+              label: "+60 REP",
+              direction: "outbound",
+              tone: "reward",
+              delayMs: 1_140,
+            },
+          ]
+        : [];
+    default:
+      return [];
+  }
+}
+
+function AgentTrace({
+  route,
+  active,
+  chapterId,
+}: {
+  readonly route: SceneRoute;
+  readonly active: boolean;
+  readonly chapterId: DemoChapterId;
+}) {
+  const packets = scenePackets(chapterId, route);
+
+  return (
+    <div
+      className={`aether-trace trace-${route}${active ? " trace-active" : ""}`}
+    >
+      {packets.map((packet, index) => (
+        <span
+          className={`trace-flow flow-${packet.direction} flow-${packet.tone ?? "default"}`}
+          key={`${chapterId}-${route}-${packet.label}-${index}`}
+          style={
+            {
+              "--flow-delay": `${packet.delayMs ?? 0}ms`,
+            } as CSSProperties
+          }
+        >
+          <span>{packet.label}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function GuildglassScene({
   chapterId,
   requesterName,
@@ -1105,15 +1233,13 @@ function GuildglassScene({
         <small>WebMCP</small>
       </div>
 
-      <div
-        className={`aether-trace trace-requester${chapterIndex >= 1 ? " trace-active" : ""}`}
+      <AgentTrace
+        route="requester"
+        active={chapterIndex >= 1}
+        chapterId={chapterId}
       />
-      <div
-        className={`aether-trace trace-scout${scoutPresent ? " trace-active" : ""}`}
-      />
-      <div
-        className={`aether-trace trace-second${secondPresent ? " trace-active" : ""}`}
-      />
+      <AgentTrace route="scout" active={scoutPresent} chapterId={chapterId} />
+      <AgentTrace route="second" active={secondPresent} chapterId={chapterId} />
 
       <HudAgentNode
         className="node-requester"
@@ -1178,6 +1304,11 @@ function GuildglassScene({
       <div
         className={`verification-plane${isVerifying ? " verification-visible" : ""}`}
       >
+        <div className="verification-ingest">
+          <span>FINDINGS</span>
+          <i>+</i>
+          <span>FIXES</span>
+        </div>
         <div>
           <span>✓</span>
           <strong>Ownership</strong>
