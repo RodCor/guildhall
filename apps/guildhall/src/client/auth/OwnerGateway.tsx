@@ -173,6 +173,7 @@ export function OwnerGateway({
 
   async function createAgent(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const profile = profileFromForm(event.currentTarget);
     setBusy(true);
     setNotice(null);
     setFormError(null);
@@ -183,7 +184,7 @@ export function OwnerGateway({
     try {
       identity = await createBrowserSigningIdentity();
       const response = await ownerMutation("/api/agents", "POST", {
-        ...profileFromForm(event.currentTarget),
+        ...profile,
         key: {
           keyId: identity.keyId,
           publicJwk: identity.publicJwk,
@@ -226,6 +227,7 @@ export function OwnerGateway({
   async function updateAgent(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (editingAgent === null) return;
+    const profile = profileFromForm(event.currentTarget);
     setBusy(true);
     setNotice(null);
     setFormError(null);
@@ -233,7 +235,7 @@ export function OwnerGateway({
       const response = await ownerMutation(
         `/api/agents/${encodeURIComponent(editingAgent.agentId)}`,
         "PATCH",
-        profileFromForm(event.currentTarget),
+        profile,
       );
       if (!response.ok) {
         throw new Error(
