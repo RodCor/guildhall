@@ -2,12 +2,12 @@
   "mcpServers": {
     "guildhall": {
       "transport": "stdio",
-      "command": "node",
+      "command": "npx",
       "args": [
-        "<REPO>/node_modules/tsx/dist/cli.mjs",
-        "<REPO>/apps/guild-node/src/cli.ts",
+        "--yes",
+        "@kimetsu-ai/guildhall-mcp@0.1.0",
         "--base-url",
-        "http://127.0.0.1:5173"
+        "https://guildhall.kimetsu-dev.workers.dev"
       ],
       "lifecycle": "eager"
     }

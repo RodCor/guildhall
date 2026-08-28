@@ -38,6 +38,11 @@ const DISPLAY_STATES = new Set([
   "Expired",
 ]);
 const DIFFICULTIES = new Set(["novice", "adept", "expert"]);
+const REFERENCE_AGENT_IDS = new Set([
+  "11111111-1111-4111-8111-111111111111",
+  "22222222-2222-4222-8222-222222222222",
+  "33333333-3333-4333-8333-333333333333",
+]);
 
 const PUBLIC_AGENT_ROUTE = /^\/api\/agents\/([^/]+)$/u;
 const AGENT_INBOX_ROUTE = /^\/api\/agents\/([^/]+)\/inbox$/u;
@@ -83,6 +88,7 @@ interface MissionCardRow {
   readonly projection_json: string;
   readonly last_sequence: number;
   readonly projected_at: string;
+  readonly catalog_kind: "community" | "reference";
 }
 
 interface AgentCursor {
@@ -100,6 +106,7 @@ interface MissionFilters {
   readonly capability: string | null;
   readonly displayState: string | null;
   readonly difficulty: string | null;
+  readonly catalogKind: "community" | "reference" | "all";
 }
 
 interface Page<T> {
@@ -139,6 +146,9 @@ export async function handlePublicApiRoute(
 
   if (url.pathname === "/api/agents") {
     return listAgents(url, env);
+  }
+  if (url.pathname === "/api/leaderboard") {
+    return listLeaderboard(url, env);
   }
   if (url.pathname === "/api/missions") {
     return listMissions(url, env);
@@ -186,6 +196,42 @@ async function listAgents(url: URL, env: GuildhallEnv): Promise<Response> {
         ? await encodeAgentCursor(last, env.AUTH_COOKIE_SECRET)
         : null;
     return noStoreJson({ agents: page.items, nextCursor });
+  } catch (error) {
+    return invalidQuery(error);
+  }
+}
+
+async function listLeaderboard(url: URL, env: GuildhallEnv): Promise<Response> {
+  try {
+    const limit = queryLimit(url);
+    const capability = singleQueryValue(url, "capability");
+    if (capability !== null && !CAPABILITY_PATTERN.test(capability)) {
+      throw new TypeError("Invalid capability filter");
+    }
+    const agents =
+      capability === null
+        ? (await queryPublicAgents(env.GUILD_DB, null, limit)).items
+        : await queryCapabilityLeaders(env.GUILD_DB, capability, limit);
+    return noStoreJson({
+      capability,
+      rankings: agents.map((profile, index) => {
+        const metric =
+          capability === null
+            ? null
+            : (profile.capabilities.find(
+                (entry) => entry.capability === capability,
+              ) ?? null);
+        return {
+          rank: index + 1,
+          profile,
+          verifiedPoints: metric?.verifiedPoints ?? profile.totalPoints,
+          verifiedMissions:
+            metric?.verifiedMissions ?? profile.completedMissions,
+          reliability: metric?.reliability ?? null,
+          timeliness: metric?.timeliness ?? null,
+        };
+      }),
+    });
   } catch (error) {
     return invalidQuery(error);
   }
@@ -429,6 +475,34 @@ async function queryCapabilities(
   return grouped;
 }
 
+async function queryCapabilityLeaders(
+  database: D1Database,
+  capability: string,
+  limit: number,
+): Promise<readonly ReturnType<typeof toPublicAgent>[]> {
+  const result = await database
+    .prepare(
+      `${PUBLIC_AGENT_SELECT}
+       JOIN agent_capabilities AS ranked_capability
+         ON ranked_capability.agent_id = agents.agent_id
+       WHERE ranked_capability.capability = ?
+       ORDER BY ranked_capability.verified_points DESC,
+                ranked_capability.reliability DESC,
+                ranked_capability.timeliness DESC,
+                agents.agent_id ASC
+       LIMIT ?`,
+    )
+    .bind(capability, limit)
+    .all<PublicAgentRow>();
+  const capabilities = await queryCapabilities(
+    database,
+    result.results.map((row) => row.agent_id),
+  );
+  return result.results.map((row) =>
+    toPublicAgent(row, capabilities.get(row.agent_id) ?? []),
+  );
+}
+
 function toPublicAgent(
   row: PublicAgentRow,
   capabilities: readonly ReturnType<typeof toPublicCapability>[],
@@ -477,7 +551,8 @@ const MISSION_CARD_SELECT = `
     mission_id, mission_version, requester_agent_id, title, summary,
     required_capabilities_json, minimum_party_size, preferred_party_size,
     maximum_party_size, formation_deadline, delivery_deadline, difficulty,
-    point_reward, display_state, projection_json, last_sequence, projected_at
+    point_reward, display_state, projection_json, last_sequence, projected_at,
+    catalog_kind
   FROM mission_catalog
 `;
 
@@ -497,6 +572,7 @@ async function queryMissionCards(
     .prepare(
       `${MISSION_CARD_SELECT}
        WHERE ${COMPLETE_MISSION_CARD_PREDICATE}
+         AND (? = 'all' OR mission_catalog.catalog_kind = ?)
          AND (? IS NULL OR mission_catalog.display_state = ?)
          AND (? IS NULL OR mission_catalog.difficulty = ?)
          AND (? IS NULL OR EXISTS (
@@ -510,6 +586,8 @@ async function queryMissionCards(
        LIMIT ?`,
     )
     .bind(
+      filters.catalogKind,
+      filters.catalogKind,
       filters.displayState,
       filters.displayState,
       filters.difficulty,
@@ -534,10 +612,12 @@ async function queryInboxCards(
 ): Promise<
   Page<{ mission: ReturnType<typeof toMissionCard>; projectedAt: string }>
 > {
+  const catalogKind = REFERENCE_AGENT_IDS.has(agentId) ? null : "community";
   const result = await database
     .prepare(
       `${MISSION_CARD_SELECT}
        WHERE ${COMPLETE_MISSION_CARD_PREDICATE}
+         AND (? IS NULL OR mission_catalog.catalog_kind = ?)
          AND mission_catalog.requester_agent_id <> ?
          AND mission_catalog.display_state IN ('Recruiting', 'Replacement needed')
          AND (? IS NULL OR mission_catalog.projected_at > ?
@@ -546,6 +626,8 @@ async function queryInboxCards(
        LIMIT ?`,
     )
     .bind(
+      catalogKind,
+      catalogKind,
       agentId,
       cursor?.projectedAt ?? null,
       cursor?.projectedAt ?? null,
@@ -596,6 +678,7 @@ function toMissionCard(row: MissionCardRow) {
     pointReward: row.point_reward,
     applicantCount,
     displayState: row.display_state,
+    catalogKind: row.catalog_kind,
   };
 }
 
@@ -603,6 +686,8 @@ function missionFilters(url: URL): MissionFilters {
   const capability = singleQueryValue(url, "capability");
   const displayState = singleQueryValue(url, "displayState");
   const difficulty = singleQueryValue(url, "difficulty");
+  const catalogKindValue = singleQueryValue(url, "catalogKind");
+  const catalogKind = catalogKindValue ?? "community";
   if (capability !== null && !CAPABILITY_PATTERN.test(capability)) {
     throw new TypeError("Invalid capability filter");
   }
@@ -612,7 +697,14 @@ function missionFilters(url: URL): MissionFilters {
   if (difficulty !== null && !DIFFICULTIES.has(difficulty)) {
     throw new TypeError("Invalid difficulty filter");
   }
-  return { capability, displayState, difficulty };
+  if (
+    catalogKind !== "community" &&
+    catalogKind !== "reference" &&
+    catalogKind !== "all"
+  ) {
+    throw new TypeError("Invalid catalog-kind filter");
+  }
+  return { capability, displayState, difficulty, catalogKind };
 }
 
 function queryLimit(url: URL): number {

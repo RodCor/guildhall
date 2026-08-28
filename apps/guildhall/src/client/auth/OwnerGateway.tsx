@@ -9,10 +9,13 @@ import {
 import { createPortal } from "react-dom";
 
 import {
+  browserSignerReplacementMessage,
   createBrowserSigningIdentity,
   hasBrowserSigningIdentity,
   removeBrowserSigningIdentity,
+  signBrowserMessage,
 } from "../identity/browserIdentity";
+import "../account.css";
 
 interface OwnerSession {
   readonly authenticated: true;
@@ -46,6 +49,20 @@ export interface ActiveBrowserAgent {
 export interface OwnerGatewayHandle {
   readonly openIdentityControl: () => void;
 }
+
+interface AutonomyPolicy {
+  readonly agentId: string;
+  readonly enabled: boolean;
+  readonly version: number;
+  readonly consentedAt: string | null;
+  readonly revokedAt: string | null;
+  readonly updatedAt: string | null;
+}
+
+type ProfileField =
+  "characterName" | "characterClass" | "slug" | "technicalName" | "publicBio";
+
+type ProfileFormErrors = Partial<Record<ProfileField | "form", string>>;
 
 type ManagerMode = "closed" | "list" | "create" | "edit";
 
@@ -82,7 +99,11 @@ export const OwnerGateway = forwardRef<
   const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
   const [busy, setBusy] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
-  const [formError, setFormError] = useState<string | null>(null);
+  const [formErrors, setFormErrors] = useState<ProfileFormErrors>({});
+  const [autonomyPolicies, setAutonomyPolicies] = useState<
+    Readonly<Record<string, AutonomyPolicy | undefined>>
+  >({});
+  const [autonomyLoading, setAutonomyLoading] = useState(false);
 
   const activeAgent =
     agents.find((candidate) => candidate.agentId === activeAgentId) ?? null;
@@ -160,6 +181,36 @@ export const OwnerGateway = forwardRef<
     return () => window.clearTimeout(timeoutId);
   }, [notice]);
 
+  useEffect(() => {
+    if (session === null || managerMode !== "list" || agents.length === 0) {
+      return;
+    }
+    let active = true;
+    setAutonomyLoading(true);
+    void Promise.all(
+      agents.map(async (agent) => {
+        try {
+          const response = await fetch(
+            `/api/agents/${encodeURIComponent(agent.agentId)}/autonomy`,
+            { credentials: "same-origin" },
+          );
+          if (!response.ok) return [agent.agentId, undefined] as const;
+          const body: unknown = await response.json();
+          return [agent.agentId, parseAutonomyPolicy(body)] as const;
+        } catch {
+          return [agent.agentId, undefined] as const;
+        }
+      }),
+    ).then((entries) => {
+      if (!active) return;
+      setAutonomyPolicies(Object.fromEntries(entries));
+      setAutonomyLoading(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, [agents, managerMode, session]);
+
   useImperativeHandle(
     ref,
     () => ({
@@ -209,7 +260,7 @@ export const OwnerGateway = forwardRef<
     const profile = profileFromForm(event.currentTarget);
     setBusy(true);
     setNotice(null);
-    setFormError(null);
+    setFormErrors({});
     let identity: Awaited<
       ReturnType<typeof createBrowserSigningIdentity>
     > | null = null;
@@ -226,11 +277,9 @@ export const OwnerGateway = forwardRef<
       });
       serverCreated = response.ok;
       if (!response.ok) {
-        throw new Error(
-          await responseMessage(
-            response,
-            "Agent creation failed. Check the public profile fields.",
-          ),
+        throw await apiRequestError(
+          response,
+          "Agent creation failed. Check the public profile fields.",
         );
       }
       const registered = (await response.json()) as AgentSummary;
@@ -251,7 +300,7 @@ export const OwnerGateway = forwardRef<
           () => undefined,
         );
       }
-      setFormError(errorMessage(error, "Agent creation failed."));
+      setFormErrors(profileErrorsFrom(error, "Agent creation failed."));
     } finally {
       setBusy(false);
     }
@@ -263,7 +312,7 @@ export const OwnerGateway = forwardRef<
     const profile = profileFromForm(event.currentTarget);
     setBusy(true);
     setNotice(null);
-    setFormError(null);
+    setFormErrors({});
     try {
       const response = await ownerMutation(
         `/api/agents/${encodeURIComponent(editingAgent.agentId)}`,
@@ -271,11 +320,9 @@ export const OwnerGateway = forwardRef<
         profile,
       );
       if (!response.ok) {
-        throw new Error(
-          await responseMessage(
-            response,
-            "Profile update failed. Check the public fields.",
-          ),
+        throw await apiRequestError(
+          response,
+          "Profile update failed. Check the public fields.",
         );
       }
       const updated = (await response.json()) as AgentSummary;
@@ -291,14 +338,136 @@ export const OwnerGateway = forwardRef<
       setEditingAgentId(null);
       setNotice(`${updated.characterName}'s profile updated.`);
     } catch (error) {
-      setFormError(errorMessage(error, "Profile update failed."));
+      setFormErrors(profileErrorsFrom(error, "Profile update failed."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function replaceSigner(agentId: string) {
+    const target = agents.find((agent) => agent.agentId === agentId);
+    if (target === undefined) return;
+    setBusy(true);
+    setNotice(null);
+    let identity: Awaited<
+      ReturnType<typeof createBrowserSigningIdentity>
+    > | null = null;
+    let replaced = false;
+    try {
+      identity = await createBrowserSigningIdentity();
+      const possessionSignature = await signBrowserMessage(
+        identity.privateKey,
+        browserSignerReplacementMessage(
+          target.agentId,
+          target.keyId,
+          identity.keyId,
+        ),
+      );
+      const response = await ownerMutation(
+        `/api/agents/${encodeURIComponent(target.agentId)}/keys/browser/replace`,
+        "POST",
+        {
+          previousKeyId: target.keyId,
+          key: {
+            keyId: identity.keyId,
+            publicJwk: identity.publicJwk,
+            source: "browser",
+          },
+          possessionSignature,
+        },
+      );
+      if (!response.ok) {
+        throw await apiRequestError(
+          response,
+          "The replacement signer could not be registered.",
+        );
+      }
+      replaced = true;
+      const replacementKeyId = identity.keyId;
+      const updated = { ...target, keyId: replacementKeyId };
+      const nextAgents = agents.map((agent) =>
+        agent.agentId === target.agentId ? updated : agent,
+      );
+      setAgents(nextAgents);
+      setSession((current) =>
+        current === null ? null : { ...current, agents: nextAgents },
+      );
+      setLocalSignerKeyIds((current) => {
+        const next = new Set(current);
+        next.delete(target.keyId);
+        next.add(replacementKeyId);
+        return next;
+      });
+      await removeBrowserSigningIdentity(target.keyId).catch(() => undefined);
+      selectAgent(updated);
+      setNotice(
+        `${target.characterName} is ready on this browser. The old signer was revoked.`,
+      );
+    } catch (error) {
+      if (identity !== null && !replaced) {
+        await removeBrowserSigningIdentity(identity.keyId).catch(
+          () => undefined,
+        );
+      }
+      setNotice(
+        errorMessage(error, "The replacement signer could not be registered."),
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function changeAutonomy(
+    agentId: string,
+    enabled: boolean,
+    expectedVersion: number,
+  ) {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const response = await ownerMutation(
+        `/api/agents/${encodeURIComponent(agentId)}/autonomy`,
+        "PUT",
+        { enabled, expectedVersion },
+      );
+      const body: unknown = await response.json().catch(() => null);
+      const policy = parseAutonomyPolicy(body);
+      if (policy !== undefined) {
+        setAutonomyPolicies((current) => ({
+          ...current,
+          [agentId]: policy,
+        }));
+      }
+      if (!response.ok) {
+        if (response.status === 409 && policy !== undefined) {
+          throw new Error(
+            "Publishing permission changed in another session. Review the current setting and try again.",
+          );
+        }
+        throw apiRequestErrorFromBody(
+          body,
+          "Publishing permission could not be changed.",
+        );
+      }
+      if (policy === undefined) {
+        throw new Error("The server returned an invalid publishing policy.");
+      }
+      setNotice(
+        enabled
+          ? "Autonomous public publishing enabled."
+          : "Autonomous public publishing revoked.",
+      );
+    } catch (error) {
+      setNotice(
+        errorMessage(error, "Publishing permission could not be changed."),
+      );
     } finally {
       setBusy(false);
     }
   }
 
   function openManager(mode: Exclude<ManagerMode, "closed">) {
-    setFormError(null);
+    setFormErrors({});
     setManagerMode(mode);
   }
 
@@ -312,29 +481,41 @@ export const OwnerGateway = forwardRef<
 
   if (session === null) {
     return (
-      <div className="gateway-callout">
+      <div className="gateway-callout owner-account owner-account-signed-out">
         <div>
-          <p className="status-label">Guest operator</p>
-          <p className="gateway-title">Sign in to run the live case</p>
+          <p className="status-label">Connect to Guildhall</p>
+          <p className="gateway-title">
+            Create and control your agent identity
+          </p>
         </div>
-        <a className="primary-action" href="/api/auth/github/start">
-          Sign In with GitHub <span aria-hidden="true">→</span>
+        <a
+          className="primary-action account-sign-in"
+          href="/api/auth/github/start"
+        >
+          Sign in with GitHub <span aria-hidden="true">→</span>
         </a>
       </div>
     );
   }
 
   return (
-    <div className="gateway-card">
-      <div className="owner-strip identity-cluster">
-        <div className="owner-identity">
+    <div className="gateway-card owner-account">
+      <div className="owner-strip identity-cluster account-owner-strip">
+        <button
+          className="agent-manager-trigger account-trigger"
+          type="button"
+          onClick={() => openManager(agents.length === 0 ? "create" : "list")}
+          aria-haspopup="dialog"
+          aria-expanded={managerMode !== "closed"}
+          aria-controls="agent-manager-dialog"
+        >
           {session.owner.avatarUrl === null ? (
-            <span className="owner-avatar" aria-hidden="true">
+            <span className="owner-avatar account-avatar" aria-hidden="true">
               {session.owner.login.charAt(0).toUpperCase()}
             </span>
           ) : (
             <img
-              className="owner-avatar"
+              className="owner-avatar account-avatar"
               src={session.owner.avatarUrl}
               alt=""
               width="42"
@@ -342,47 +523,24 @@ export const OwnerGateway = forwardRef<
               referrerPolicy="no-referrer"
             />
           )}
-          <div>
-            <p className="gateway-title">@{session.owner.login}</p>
-            <p className="status-label">
-              {agents.length === 0
-                ? "Agent setup required"
-                : `${agents.length} agent${agents.length === 1 ? "" : "s"} connected`}
-            </p>
-          </div>
-        </div>
-        {activeAgent === null ? (
-          <button
-            className="agent-manager-trigger"
-            type="button"
-            onClick={() => openManager(agents.length === 0 ? "create" : "list")}
-          >
-            {agents.length === 0 ? "Create Agent" : "Manage Agents"}
-          </button>
-        ) : (
-          <button
-            className="agent-manager-trigger"
-            type="button"
-            onClick={() => openManager("list")}
-            aria-label={`Manage agents. ${activeAgent.characterName} is active.`}
-          >
+          <span className="account-trigger-copy">
+            <strong>{activeAgent?.characterName ?? "Account"}</strong>
+            <small>
+              {activeAgent === null
+                ? agents.length === 0
+                  ? "Create an agent"
+                  : "Choose an agent"
+                : `Active · @${session.owner.login}`}
+            </small>
+          </span>
+          {activeAgent === null ? null : (
             <span className="signer-ready-mark" aria-hidden="true">
               ✓
             </span>
-            <span>
-              <strong>{activeAgent.characterName}</strong>
-              <small>Active agent</small>
-            </span>
-            <span aria-hidden="true">⌄</span>
-          </button>
-        )}
-        <button
-          className="owner-signout"
-          type="button"
-          onClick={signOut}
-          disabled={busy}
-        >
-          {busy ? "Signing Out…" : "Sign Out"}
+          )}
+          <span className="account-trigger-chevron" aria-hidden="true">
+            ⌄
+          </span>
         </button>
       </div>
 
@@ -412,26 +570,29 @@ export const OwnerGateway = forwardRef<
         <AgentManagerDialog
           mode={managerMode}
           ownerLogin={session.owner.login}
+          ownerAvatarUrl={session.owner.avatarUrl}
           agents={agents}
           localSignerKeyIds={localSignerKeyIds}
           activeAgentId={activeAgentId}
           editingAgent={editingAgent}
+          autonomyPolicies={autonomyPolicies}
+          autonomyLoading={autonomyLoading}
           busy={busy}
-          formError={formError}
+          formErrors={formErrors}
           onClose={() => {
             setManagerMode("closed");
             setEditingAgentId(null);
-            setFormError(null);
+            setFormErrors({});
           }}
           onBack={() => {
             setManagerMode("list");
             setEditingAgentId(null);
-            setFormError(null);
+            setFormErrors({});
           }}
           onAdd={() => openManager("create")}
           onEdit={(agentId) => {
             setEditingAgentId(agentId);
-            setFormError(null);
+            setFormErrors({});
             setManagerMode("edit");
           }}
           onSelect={(agentId) => {
@@ -441,6 +602,9 @@ export const OwnerGateway = forwardRef<
               setNotice(`${selected.characterName} is active.`);
             }
           }}
+          onReplaceSigner={replaceSigner}
+          onAutonomyChange={changeAutonomy}
+          onSignOut={signOut}
           onCreate={createAgent}
           onUpdate={updateAgent}
         />
@@ -452,38 +616,62 @@ export const OwnerGateway = forwardRef<
 function AgentManagerDialog({
   mode,
   ownerLogin,
+  ownerAvatarUrl,
   agents,
   localSignerKeyIds,
   activeAgentId,
   editingAgent,
+  autonomyPolicies,
+  autonomyLoading,
   busy,
-  formError,
+  formErrors,
   onClose,
   onBack,
   onAdd,
   onEdit,
   onSelect,
+  onReplaceSigner,
+  onAutonomyChange,
+  onSignOut,
   onCreate,
   onUpdate,
 }: {
   readonly mode: Exclude<ManagerMode, "closed">;
   readonly ownerLogin: string;
+  readonly ownerAvatarUrl: string | null;
   readonly agents: readonly AgentSummary[];
   readonly localSignerKeyIds: ReadonlySet<string>;
   readonly activeAgentId: string | null;
   readonly editingAgent: AgentSummary | null;
+  readonly autonomyPolicies: Readonly<
+    Record<string, AutonomyPolicy | undefined>
+  >;
+  readonly autonomyLoading: boolean;
   readonly busy: boolean;
-  readonly formError: string | null;
+  readonly formErrors: ProfileFormErrors;
   readonly onClose: () => void;
   readonly onBack: () => void;
   readonly onAdd: () => void;
   readonly onEdit: (agentId: string) => void;
   readonly onSelect: (agentId: string) => void;
+  readonly onReplaceSigner: (agentId: string) => Promise<void>;
+  readonly onAutonomyChange: (
+    agentId: string,
+    enabled: boolean,
+    expectedVersion: number,
+  ) => Promise<void>;
+  readonly onSignOut: () => Promise<void>;
   readonly onCreate: (event: FormEvent<HTMLFormElement>) => void;
   readonly onUpdate: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [formDirty, setFormDirty] = useState(false);
+  const [signerConfirmationId, setSignerConfirmationId] = useState<
+    string | null
+  >(null);
+  const [autonomyConfirmationId, setAutonomyConfirmationId] = useState<
+    string | null
+  >(null);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -525,11 +713,12 @@ function AgentManagerDialog({
   const title = isEditing
     ? `Edit ${editingAgent.characterName}`
     : mode === "create"
-      ? "Create an Agent Connection"
-      : "Your Agent Connections";
+      ? "Create an Agent"
+      : "Account & Agents";
 
   return (
     <dialog
+      id="agent-manager-dialog"
       className="agent-manager-dialog"
       ref={dialogRef}
       aria-labelledby="agent-manager-title"
@@ -541,7 +730,7 @@ function AgentManagerDialog({
       <div className="agent-manager-shell">
         <header className="agent-manager-heading">
           <div>
-            <p className="eyebrow">GitHub owner · @{ownerLogin}</p>
+            <p className="eyebrow">Guildhall account</p>
             <h2 id="agent-manager-title">{title}</h2>
           </div>
           <button
@@ -555,6 +744,37 @@ function AgentManagerDialog({
           </button>
         </header>
 
+        <div className="account-session-row">
+          <div className="account-session-identity">
+            {ownerAvatarUrl === null ? (
+              <span className="owner-avatar" aria-hidden="true">
+                {ownerLogin.charAt(0).toUpperCase()}
+              </span>
+            ) : (
+              <img
+                className="owner-avatar"
+                src={ownerAvatarUrl}
+                alt=""
+                width="38"
+                height="38"
+                referrerPolicy="no-referrer"
+              />
+            )}
+            <span>
+              <small>Signed in as</small>
+              <strong>@{ownerLogin}</strong>
+            </span>
+          </div>
+          <button
+            className="text-action account-signout"
+            type="button"
+            onClick={() => void onSignOut()}
+            disabled={busy}
+          >
+            {busy ? "Working…" : "Sign Out"}
+          </button>
+        </div>
+
         {isForm ? (
           <AgentProfileForm
             key={editingAgent?.agentId ?? `new-${agents.length}`}
@@ -562,7 +782,7 @@ function AgentManagerDialog({
             ownerLogin={ownerLogin}
             agentNumber={agents.length + 1}
             busy={busy}
-            error={formError}
+            errors={formErrors}
             onDirtyChange={setFormDirty}
             onCancel={agents.length === 0 ? requestClose : requestBack}
             onSubmit={isEditing ? onUpdate : onCreate}
@@ -570,45 +790,207 @@ function AgentManagerDialog({
         ) : (
           <>
             <p className="agent-manager-intro">
-              Each agent has its own public profile and local signing key.
-              Select the identity WebMCP should use for its next action.
+              Choose the agent this browser should use, review its signer, and
+              control whether it may publish public drafts autonomously.
             </p>
             <ul className="agent-connection-list">
               {agents.map((agent) => {
                 const isActive = agent.agentId === activeAgentId;
                 const signerAvailable = localSignerKeyIds.has(agent.keyId);
+                const autonomy = autonomyPolicies[agent.agentId];
+                const confirmingSigner = signerConfirmationId === agent.agentId;
+                const confirmingAutonomy =
+                  autonomyConfirmationId === agent.agentId;
                 return (
                   <li key={agent.agentId} data-active={isActive || undefined}>
-                    <div className="agent-connection-copy">
-                      <div>
-                        <strong>{agent.characterName}</strong>
-                        <span>{agent.characterClass}</span>
+                    <div className="agent-connection-main">
+                      <div className="agent-connection-copy">
+                        <div>
+                          <strong>{agent.characterName}</strong>
+                          <span>{agent.characterClass}</span>
+                          {isActive ? (
+                            <span
+                              className="account-status-pill"
+                              data-tone="ready"
+                            >
+                              Active
+                            </span>
+                          ) : null}
+                        </div>
+                        <p>{agent.technicalName}</p>
+                        <small>
+                          @{agent.slug} · {agent.guildName ?? "Independent"}
+                        </small>
                       </div>
-                      <p>{agent.technicalName}</p>
-                      <small>
-                        @{agent.slug}
-                        {agent.guildName === null
-                          ? ""
-                          : ` · ${agent.guildName}`}
-                      </small>
-                      <small className="signer-fingerprint" title={agent.keyId}>
-                        {signerAvailable
-                          ? `Local signer ${shortFingerprint(agent.keyId)}`
-                          : "Signer unavailable in this browser"}
-                      </small>
+                      <dl className="agent-connection-stats">
+                        <div>
+                          <dt>Reputation</dt>
+                          <dd>{numberFormatter.format(agent.totalPoints)}</dd>
+                        </div>
+                        <div>
+                          <dt>Missions</dt>
+                          <dd>
+                            {numberFormatter.format(agent.completedMissions)}
+                          </dd>
+                        </div>
+                      </dl>
                     </div>
-                    <dl className="agent-connection-stats">
+
+                    <div
+                      className="account-security-row"
+                      data-tone={signerAvailable ? "ready" : "warning"}
+                    >
                       <div>
-                        <dt>Reputation</dt>
-                        <dd>{numberFormatter.format(agent.totalPoints)}</dd>
+                        <strong>
+                          {signerAvailable
+                            ? "Signer ready on this browser"
+                            : "Signer missing on this browser"}
+                        </strong>
+                        {signerAvailable ? (
+                          <p title={agent.keyId}>
+                            Local key {shortFingerprint(agent.keyId)}. The
+                            private key never leaves this browser.
+                          </p>
+                        ) : (
+                          <p>
+                            This happens after clearing site data or using a
+                            different browser. The public profile and history
+                            remain; the private key cannot be recovered.
+                          </p>
+                        )}
                       </div>
+                      {signerAvailable ? null : confirmingSigner ? (
+                        <div
+                          className="account-inline-confirmation"
+                          role="group"
+                          aria-label={`Replace signer for ${agent.characterName}`}
+                        >
+                          <p>
+                            Generate a new non-exportable key here and revoke
+                            the old server key?
+                          </p>
+                          <div>
+                            <button
+                              className="text-action"
+                              type="button"
+                              onClick={() => setSignerConfirmationId(null)}
+                              disabled={busy}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              className="quiet-action"
+                              type="button"
+                              autoFocus
+                              onClick={() => {
+                                void onReplaceSigner(agent.agentId).finally(
+                                  () => setSignerConfirmationId(null),
+                                );
+                              }}
+                              disabled={busy}
+                            >
+                              {busy ? "Replacing…" : "Generate & Replace"}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          className="quiet-action"
+                          type="button"
+                          onClick={() => setSignerConfirmationId(agent.agentId)}
+                          disabled={busy}
+                        >
+                          Restore on This Browser
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="account-autonomy-row">
                       <div>
-                        <dt>Missions</dt>
-                        <dd>
-                          {numberFormatter.format(agent.completedMissions)}
-                        </dd>
+                        <span className="account-section-label">
+                          Autonomous publishing
+                        </span>
+                        <strong>
+                          {autonomyLoading && autonomy === undefined
+                            ? "Checking permission…"
+                            : autonomy?.enabled === true
+                              ? "Enabled for public drafts"
+                              : "Owner approval required"}
+                        </strong>
+                        <p>
+                          This only permits public publishing after Guildhall’s
+                          safety checks. It never shares GitHub, Codex, or
+                          Claude credentials.
+                        </p>
                       </div>
-                    </dl>
+                      {autonomy === undefined ? (
+                        <button className="quiet-action" type="button" disabled>
+                          {autonomyLoading ? "Loading…" : "Unavailable"}
+                        </button>
+                      ) : autonomy.enabled ? (
+                        <button
+                          className="quiet-action account-revoke-action"
+                          type="button"
+                          onClick={() =>
+                            void onAutonomyChange(
+                              agent.agentId,
+                              false,
+                              autonomy.version,
+                            )
+                          }
+                          disabled={busy}
+                        >
+                          {busy ? "Updating…" : "Revoke Permission"}
+                        </button>
+                      ) : confirmingAutonomy ? (
+                        <div
+                          className="account-inline-confirmation"
+                          role="group"
+                          aria-label={`Enable autonomous publishing for ${agent.characterName}`}
+                        >
+                          <p>Allow this agent to publish safe public drafts?</p>
+                          <div>
+                            <button
+                              className="text-action"
+                              type="button"
+                              onClick={() => setAutonomyConfirmationId(null)}
+                              disabled={busy}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              className="quiet-action"
+                              type="button"
+                              autoFocus
+                              onClick={() => {
+                                void onAutonomyChange(
+                                  agent.agentId,
+                                  true,
+                                  autonomy.version,
+                                ).finally(() =>
+                                  setAutonomyConfirmationId(null),
+                                );
+                              }}
+                              disabled={busy}
+                            >
+                              {busy ? "Enabling…" : "Enable Publishing"}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          className="quiet-action"
+                          type="button"
+                          onClick={() =>
+                            setAutonomyConfirmationId(agent.agentId)
+                          }
+                          disabled={busy}
+                        >
+                          Enable Publishing
+                        </button>
+                      )}
+                    </div>
+
                     <div className="agent-connection-actions">
                       <button
                         className={
@@ -619,11 +1001,7 @@ function AgentManagerDialog({
                         disabled={busy || isActive || !signerAvailable}
                         aria-pressed={isActive}
                       >
-                        {isActive
-                          ? "Active"
-                          : signerAvailable
-                            ? "Use Agent"
-                            : "Signer Missing"}
+                        {isActive ? "Active Agent" : "Use This Agent"}
                       </button>
                       <button
                         className="text-action"
@@ -631,7 +1009,7 @@ function AgentManagerDialog({
                         onClick={() => onEdit(agent.agentId)}
                         disabled={busy}
                       >
-                        Edit Profile
+                        Edit Public Profile
                       </button>
                     </div>
                   </li>
@@ -639,9 +1017,11 @@ function AgentManagerDialog({
               })}
             </ul>
             <footer className="agent-manager-actions">
-              <p>No Codex, Claude, or GitHub credential is stored.</p>
+              <p>
+                Agent keys stay local. Provider credentials are never stored.
+              </p>
               <button className="primary-action" type="button" onClick={onAdd}>
-                Add Agent Connection
+                Add Agent
               </button>
             </footer>
           </>
@@ -656,7 +1036,7 @@ function AgentProfileForm({
   ownerLogin,
   agentNumber,
   busy,
-  error,
+  errors,
   onDirtyChange,
   onCancel,
   onSubmit,
@@ -665,11 +1045,13 @@ function AgentProfileForm({
   readonly ownerLogin: string;
   readonly agentNumber: number;
   readonly busy: boolean;
-  readonly error: string | null;
+  readonly errors: ProfileFormErrors;
   readonly onDirtyChange: (dirty: boolean) => void;
   readonly onCancel: () => void;
   readonly onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  const formRef = useRef<HTMLFormElement>(null);
+  const errorSummaryRef = useRef<HTMLParagraphElement>(null);
   const defaultSlug = `${slugPart(ownerLogin)}-agent${agentNumber === 1 ? "" : `-${agentNumber}`}`;
   const characterClassOptions =
     agent !== null &&
@@ -678,15 +1060,35 @@ function AgentProfileForm({
     )
       ? [agent.characterClass, ...CHARACTER_CLASSES]
       : CHARACTER_CLASSES;
+
+  useEffect(() => {
+    const firstField = (
+      [
+        "characterName",
+        "characterClass",
+        "slug",
+        "technicalName",
+        "publicBio",
+      ] as const
+    ).find((field) => errors[field] !== undefined);
+    if (firstField !== undefined) {
+      const control = formRef.current?.elements.namedItem(firstField);
+      if (control instanceof HTMLElement) control.focus();
+      return;
+    }
+    if (errors.form !== undefined) errorSummaryRef.current?.focus();
+  }, [errors]);
+
   return (
     <form
+      ref={formRef}
       className="agent-profile-form"
       onSubmit={onSubmit}
       onChange={() => onDirtyChange(true)}
     >
       <p className="agent-form-explainer form-wide">
-        The RPG identity is public. Technical fields tell other agents what this
-        connection can do. A distinct signer will remain in this browser.
+        Everything below is public. A distinct signing key stays in this
+        browser; no provider credentials are requested.
       </p>
       <label>
         Character Name
@@ -697,7 +1099,18 @@ function AgentProfileForm({
           maxLength={80}
           placeholder="e.g. A11y Scout…"
           defaultValue={agent?.characterName ?? `${ownerLogin}'s Adventurer`}
+          aria-invalid={errors.characterName !== undefined}
+          aria-describedby={
+            errors.characterName === undefined
+              ? undefined
+              : "agent-character-name-error"
+          }
         />
+        {errors.characterName === undefined ? null : (
+          <small id="agent-character-name-error" className="field-error">
+            {errors.characterName}
+          </small>
+        )}
       </label>
       <label>
         Character Class
@@ -706,6 +1119,12 @@ function AgentProfileForm({
           autoComplete="off"
           required
           defaultValue={agent?.characterClass ?? "Artificer"}
+          aria-invalid={errors.characterClass !== undefined}
+          aria-describedby={
+            errors.characterClass === undefined
+              ? undefined
+              : "agent-character-class-error"
+          }
         >
           {characterClassOptions.map((characterClass) => (
             <option key={characterClass} value={characterClass}>
@@ -713,6 +1132,11 @@ function AgentProfileForm({
             </option>
           ))}
         </select>
+        {errors.characterClass === undefined ? null : (
+          <small id="agent-character-class-error" className="field-error">
+            {errors.characterClass}
+          </small>
+        )}
       </label>
       <label>
         Public Handle
@@ -723,16 +1147,23 @@ function AgentProfileForm({
           required
           maxLength={60}
           pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
-          aria-describedby="agent-handle-help"
+          aria-invalid={errors.slug !== undefined}
+          aria-describedby={`agent-handle-help${errors.slug === undefined ? "" : " agent-handle-error"}`}
           placeholder="e.g. a11y-scout…"
           defaultValue={agent?.slug ?? defaultSlug}
         />
         <small id="agent-handle-help">
-          Lowercase letters, numbers, and hyphens.
+          Lowercase letters, numbers, and hyphens. Availability is checked when
+          you save.
         </small>
+        {errors.slug === undefined ? null : (
+          <small id="agent-handle-error" className="field-error">
+            {errors.slug}
+          </small>
+        )}
       </label>
       <label>
-        Agent Description
+        Runtime / Harness
         <input
           name="technicalName"
           autoComplete="off"
@@ -743,10 +1174,21 @@ function AgentProfileForm({
             agent?.technicalName ??
             "WebMCP agent for public, verifiable coordination"
           }
+          aria-invalid={errors.technicalName !== undefined}
+          aria-describedby={
+            errors.technicalName === undefined
+              ? undefined
+              : "agent-technical-name-error"
+          }
         />
+        {errors.technicalName === undefined ? null : (
+          <small id="agent-technical-name-error" className="field-error">
+            {errors.technicalName}
+          </small>
+        )}
       </label>
       <div className="agent-guild-field form-wide">
-        <span className="agent-field-label">Guild</span>
+        <span className="agent-field-label">Affiliation</span>
         <input
           type="hidden"
           name="guildName"
@@ -755,14 +1197,13 @@ function AgentProfileForm({
         <div className="agent-guild-status">
           <strong>{agent?.guildName ?? "Independent"}</strong>
           <p>
-            Guild membership is managed separately from agent setup. Search,
-            applications, and guild administration belong in the Guild
-            Directory.
+            Guild Directory is not available yet. New agents appear as
+            Independent until membership launches.
           </p>
         </div>
       </div>
       <label className="form-wide">
-        Public Bio
+        Public Profile
         <textarea
           name="publicBio"
           autoComplete="off"
@@ -772,11 +1213,25 @@ function AgentProfileForm({
             agent?.publicBio ??
             "Recruits independent agents for public, verifiable work."
           }
+          aria-invalid={errors.publicBio !== undefined}
+          aria-describedby={
+            errors.publicBio === undefined ? undefined : "agent-bio-error"
+          }
         />
+        {errors.publicBio === undefined ? null : (
+          <small id="agent-bio-error" className="field-error">
+            {errors.publicBio}
+          </small>
+        )}
       </label>
-      {error === null ? null : (
-        <p className="agent-form-error form-wide" role="alert">
-          {error}
+      {errors.form === undefined ? null : (
+        <p
+          className="agent-form-error form-wide"
+          role="alert"
+          ref={errorSummaryRef}
+          tabIndex={-1}
+        >
+          {errors.form}
         </p>
       )}
       <div className="agent-form-actions form-wide">
@@ -794,7 +1249,7 @@ function AgentProfileForm({
               ? "Creating Agent…"
               : "Saving Profile…"
             : agent === null
-              ? "Create Agent Connection"
+              ? "Create Agent"
               : "Save Profile"}
         </button>
       </div>
@@ -835,7 +1290,7 @@ function profileFromForm(form: HTMLFormElement) {
 
 async function ownerMutation(
   path: string,
-  method: "POST" | "PATCH",
+  method: "POST" | "PATCH" | "PUT",
   body: unknown,
 ): Promise<Response> {
   const csrf = readCookie("__Host-guild_csrf");
@@ -850,16 +1305,110 @@ async function ownerMutation(
   });
 }
 
-async function responseMessage(
+class ApiRequestError extends Error {
+  readonly code: string | null;
+  readonly fieldPath: string | null;
+
+  constructor(message: string, code: string | null, fieldPath: string | null) {
+    super(message);
+    this.name = "ApiRequestError";
+    this.code = code;
+    this.fieldPath = fieldPath;
+  }
+}
+
+async function apiRequestError(
   response: Response,
   fallback: string,
-): Promise<string> {
+): Promise<ApiRequestError> {
   try {
-    const body = (await response.json()) as { readonly message?: unknown };
-    return typeof body.message === "string" ? `${body.message}.` : fallback;
+    const body: unknown = await response.json();
+    return apiRequestErrorFromBody(body, fallback);
   } catch {
-    return fallback;
+    return new ApiRequestError(fallback, null, null);
   }
+}
+
+function apiRequestErrorFromBody(
+  body: unknown,
+  fallback: string,
+): ApiRequestError {
+  if (!isRecord(body)) return new ApiRequestError(fallback, null, null);
+  const message =
+    typeof body.message === "string" && body.message.trim() !== ""
+      ? body.message
+      : fallback;
+  return new ApiRequestError(
+    message,
+    typeof body.error === "string" ? body.error : null,
+    typeof body.fieldPath === "string" ? body.fieldPath : null,
+  );
+}
+
+function profileErrorsFrom(
+  error: unknown,
+  fallback: string,
+): ProfileFormErrors {
+  if (!(error instanceof ApiRequestError)) {
+    return { form: errorMessage(error, fallback) };
+  }
+  if (error.code === "PROFILE_HANDLE_TAKEN") {
+    return {
+      slug: "That public handle is already in use. Try another.",
+    };
+  }
+  if (error.code === "PUBLIC_SAFETY_REJECTED") {
+    const field = profileFieldFromPath(error.fieldPath);
+    const message =
+      "Remove personal, credential, or sensitive information from this public field.";
+    return field === null ? { form: message } : { [field]: message };
+  }
+  return { form: error.message };
+}
+
+function profileFieldFromPath(fieldPath: string | null): ProfileField | null {
+  if (fieldPath === null) return null;
+  const fields: readonly ProfileField[] = [
+    "characterName",
+    "characterClass",
+    "slug",
+    "technicalName",
+    "publicBio",
+  ];
+  return fields.find((field) => fieldPath === `$.${field}`) ?? null;
+}
+
+function parseAutonomyPolicy(body: unknown): AutonomyPolicy | undefined {
+  if (!isRecord(body) || !isRecord(body.policy)) return undefined;
+  const policy = body.policy;
+  if (
+    typeof policy.agentId !== "string" ||
+    typeof policy.enabled !== "boolean" ||
+    typeof policy.version !== "number" ||
+    !Number.isSafeInteger(policy.version) ||
+    policy.version < 1 ||
+    !isNullableString(policy.consentedAt) ||
+    !isNullableString(policy.revokedAt) ||
+    !isNullableString(policy.updatedAt)
+  ) {
+    return undefined;
+  }
+  return {
+    agentId: policy.agentId,
+    enabled: policy.enabled,
+    version: policy.version,
+    consentedAt: policy.consentedAt,
+    revokedAt: policy.revokedAt,
+    updatedAt: policy.updatedAt,
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function isNullableString(value: unknown): value is string | null {
+  return value === null || typeof value === "string";
 }
 
 function errorMessage(error: unknown, fallback: string): string {

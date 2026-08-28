@@ -6,6 +6,7 @@ import {
   type ReactNode,
 } from "react";
 
+import { useGuildCatalog } from "../catalog/GuildCatalog";
 import {
   clampReplayIndex,
   receiptUnlocked,
@@ -23,19 +24,11 @@ import {
   isReferenceDemoMissionTitle,
   REFERENCE_DEMO_MISSION_TITLE,
 } from "./referenceDemo";
-
-interface MissionListResponse {
-  readonly missions: readonly MissionCard[];
-}
-
-interface AgentListResponse {
-  readonly agents: readonly PublicAgent[];
-}
+import "../demo-polish.css";
 
 type Lens = "story" | "technical";
 type StreamState = "connecting" | "live" | "polling";
 
-const CATALOG_REFRESH_MS = 10_000;
 const STREAM_FALLBACK_MS = 15_000;
 const REPLAY_STEP_MS = 3_000;
 
@@ -149,8 +142,11 @@ export function TechnicalMission({
   readonly identityResolved: boolean;
 }) {
   const query = useMemo(() => new URLSearchParams(window.location.search), []);
-  const [missions, setMissions] = useState<readonly MissionCard[]>([]);
-  const [agents, setAgents] = useState<readonly PublicAgent[]>([]);
+  const {
+    referenceMissions: missions,
+    agents,
+    refresh: refreshCatalog,
+  } = useGuildCatalog();
   const [missionId, setMissionId] = useState(() => query.get("mission") ?? "");
   const [packet, setPacket] = useState<MissionPacket | null>(null);
   const [lens, setLens] = useState<Lens>(() =>
@@ -172,34 +168,6 @@ export function TechnicalMission({
   const [spectatorReplayId, setSpectatorReplayId] = useState<string | null>(
     null,
   );
-
-  useEffect(() => {
-    const lifetime = new AbortController();
-    const refresh = async () => {
-      if (document.visibilityState === "hidden") return;
-      try {
-        const [missionResponse, agentResponse] = await Promise.all([
-          loadMissionList(lifetime.signal),
-          loadAgentList(lifetime.signal),
-        ]);
-        if (lifetime.signal.aborted) return;
-        setMissions(missionResponse.missions);
-        setAgents(agentResponse.agents);
-      } catch {
-        // The archive is optional context. It must never replace or interrupt
-        // the step-00 demo experience when its catalog is unavailable.
-      }
-    };
-    void refresh();
-    const interval = window.setInterval(
-      () => void refresh(),
-      CATALOG_REFRESH_MS,
-    );
-    return () => {
-      lifetime.abort();
-      window.clearInterval(interval);
-    };
-  }, []);
 
   useEffect(() => {
     if (missionId === "") {
@@ -428,11 +396,11 @@ export function TechnicalMission({
         lifetime.signal,
         resumeMissionId,
       );
-      const [next, catalog] = await Promise.all([
-        loadMission(result.missionId, AbortSignal.timeout(15_000)),
-        loadMissionList(AbortSignal.timeout(15_000)),
-      ]);
-      setMissions(catalog.missions);
+      const next = await loadMission(
+        result.missionId,
+        AbortSignal.timeout(15_000),
+      );
+      refreshCatalog();
       setMissionId(result.missionId);
       setPacket(next);
       setFollowLive(true);
@@ -458,10 +426,16 @@ export function TechnicalMission({
           <p className="eyebrow">Demo Case 001 / Reference Party</p>
           <h3 id="mission-console-title">Website Accessibility Repair</h3>
         </div>
-        <span className={`stream-chip stream-${streamState}`}>
-          <span aria-hidden="true" />
-          {streamState === "live" ? "Verified Ledger Live" : "Protocol Ready"}
-        </span>
+        <div className="guildglass-case-meta">
+          <p className="demo-provenance">
+            <strong>1 public ledger</strong>
+            <span>Real Guild actions, replayed step by step</span>
+          </p>
+          <span className={`stream-chip stream-${streamState}`}>
+            <span aria-hidden="true" />
+            {streamState === "live" ? "Verified Ledger Live" : "Protocol Ready"}
+          </span>
+        </div>
       </div>
 
       {error !== null ? (
@@ -587,7 +561,7 @@ function GuildBoard({
                   </div>
                   <h3>{mission.title}</h3>
                   <p>
-                    {mission.summary ??
+                    {mission.goal ||
                       "Open the public ledger to inspect every term."}
                   </p>
                   <div className="quest-reward">
@@ -811,9 +785,7 @@ function MissionChamber({
         <article className="hud-narration" key={chapterId}>
           <div className="hud-step-kicker">
             <span>{String(stepIndex).padStart(2, "0")}</span>
-            <code translate="no">
-              {HUD_STEPS[stepIndex]?.protocol ?? "Guildhall"}
-            </code>
+            <code translate="no">{protocolActionLabel(chapterId)}</code>
           </div>
           <h4>{content.title}</h4>
           <p>{content.detail}</p>
@@ -826,13 +798,20 @@ function MissionChamber({
             ))}
           </dl>
 
+          {chapterId === "replacement" ? (
+            <p className="recovery-handoff">
+              <strong>Work Resumed</strong>
+              <span>Terms Unchanged</span>
+            </p>
+          ) : null}
+
           {chapterId === "ready" && !questActive && packet.events.length > 0 ? (
             <button
               className="primary-action run-case-action"
               type="button"
               onClick={onTogglePlay}
             >
-              Play Demo <span aria-hidden="true">→</span>
+              Play 30-Second Demo <span aria-hidden="true">→</span>
             </button>
           ) : null}
 
@@ -844,9 +823,7 @@ function MissionChamber({
               onClick={onTogglePresentation}
             >
               <span aria-hidden="true">{presentationPaused ? "▶" : "Ⅱ"}</span>
-              {presentationPaused
-                ? "Resume presentation"
-                : "Pause presentation"}
+              {presentationPaused ? "Resume Demo" : "Pause Demo"}
             </button>
           ) : null}
 
@@ -857,7 +834,7 @@ function MissionChamber({
                 className="primary-action"
                 onClick={onTogglePlay}
               >
-                {playing ? "Pause Demo" : "Replay Demo"}
+                {playing ? "Pause Demo" : "Replay 30-Second Demo"}
               </button>
             </div>
           ) : null}
@@ -870,7 +847,11 @@ function MissionChamber({
         aria-live="polite"
         aria-atomic="true"
       >
-        Step {stepIndex} of 8: {content.title}. {chapterFacts[0]?.value ?? ""}
+        Demo state {stepIndex + 1} of {HUD_STEPS.length},{" "}
+        {String(stepIndex).padStart(2, "0")}{" "}
+        {HUD_STEPS[stepIndex]?.label ?? "Ready"}: {content.title}.{" "}
+        {chapterId === "replacement" ? "Work resumed. Terms unchanged. " : ""}
+        {chapterFacts[0]?.value ?? ""}
       </p>
 
       {isTerminal && chapterId === "reward" ? (
@@ -1008,11 +989,13 @@ function hudChapterContent(
 
 function HudStepTrack({ chapterId }: { readonly chapterId: DemoChapterId }) {
   const chapterIndex = HUD_STEPS.findIndex((step) => step.id === chapterId);
+  const activeStep = HUD_STEPS[chapterIndex] ?? HUD_STEPS[0]!;
   const mainIndex = mainTimelineIndex(chapterId);
   const lastMainIndex = MAIN_HUD_STEPS.length - 1;
   const progressStyle = {
     "--hud-main-index": mainIndex,
     "--hud-main-progress": mainIndex / lastMainIndex,
+    "--hud-story-progress": chapterIndex / (HUD_STEPS.length - 1),
   } as CSSProperties;
 
   function stepState(stepId: DemoChapterId): "complete" | "active" | "pending" {
@@ -1024,9 +1007,36 @@ function HudStepTrack({ chapterId }: { readonly chapterId: DemoChapterId }) {
   return (
     <nav
       className={`hud-step-track track-${chapterId}`}
-      aria-label="Mission story progress"
+      aria-label="30-second mission demo progress"
       style={progressStyle}
     >
+      <ol className="sr-only">
+        {HUD_STEPS.map((step, index) => (
+          <li
+            key={step.id}
+            aria-current={step.id === chapterId ? "step" : undefined}
+          >
+            State {index + 1} of {HUD_STEPS.length},{" "}
+            {String(index).padStart(2, "0")} {step.label}:{" "}
+            {protocolActionLabel(step.id)}
+          </li>
+        ))}
+      </ol>
+      <div className="hud-mobile-chapter" aria-hidden="true">
+        <span className="hud-mobile-code">
+          {String(chapterIndex).padStart(2, "0")}
+        </span>
+        <span className="hud-mobile-copy">
+          <strong>{activeStep.label}</strong>
+          <small>{protocolActionLabel(chapterId)}</small>
+        </span>
+        <span className="hud-mobile-count">
+          {chapterIndex + 1}/{HUD_STEPS.length}
+        </span>
+        <span className="hud-mobile-meter">
+          <span />
+        </span>
+      </div>
       <span className="hud-main-lane" aria-hidden="true">
         <span className="hud-main-progress-fill" />
         <span className="hud-main-runner">
@@ -1050,7 +1060,7 @@ function HudStepTrack({ chapterId }: { readonly chapterId: DemoChapterId }) {
           <span className="hud-progress-orb" />
         </span>
       </span>
-      <ol className="hud-main-steps">
+      <ol className="hud-main-steps" aria-hidden="true">
         {MAIN_HUD_STEPS.map((step) => {
           const state = stepState(step.id);
           const index = HUD_STEPS.findIndex((item) => item.id === step.id);
@@ -1067,7 +1077,7 @@ function HudStepTrack({ chapterId }: { readonly chapterId: DemoChapterId }) {
           );
         })}
       </ol>
-      <ol className="hud-branch-steps" aria-label="Failure recovery branch">
+      <ol className="hud-branch-steps" aria-hidden="true">
         {BRANCH_HUD_STEPS.map((step) => {
           const state = stepState(step.id);
           const index = HUD_STEPS.findIndex((item) => item.id === step.id);
@@ -1377,24 +1387,48 @@ function GuildglassScene({
 function sceneActionLabel(chapterId: DemoChapterId): string {
   switch (chapterId) {
     case "publish":
-      return "Public task sent through WebMCP";
+      return "WebMCP published the public mission";
     case "recruit":
-      return "2 independent agents connected";
+      return "A2A selected 2 independent helpers";
     case "pact":
-      return "3 matching signatures recorded";
+      return "PactBridge locked 3/3 signatures";
     case "work":
-      return "Scout submitted the findings file";
+      return "A2A accepted Scout’s findings";
     case "failure":
-      return "Scribe missed the required output";
+      return "A2A recorded Scribe’s default";
     case "replacement":
-      return "Warden accepted the role and returned it to Work";
+      return "A2A bound Warden to the same role";
     case "verify":
-      return "Verifier checking 2 linked files";
+      return "Verifier checks 2 linked artifacts";
     case "reward":
-      return "Signed reputation receipt issued";
+      return "Guildhall issued the signed receipt";
     case "ready":
     default:
-      return "Ready to run the public case";
+      return "Guild capability ready";
+  }
+}
+
+function protocolActionLabel(chapterId: DemoChapterId): string {
+  switch (chapterId) {
+    case "publish":
+      return "WebMCP · guild.publish_mission";
+    case "recruit":
+      return "A2A · signed applications";
+    case "pact":
+      return "PactBridge · pact_bound";
+    case "work":
+      return "A2A · artifact_submitted";
+    case "failure":
+      return "A2A · role_defaulted";
+    case "replacement":
+      return "A2A · replacement_bound";
+    case "verify":
+      return "Verifier · deterministic checks";
+    case "reward":
+      return "Receipt · issue_receipt";
+    case "ready":
+    default:
+      return "Guildhall · capability ready";
   }
 }
 
@@ -1741,10 +1775,10 @@ function ReplayControls({
           disabled={eventCount === 0}
         >
           {playing
-            ? "Pause Story"
+            ? "Pause Demo"
             : replayIndex >= eventCount
-              ? "Replay This Quest"
-              : "Resume Story"}
+              ? "Replay 30-Second Demo"
+              : "Resume Demo"}
         </button>
         {!followLive ? (
           <button type="button" onClick={onGoLive}>
@@ -2125,7 +2159,7 @@ function EmptyMissionStage({
               onClick={onRun}
               disabled={busy}
             >
-              {busy ? "Opening Demo…" : "Run Demo"}{" "}
+              {busy ? "Opening Demo…" : "Run 30-Second Demo"}{" "}
               <span aria-hidden="true">→</span>
             </button>
           )}
@@ -2751,16 +2785,6 @@ async function findResumableReferenceMission(
     }
   }
   return undefined;
-}
-
-async function loadMissionList(
-  signal: AbortSignal,
-): Promise<MissionListResponse> {
-  return fetchTyped<MissionListResponse>("/api/missions?limit=12", signal);
-}
-
-async function loadAgentList(signal: AbortSignal): Promise<AgentListResponse> {
-  return fetchTyped<AgentListResponse>("/api/agents?limit=12", signal);
 }
 
 async function loadMission(

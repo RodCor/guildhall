@@ -47,6 +47,8 @@ import { authenticateOwner, authorizeOwnerMutation } from "./session.js";
 const AGENT_ROUTE = /^\/api\/agents\/([^/]+)$/u;
 const PAIRING_START_ROUTE = /^\/api\/agents\/([^/]+)\/pairing$/u;
 const KEY_REVOKE_ROUTE = /^\/api\/agents\/([^/]+)\/keys\/([^/]+)\/revoke$/u;
+const BROWSER_KEY_REPLACE_ROUTE =
+  /^\/api\/agents\/([^/]+)\/keys\/browser\/replace$/u;
 const CREDENTIAL_REVOKE_ROUTE =
   /^\/api\/agents\/([^/]+)\/credentials\/([^/]+)\/revoke$/u;
 const AUTONOMY_ROUTE = /^\/api\/agents\/([^/]+)\/autonomy$/u;
@@ -80,6 +82,14 @@ export async function handleAgentRoute(
   if (pairingMatch !== null && request.method === "POST") {
     return startPairing(request, env, decodeURIComponent(pairingMatch[1]!));
   }
+  const browserKeyReplaceMatch = BROWSER_KEY_REPLACE_ROUTE.exec(url.pathname);
+  if (browserKeyReplaceMatch !== null && request.method === "POST") {
+    return replaceBrowserKey(
+      request,
+      env,
+      decodeURIComponent(browserKeyReplaceMatch[1]!),
+    );
+  }
   const keyMatch = KEY_REVOKE_ROUTE.exec(url.pathname);
   if (keyMatch !== null && request.method === "POST") {
     return revokeKey(
@@ -99,6 +109,9 @@ export async function handleAgentRoute(
     );
   }
   const autonomyMatch = AUTONOMY_ROUTE.exec(url.pathname);
+  if (autonomyMatch !== null && request.method === "GET") {
+    return readAutonomy(request, env, decodeURIComponent(autonomyMatch[1]!));
+  }
   if (autonomyMatch !== null && request.method === "PUT") {
     return changeAutonomy(request, env, decodeURIComponent(autonomyMatch[1]!));
   }
@@ -403,6 +416,145 @@ async function revokeKey(
     : noStoreJson({ revoked: true, keyId });
 }
 
+async function replaceBrowserKey(
+  request: Request,
+  env: GuildhallEnv,
+  agentId: string,
+): Promise<Response> {
+  const owner = await authorizeOwnerMutation(request, env);
+  if (!owner.ok) return owner.response;
+  const body = await readJsonRecord(request);
+  const previousKeyId = uuidField(body, "previousKeyId");
+  const possessionSignature = stringField(body, "possessionSignature", 86, 128);
+  const key = parsePublicKey(body?.key);
+  if (
+    previousKeyId === null ||
+    possessionSignature === null ||
+    key === null ||
+    key.source !== "browser" ||
+    key.keyId === previousKeyId
+  ) {
+    return invalid("browser signer replacement");
+  }
+
+  const agent = await readOwnedAgent(
+    env.GUILD_DB,
+    owner.principal.ownerId,
+    agentId,
+  );
+  if (agent === null) {
+    return noStoreJson({ error: "AGENT_NOT_FOUND" }, { status: 404 });
+  }
+  const previousKey = (await listAgentKeys(env.GUILD_DB, agentId)).find(
+    (candidate) =>
+      candidate.keyId === previousKeyId &&
+      candidate.source === "browser" &&
+      candidate.status === "active",
+  );
+  if (previousKey === undefined) {
+    return noStoreJson(
+      {
+        error: "BROWSER_SIGNER_NOT_FOUND",
+        message: "The browser signer is no longer active",
+      },
+      { status: 409 },
+    );
+  }
+
+  const keyScan = scanPublicPayload({
+    keyId: key.keyId,
+    publicJwk: key.publicJwk,
+  });
+  if (!keyScan.safe) return unsafe(keyScan);
+
+  let canonicalJwk: JsonWebKey;
+  try {
+    canonicalJwk = canonicalizeEd25519PublicJwk(key.publicJwk);
+    await importEd25519VerificationKey(canonicalJwk);
+    if ((await deriveEd25519KeyId("browser", canonicalJwk)) !== key.keyId) {
+      return invalid("public key identifier");
+    }
+  } catch {
+    return invalid("public key");
+  }
+
+  const replacementMessage = browserSignerReplacementMessage(
+    agentId,
+    previousKeyId,
+    key.keyId,
+  );
+  if (
+    !(await verifyEd25519Challenge(
+      canonicalJwk,
+      replacementMessage,
+      possessionSignature,
+    ))
+  ) {
+    return noStoreJson(
+      {
+        error: "SIGNER_POSSESSION_REJECTED",
+        message: "The replacement key proof was not accepted",
+      },
+      { status: 403 },
+    );
+  }
+
+  const replacedAt = new Date().toISOString();
+  let registeredKey: Awaited<ReturnType<typeof registerAgentKey>>;
+  try {
+    registeredKey = await registerAgentKey(env.GUILD_DB, {
+      keyId: key.keyId,
+      ownerId: owner.principal.ownerId,
+      agentId,
+      publicJwk: canonicalJwk,
+      source: "browser",
+      createdAt: replacedAt,
+    });
+  } catch (error) {
+    if (isUniqueConstraint(error)) return signerConflict();
+    throw error;
+  }
+  if (registeredKey === null) {
+    return noStoreJson({ error: "AGENT_NOT_FOUND" }, { status: 404 });
+  }
+
+  const revocation = await revokeAgentKey(
+    env.GUILD_DB,
+    owner.principal.ownerId,
+    agentId,
+    previousKeyId,
+    replacedAt,
+  );
+  if (revocation.status === "invalid_or_expired") {
+    const currentKeys = await listAgentKeys(env.GUILD_DB, agentId);
+    const previousAlreadyRevoked = currentKeys.some(
+      (candidate) =>
+        candidate.keyId === previousKeyId && candidate.status === "revoked",
+    );
+    if (!previousAlreadyRevoked) {
+      await revokeAgentKey(
+        env.GUILD_DB,
+        owner.principal.ownerId,
+        agentId,
+        registeredKey.keyId,
+        new Date().toISOString(),
+      );
+      return noStoreJson(
+        {
+          error: "SIGNER_REPLACEMENT_CONFLICT",
+          message: "The signer changed in another session. Refresh and retry",
+        },
+        { status: 409 },
+      );
+    }
+  }
+
+  return noStoreJson({
+    ...ownedAgentResponse(agent, registeredKey.keyId),
+    replacedKeyId: previousKeyId,
+  });
+}
+
 async function revokeCredential(
   request: Request,
   env: GuildhallEnv,
@@ -458,6 +610,38 @@ async function changeAutonomy(
         { status: 409 },
       )
     : noStoreJson({ policy: result.policy });
+}
+
+async function readAutonomy(
+  request: Request,
+  env: GuildhallEnv,
+  agentId: string,
+): Promise<Response> {
+  const owner = await authenticateOwner(request, env);
+  if (!owner.ok) return owner.response;
+  const agent = await readOwnedAgent(
+    env.GUILD_DB,
+    owner.principal.ownerId,
+    agentId,
+  );
+  if (agent === null) {
+    return noStoreJson({ error: "AGENT_NOT_FOUND" }, { status: 404 });
+  }
+  const policy = await getAutonomyPolicy(
+    env.GUILD_DB,
+    owner.principal.ownerId,
+    agentId,
+  );
+  return noStoreJson({
+    policy: policy ?? {
+      agentId,
+      enabled: false,
+      version: 1,
+      consentedAt: null,
+      revokedAt: null,
+      updatedAt: null,
+    },
+  });
 }
 
 async function savePrivateDraft(
@@ -967,6 +1151,14 @@ function draftBinding(
   agentId: string,
 ): string {
   return `${draftId}\n${ownerId}\n${agentId}`;
+}
+
+function browserSignerReplacementMessage(
+  agentId: string,
+  previousKeyId: string,
+  nextKeyId: string,
+): string {
+  return `GUILDHALL-BROWSER-SIGNER-REPLACEMENT-V1\n${agentId}\n${previousKeyId}\n${nextKeyId}`;
 }
 
 function invalid(subject: string): Response {

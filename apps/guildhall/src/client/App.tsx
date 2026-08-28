@@ -1,49 +1,65 @@
-import { useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 
 import {
   OwnerGateway,
   type ActiveBrowserAgent,
   type OwnerGatewayHandle,
 } from "./auth/OwnerGateway";
-import { LiveGuild } from "./live/LiveGuild";
-import { TechnicalMission } from "./mission/TechnicalMission";
-import { GuildhallWebMcp } from "./webmcp/GuildhallWebMcp";
+import {
+  GuildhallWebMcp,
+  type WebMcpReadiness,
+} from "./webmcp/GuildhallWebMcp";
+import { ProtocolCards } from "./protocol/ProtocolCards";
+import "./app-shell.css";
 
-const protocolMoves = [
-  {
-    index: "01",
-    protocol: "WebMCP",
-    title: "Publish",
-    detail: "A browser agent turns public context into fixed mission terms.",
-  },
-  {
-    index: "02",
-    protocol: "A2A",
-    title: "Recruit",
-    detail: "Independent agents discover the work and bid by capability.",
-  },
-  {
-    index: "03",
-    protocol: "PactBridge",
-    title: "Sign",
-    detail: "The party signs one role map, output list, and reward split.",
-  },
-  {
-    index: "04",
-    protocol: "Verifier",
-    title: "Verify",
-    detail: "Evidence decides the result and issues a public receipt.",
-  },
-] as const;
+const TechnicalMission = lazy(async () => ({
+  default: (await import("./mission/TechnicalMission")).TechnicalMission,
+}));
+const LiveGuild = lazy(async () => ({
+  default: (await import("./live/LiveGuild")).LiveGuild,
+}));
 
 export function App() {
   const identityControlRef = useRef<OwnerGatewayHandle>(null);
+  const mobileNavRef = useRef<HTMLDetailsElement>(null);
   const [activeAgent, setActiveAgent] = useState<ActiveBrowserAgent | null>(
     null,
   );
   const [identityResolved, setIdentityResolved] = useState(false);
+  const [webMcpStatus, setWebMcpStatus] = useState<WebMcpReadiness>("checking");
+  const [activeSection, setActiveSection] = useState("home");
   const activeAgentId = activeAgent?.agentId ?? null;
   const activeAgentKeyId = activeAgent?.keyId ?? null;
+
+  useEffect(() => {
+    const targetId = window.location.hash.slice(1);
+    if (targetId.length === 0) return;
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById(targetId)?.scrollIntoView({ block: "start" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => {
+    const sections = ["home", "protocol", "demo", "live-guild"]
+      .map((id) => document.getElementById(id))
+      .filter((section): section is HTMLElement => section !== null);
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+        if (visible?.target.id) setActiveSection(visible.target.id);
+      },
+      { rootMargin: "-18% 0px -68%", threshold: [0, 0.2, 0.6] },
+    );
+    sections.forEach((section) => observer.observe(section));
+    return () => observer.disconnect();
+  }, []);
+
+  function closeMobileNav() {
+    if (mobileNavRef.current !== null) mobileNavRef.current.open = false;
+  }
 
   return (
     <div className="app-shell">
@@ -54,7 +70,7 @@ export function App() {
       <header className="site-shell-header">
         <a className="hud-wordmark" href="#home" aria-label="Guildhall home">
           <span className="hud-wordmark-mark" aria-hidden="true">
-            G
+            <img src="/brand/pact-seal.svg" alt="" />
           </span>
           <span>
             <strong>Guildhall</strong>
@@ -62,10 +78,68 @@ export function App() {
           </span>
         </a>
         <nav className="site-shell-nav" aria-label="Primary navigation">
-          <a href="#protocol">Protocol</a>
-          <a href="#demo">Demo</a>
-          <a href="#live-guild">Live Guild</a>
+          <a
+            href="#protocol"
+            aria-current={activeSection === "protocol" ? "location" : undefined}
+          >
+            Protocol
+          </a>
+          <a
+            href="#demo"
+            aria-current={activeSection === "demo" ? "location" : undefined}
+          >
+            Demo
+          </a>
+          <a
+            href="#live-guild"
+            aria-current={
+              activeSection === "live-guild" ? "location" : undefined
+            }
+          >
+            Live Guild
+          </a>
         </nav>
+        <details className="mobile-site-nav" ref={mobileNavRef}>
+          <summary aria-label="Open site navigation">
+            <span aria-hidden="true" />
+            <span aria-hidden="true" />
+            <span aria-hidden="true" />
+          </summary>
+          <nav aria-label="Mobile navigation">
+            <a
+              href="#home"
+              onClick={closeMobileNav}
+              aria-current={activeSection === "home" ? "location" : undefined}
+            >
+              Home
+            </a>
+            <a
+              href="#protocol"
+              onClick={closeMobileNav}
+              aria-current={
+                activeSection === "protocol" ? "location" : undefined
+              }
+            >
+              Protocol
+            </a>
+            <a
+              href="#demo"
+              onClick={closeMobileNav}
+              aria-current={activeSection === "demo" ? "location" : undefined}
+            >
+              Guided Demo
+            </a>
+            <a
+              href="#live-guild"
+              onClick={closeMobileNav}
+              aria-current={
+                activeSection === "live-guild" ? "location" : undefined
+              }
+            >
+              Live Guild
+            </a>
+          </nav>
+        </details>
         <div className="hud-owner-controls" id="guild-identity">
           <OwnerGateway
             ref={identityControlRef}
@@ -75,6 +149,7 @@ export function App() {
           <GuildhallWebMcp
             activeAgentId={activeAgentId}
             activeAgentKeyId={activeAgentKeyId}
+            onStatusChange={setWebMcpStatus}
           />
         </div>
       </header>
@@ -152,24 +227,15 @@ export function App() {
           <div className="page-section-heading">
             <div>
               <p className="eyebrow">The Protocol</p>
-              <h2 id="protocol-title">4 Moves. One Inspectable Record.</h2>
+              <h2 id="protocol-title">Four Stages. Two Levels of Detail.</h2>
             </div>
             <p>
-              WebMCP starts the request in the browser. A2A finds independent
-              help. PactBridge fixes the contract. Deterministic verification
-              decides the outcome.
+              Start with the simple explanation. Select any stage to see the
+              real tools, transport, signatures, and invariants that make it
+              work.
             </p>
           </div>
-          <ol className="protocol-moves">
-            {protocolMoves.map((move) => (
-              <li key={move.protocol}>
-                <span>{move.index}</span>
-                <code translate="no">{move.protocol}</code>
-                <h3>{move.title}</h3>
-                <p>{move.detail}</p>
-              </li>
-            ))}
-          </ol>
+          <ProtocolCards />
 
           <div className="login-guide" aria-labelledby="login-guide-title">
             <div>
@@ -234,25 +300,32 @@ export function App() {
               <span>03</span>Verification, not voting, decides the reward.
             </li>
           </ul>
-          <TechnicalMission
-            activeAgentId={activeAgentId}
-            activeAgentKeyId={activeAgentKeyId}
-            identityResolved={identityResolved}
-          />
+          <Suspense
+            fallback={<SectionLoading label="Loading the guided demo" />}
+          >
+            <TechnicalMission
+              activeAgentId={activeAgentId}
+              activeAgentKeyId={activeAgentKeyId}
+              identityResolved={identityResolved}
+            />
+          </Suspense>
         </section>
 
-        <LiveGuild
-          activeAgentId={activeAgentId}
-          onOpenIdentity={() =>
-            identityControlRef.current?.openIdentityControl()
-          }
-        />
+        <Suspense fallback={<SectionLoading label="Loading the live guild" />}>
+          <LiveGuild
+            activeAgentId={activeAgentId}
+            webMcpStatus={webMcpStatus}
+            onOpenIdentity={() =>
+              identityControlRef.current?.openIdentityControl()
+            }
+          />
+        </Suspense>
       </main>
 
       <footer className="site-footer">
         <a className="hud-wordmark" href="#home">
           <span className="hud-wordmark-mark" aria-hidden="true">
-            G
+            <img src="/brand/pact-seal.svg" alt="" />
           </span>
           <span>
             <strong>Guildhall</strong>
@@ -262,6 +335,15 @@ export function App() {
         <p>Public tasks. Independent agents. Signed outcomes.</p>
         <a href="/.well-known/agent-card.json">A2A Agent Card ↗</a>
       </footer>
+    </div>
+  );
+}
+
+function SectionLoading({ label }: { readonly label: string }) {
+  return (
+    <div className="section-loading" role="status">
+      <span aria-hidden="true" />
+      {label}
     </div>
   );
 }

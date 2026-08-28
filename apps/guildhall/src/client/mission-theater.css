@@ -49,8 +49,6 @@ body {
     ),
     linear-gradient(155deg, #071116, #0b171d 48%, #071116);
   font-family:
-    "Hanken Grotesk",
-    Inter,
     ui-sans-serif,
     system-ui,
     -apple-system,
@@ -457,53 +455,6 @@ section.live-guild-section {
   font-size: 0.94rem;
   line-height: 1.65;
   text-wrap: pretty;
-}
-
-.protocol-moves {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  margin: 0;
-  padding: 0;
-  border-top: 1px solid var(--hud-edge);
-  border-bottom: 1px solid var(--hud-edge);
-  list-style: none;
-}
-
-.protocol-moves li {
-  min-height: 250px;
-  padding: 24px;
-  border-right: 1px solid var(--hud-edge);
-}
-
-.protocol-moves li:last-child {
-  border-right: 0;
-}
-
-.protocol-moves li > span {
-  display: block;
-  margin-bottom: 42px;
-  color: var(--hud-muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.6rem;
-}
-
-.protocol-moves code {
-  color: var(--hud-aether);
-  font-size: 0.62rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.protocol-moves h3 {
-  margin: 10px 0 9px;
-  font-size: 1.42rem;
-}
-
-.protocol-moves p {
-  margin: 0;
-  color: var(--hud-muted);
-  font-size: 0.78rem;
-  line-height: 1.55;
 }
 
 .login-guide {
@@ -3393,18 +3344,6 @@ section.live-guild-section {
     margin-inline: auto;
   }
 
-  .protocol-moves {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .protocol-moves li:nth-child(2) {
-    border-right: 0;
-  }
-
-  .protocol-moves li:nth-child(-n + 2) {
-    border-bottom: 1px solid var(--hud-edge);
-  }
-
   .live-entry-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -3715,21 +3654,6 @@ section.live-guild-section {
   .map-helper-one,
   .map-helper-two {
     right: 2%;
-  }
-
-  .protocol-moves {
-    grid-template-columns: 1fr;
-  }
-
-  .protocol-moves li,
-  .protocol-moves li:nth-child(2) {
-    min-height: 210px;
-    border-right: 0;
-    border-bottom: 1px solid var(--hud-edge);
-  }
-
-  .protocol-moves li:last-child {
-    border-bottom: 0;
   }
 
   .login-guide {

@@ -1,13 +1,20 @@
 export interface MissionCard {
   readonly missionId: string;
+  readonly missionVersion: number;
+  readonly requesterAgentId: string;
   readonly title: string;
-  readonly summary?: string;
+  readonly goal: string;
   readonly displayState: string;
-  readonly difficulty?: "novice" | "adept" | "expert";
-  readonly pointReward?: number;
-  readonly requiredCapabilities?: readonly string[];
-  readonly applicantCount?: number;
-  readonly maximumPartySize?: number;
+  readonly difficulty: "novice" | "adept" | "expert";
+  readonly pointReward: number;
+  readonly requiredCapabilities: readonly string[];
+  readonly applicantCount: number;
+  readonly minimumPartySize: number;
+  readonly preferredPartySize: number;
+  readonly maximumPartySize: number;
+  readonly formationDeadline: string;
+  readonly deliveryDeadline: string;
+  readonly catalogKind: "community" | "reference";
 }
 
 export interface PublicCapability {

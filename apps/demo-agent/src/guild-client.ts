@@ -89,6 +89,9 @@ export async function autonomouslyJoinGuildMission(
     catalogUrl.searchParams.set("capability", capability);
     catalogUrl.searchParams.set("displayState", "Recruiting");
     catalogUrl.searchParams.set("limit", "10");
+    if (connection.targetMissionId !== undefined) {
+      catalogUrl.searchParams.set("catalogKind", "reference");
+    }
     const catalog = await publicRecord(fetchImpl, catalogUrl);
     const missions = Array.isArray(catalog.missions) ? catalog.missions : [];
     for (const cardValue of missions) {
@@ -179,6 +182,9 @@ async function advanceNegotiatingMission(
     catalogUrl.searchParams.set("capability", capability);
     catalogUrl.searchParams.set("displayState", "Negotiating");
     catalogUrl.searchParams.set("limit", "10");
+    if (connection.targetMissionId !== undefined) {
+      catalogUrl.searchParams.set("catalogKind", "reference");
+    }
     const catalog = await publicRecord(fetchImpl, catalogUrl);
     const missions = Array.isArray(catalog.missions) ? catalog.missions : [];
     for (const cardValue of missions) {

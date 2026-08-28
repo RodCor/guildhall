@@ -13,7 +13,10 @@ import {
   registerScopedCredential,
   upsertGithubOwnerAndSession,
 } from "../../apps/guildhall/src/worker/repositories";
-import { projectMissionCatalog } from "../../apps/guildhall/src/worker/repositories/missionCatalog";
+import {
+  markReferenceMission,
+  projectMissionCatalog,
+} from "../../apps/guildhall/src/worker/repositories/missionCatalog";
 import { createAgentRequestSignatureMessage } from "../../packages/trust-engine/src";
 
 const ORIGIN = "https://guildhall.test";
@@ -76,6 +79,27 @@ describe("bounded public REST projections", () => {
       profile: { agentId: first, technicalName: "Protocol Public One" },
     });
 
+    expect(
+      await json(
+        await fetchApi(
+          "/api/leaderboard?capability=accessibility-audit&limit=10",
+        ),
+      ),
+    ).toMatchObject({
+      capability: "accessibility-audit",
+      rankings: [
+        {
+          rank: 1,
+          profile: { agentId: first },
+          verifiedPoints: 600,
+          verifiedMissions: 3,
+        },
+      ],
+    });
+    expect(
+      (await fetchApi("/api/leaderboard?capability=INVALID CAPABILITY")).status,
+    ).toBe(400);
+
     expect((await fetchApi(`/api/agents/${crypto.randomUUID()}`)).status).toBe(
       404,
     );
@@ -86,6 +110,7 @@ describe("bounded public REST projections", () => {
     const firstId = crypto.randomUUID();
     const secondId = crypto.randomUUID();
     const incompleteId = crypto.randomUUID();
+    const referenceId = crypto.randomUUID();
     await seedMission(firstId, {
       projectedAt: "2026-08-26T12:00:01.000Z",
       capability: "accessibility-audit",
@@ -110,6 +135,14 @@ describe("bounded public REST projections", () => {
       lastSequence: 1,
       projectedAt: "2026-08-26T12:00:03.000Z",
     });
+    await seedMission(referenceId, {
+      projectedAt: "2026-08-26T12:00:04.000Z",
+      capability: "accessibility-audit",
+      displayState: "Completed",
+      sequence: 14,
+      applicants: 2,
+    });
+    expect(await markReferenceMission(env.GUILD_DB, referenceId)).toBe(true);
 
     const stale = await projectMissionCatalog(env.GUILD_DB, {
       ...missionProjection(firstId, {
@@ -126,7 +159,8 @@ describe("bounded public REST projections", () => {
       "/api/missions?capability=accessibility-audit",
     );
     expect(filtered.status).toBe(200);
-    expect(await json(filtered)).toMatchObject({
+    const filteredBody = await json<Record<string, unknown>>(filtered);
+    expect(filteredBody).toMatchObject({
       missions: [
         {
           missionId: firstId,
@@ -137,6 +171,17 @@ describe("bounded public REST projections", () => {
       ],
       nextCursor: null,
     });
+    expect(JSON.stringify(filteredBody)).not.toContain(referenceId);
+
+    expect(
+      await json(await fetchApi("/api/missions?catalogKind=reference")),
+    ).toMatchObject({
+      missions: [{ missionId: referenceId, catalogKind: "reference" }],
+      nextCursor: null,
+    });
+    expect((await fetchApi("/api/missions?catalogKind=private")).status).toBe(
+      400,
+    );
 
     const firstPage = await json<{
       missions: Array<{ missionId: string }>;
@@ -463,6 +508,7 @@ function missionCardShape(missionId: string) {
     pointReward: 240,
     applicantCount: 1,
     displayState: "Negotiating",
+    catalogKind: "community",
   };
 }
 

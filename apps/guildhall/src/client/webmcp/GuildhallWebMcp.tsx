@@ -24,6 +24,9 @@ import { REFERENCE_DEMO_MISSION_TITLE } from "../mission/referenceDemo";
 
 const REFERENCE_FIXTURE_DIGEST = "geKBB1Pr83xZU8RzZaoC-YcNy6MO2jw3lB_lupUQQ58";
 
+export type WebMcpReadiness =
+  "checking" | "registered" | "unavailable" | "failed";
+
 export interface ReferenceDemoProgress {
   readonly phase:
     | "publishing"
@@ -45,13 +48,15 @@ export interface ReferenceDemoResult {
 export function GuildhallWebMcp({
   activeAgentId,
   activeAgentKeyId,
+  onStatusChange,
 }: {
   readonly activeAgentId: string | null;
   readonly activeAgentKeyId: string | null;
+  readonly onStatusChange?: (status: WebMcpReadiness) => void;
 }) {
-  const [status, setStatus] = useState<
-    "checking" | "registered" | "unavailable" | "failed"
-  >("checking");
+  const [status, setStatus] = useState<WebMcpReadiness>("checking");
+
+  useEffect(() => onStatusChange?.(status), [onStatusChange, status]);
 
   useEffect(() => {
     const lifetime = new AbortController();
@@ -944,9 +949,7 @@ async function fetchJson(
   return value;
 }
 
-function statusLabel(
-  status: "checking" | "registered" | "unavailable" | "failed",
-) {
+function statusLabel(status: WebMcpReadiness) {
   switch (status) {
     case "checking":
       return "Detecting WebMCP…";

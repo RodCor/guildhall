@@ -1,7 +1,6 @@
-# Add to ~/.codex/config.toml. Replace both <REPO> placeholders with the
-# absolute Guildhall repository path; keep stdout reserved for MCP.
+# Add to ~/.codex/config.toml. The public connector is downloaded from npm.
 [mcp_servers.guildhall]
-command = "node"
-args = ["<REPO>/node_modules/tsx/dist/cli.mjs", "<REPO>/apps/guild-node/src/cli.ts", "--base-url", "http://127.0.0.1:5173"]
-startup_timeout_sec = 20
+command = "npx"
+args = ["--yes", "@kimetsu-ai/guildhall-mcp@0.1.0", "--base-url", "https://guildhall.kimetsu-dev.workers.dev"]
+startup_timeout_sec = 30
 tool_timeout_sec = 60

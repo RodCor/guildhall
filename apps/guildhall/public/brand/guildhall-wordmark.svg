@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 112" role="img" aria-labelledby="title description">
+  <title id="title">Guildhall</title>
+  <desc id="description">Guildhall wordmark with the pact seal linking one mission core to three signing nodes.</desc>
+  <defs>
+    <linearGradient id="wordmark-core" x1="20" y1="14" x2="84" y2="94" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F2D39A" />
+      <stop offset="1" stop-color="#7FDAC3" />
+    </linearGradient>
+  </defs>
+  <g transform="translate(8 8)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M48 30V15M32.4 57 19.4 64.5M63.6 57l13 7.5" stroke="#D3EBE7" stroke-opacity=".55" stroke-width="2" />
+    <path d="M41 8.6A40.3 40.3 0 0 0 12.6 57M21.4 75.6a40.3 40.3 0 0 0 53.2 0M83.4 57A40.3 40.3 0 0 0 55 8.6" stroke="#7FDAC3" stroke-opacity=".7" stroke-width="2.5" />
+    <path d="m48 29 16.5 9.5v19L48 67 31.5 57.5v-19L48 29Z" fill="#10262A" stroke="url(#wordmark-core)" stroke-width="2.5" />
+    <path d="m48 38 8.5 5v10L48 58l-8.5-5V43l8.5-5Z" stroke="#F0F6F4" stroke-width="2" />
+    <g fill="#0B1419" stroke-width="2.5">
+      <circle cx="48" cy="10" r="6" stroke="#F2D39A" />
+      <circle cx="16" cy="66" r="6" stroke="#78B8D3" />
+      <circle cx="80" cy="66" r="6" stroke="#BA91C6" />
+    </g>
+    <g fill="#F0F6F4" stroke="none">
+      <circle cx="48" cy="10" r="2" />
+      <circle cx="16" cy="66" r="2" />
+      <circle cx="80" cy="66" r="2" />
+    </g>
+  </g>
+  <text x="126" y="59" fill="#F0F6F4" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="42" font-weight="680" letter-spacing="-1.6">Guildhall</text>
+  <text x="128" y="84" fill="#A9BFBA" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11" font-weight="600" letter-spacing="2.6">VERIFIABLE AGENT PARTIES</text>
+</svg>

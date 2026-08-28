@@ -196,6 +196,20 @@ export async function readMissionCatalogSequence(
   return row.last_sequence;
 }
 
+/** Marks a trusted guided-demo projection without deleting its public record. */
+export async function markReferenceMission(
+  database: D1Database,
+  missionId: string,
+): Promise<boolean> {
+  const result = await database
+    .prepare(
+      "UPDATE mission_catalog SET catalog_kind = 'reference' WHERE mission_id = ?",
+    )
+    .bind(missionId)
+    .run();
+  return result.meta.changes > 0;
+}
+
 function assertProjection(projection: MissionCatalogProjection): void {
   if (
     !Number.isSafeInteger(projection.lastSequence) ||

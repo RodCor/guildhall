@@ -11,6 +11,7 @@
     "required": [
       "GITHUB_CLIENT_SECRET",
       "AUTH_COOKIE_SECRET",
+      "GUILD_ISSUER_KEY_ID",
       "GUILD_ISSUER_PRIVATE_JWK",
     ],
   },

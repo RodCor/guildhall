@@ -8,6 +8,8 @@ export interface BrowserSigningIdentity {
   readonly privateKey: CryptoKey;
 }
 
+const SIGNER_REPLACEMENT_DOMAIN = "GUILDHALL-BROWSER-SIGNER-REPLACEMENT-V1";
+
 interface StoredIdentity {
   readonly id: string;
   readonly keyId: string;
@@ -92,6 +94,30 @@ export async function signBrowserMessage(
     buffer,
   );
   return encodeBase64Url(new Uint8Array(signature));
+}
+
+/**
+ * Bind a replacement signer to one owned agent and the exact server key it
+ * supersedes. The Worker verifies a signature over these same UTF-8 bytes
+ * before registering the new public key.
+ */
+export function browserSignerReplacementMessage(
+  agentId: string,
+  previousKeyId: string,
+  nextKeyId: string,
+): string {
+  if (
+    agentId.trim() === "" ||
+    previousKeyId.trim() === "" ||
+    nextKeyId.trim() === "" ||
+    previousKeyId === nextKeyId ||
+    agentId.includes("\n") ||
+    previousKeyId.includes("\n") ||
+    nextKeyId.includes("\n")
+  ) {
+    throw new TypeError("Signer replacement identifiers are invalid");
+  }
+  return `${SIGNER_REPLACEMENT_DOMAIN}\n${agentId}\n${previousKeyId}\n${nextKeyId}`;
 }
 
 export async function deriveBrowserKeyId(

@@ -2,10 +2,15 @@ import type { Mission } from "@guildhall/contracts";
 
 import { authorizeAgentAction } from "./auth/agentAuthorization.js";
 import type { MissionSnapshotPacket } from "./durable/protocol.js";
+import { markReferenceMission } from "./repositories/missionCatalog.js";
 import type { GuildhallEnv } from "./types.js";
 
 const MAX_RALLY_ROUNDS = 4;
 const AGENT_PULSE_TIMEOUT_MS = 12_000;
+const REFERENCE_DEMO_TITLES = new Set([
+  "audit and repair an inaccessible public webpage",
+  "map and remediate the accessibility dungeon",
+]);
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
@@ -71,6 +76,21 @@ export async function handleDemoRallyRoute(
       403,
     );
   }
+  if (
+    !REFERENCE_DEMO_TITLES.has(packet.definition.title.trim().toLowerCase())
+  ) {
+    return noStoreJson(
+      {
+        error: "RALLY_NOT_REFERENCE_MISSION",
+        message: "The reference party only accepts the guided demo mission.",
+      },
+      422,
+    );
+  }
+  const catalogMarked = await markReferenceMission(
+    env.GUILD_DB,
+    body.missionId,
+  );
   const secret = env.GUILD_DEMO_RALLY_SECRET;
   const agents = referenceAgentOrigins(env);
   if (secret === undefined || secret.length < 32 || agents === null) {
@@ -112,6 +132,7 @@ export async function handleDemoRallyRoute(
     JSON.stringify({
       missionId: body.missionId,
       rallies,
+      catalogMarked,
       message: "reference party rally completed",
     }),
   );
@@ -130,6 +151,7 @@ export async function handleDemoRallyRoute(
       rallies,
       boundedRounds: MAX_RALLY_ROUNDS,
       coordination: "independent-signed-a2a",
+      catalog: catalogMarked ? "reference" : "projection-pending",
     },
     replayed: false,
     catalogPending: false,

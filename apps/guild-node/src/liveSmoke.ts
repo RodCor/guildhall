@@ -9,13 +9,35 @@ function option(name: string): string | undefined {
 }
 
 const baseUrl = option("--base-url") ?? "http://127.0.0.1:8787";
+const connector = option("--connector");
 const currentFile = fileURLToPath(import.meta.url);
 const packageRoot = resolve(dirname(currentFile), "..");
 const cli = resolve(packageRoot, "src/cli.ts");
 const tsx = fileURLToPath(import.meta.resolve("tsx/cli"));
+const connectorArguments = [
+  "--yes",
+  "--package",
+  connector ?? "",
+  "--",
+  "guildhall-mcp",
+  "--base-url",
+  baseUrl,
+];
+const command =
+  connector === undefined
+    ? process.execPath
+    : process.platform === "win32"
+      ? "cmd.exe"
+      : "npx";
+const arguments_ =
+  connector === undefined
+    ? [tsx, cli, "--base-url", baseUrl]
+    : process.platform === "win32"
+      ? ["/d", "/s", "/c", "npx", ...connectorArguments]
+      : connectorArguments;
 const transport = new StdioClientTransport({
-  command: process.execPath,
-  args: [tsx, cli, "--base-url", baseUrl],
+  command,
+  args: arguments_,
   cwd: packageRoot,
   stderr: "pipe",
 });
@@ -46,6 +68,9 @@ try {
   process.stdout.write(
     `${JSON.stringify(response.structuredContent, null, 2)}\n`,
   );
+} catch (error) {
+  if (stderr.length > 0) process.stderr.write(stderr);
+  throw error;
 } finally {
   await client.close();
 }

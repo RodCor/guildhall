@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import { App } from "./App";
+import { GuildCatalogProvider } from "./catalog/GuildCatalog";
 import "./styles.css";
 import "./mission-theater.css";
 
@@ -13,6 +14,8 @@ if (!rootElement) {
 
 createRoot(rootElement).render(
   <StrictMode>
-    <App />
+    <GuildCatalogProvider>
+      <App />
+    </GuildCatalogProvider>
   </StrictMode>,
 );
