@@ -5,6 +5,8 @@ import {
 } from "@guildhall/capability-manifest";
 import {
   ArtifactSubmissionSchema,
+  CommandProofSchema,
+  TimestampSchema,
   buildPact,
   canonicalJsonDigest,
   type AllocationAssignment,
@@ -37,6 +39,7 @@ import {
   authorizeAgentAction,
   type AgentAuthorization,
 } from "../auth/agentAuthorization.js";
+import { verifyAuthenticatedCommandProof } from "../auth/commandProof.js";
 import type { GuildhallEnv } from "../types.js";
 import { attemptAutomaticFormation } from "../formation.js";
 import { D1A2ATaskStore } from "./d1TaskStore.js";
@@ -232,6 +235,36 @@ class GuildBrokerExecutor implements A2ATaskExecutor {
         },
       );
     }
+    const commandProof = CommandProofSchema.safeParse(
+      context.commitment.commandProof,
+    );
+    const issuedAt = metadataString(context.commitment, "commandIssuedAt");
+    const proofPayload = {
+      input,
+      commitment: unsignedA2ACommitment(context.commitment),
+    };
+    if (!commandProof.success) {
+      throw taskError(
+        "The A2A command proof is missing, stale, or invalid.",
+        "GUILD_COMMAND_PROOF_INVALID",
+      );
+    }
+    const verifiedProof = await verifyAuthenticatedCommandProof({
+      authorization,
+      commandId: stableCommandId(input.commandId, context.message.messageId),
+      action,
+      missionId,
+      expectedSequence,
+      issuedAt,
+      payload: proofPayload,
+      proof: commandProof.data,
+    });
+    if (verifiedProof === null) {
+      throw taskError(
+        "The A2A command proof is missing, stale, or invalid.",
+        "GUILD_COMMAND_PROOF_INVALID",
+      );
+    }
     if (
       action === "guild.apply_to_mission" &&
       (snapshot.definition === null ||
@@ -282,8 +315,13 @@ class GuildBrokerExecutor implements A2ATaskExecutor {
         keyId: authorization.keyId,
       },
       source: "a2a",
-      issuedAt: new Date().toISOString(),
+      issuedAt,
       command,
+      proof: commandProof.data,
+      proofVerifiedAt: verifiedProof.verifiedAt,
+      keyStatusCheckedAt: verifiedProof.keyStatusCheckedAt,
+      proofAction: action,
+      proofPayload,
     } as const;
     const result =
       command.type === "submit_artifact"
@@ -383,6 +421,22 @@ class GuildBrokerExecutor implements A2ATaskExecutor {
     }
     return jsonValue(await response.json());
   }
+}
+
+function unsignedA2ACommitment(
+  commitment: Readonly<Record<string, JsonValue>>,
+): JsonObject {
+  return Object.fromEntries(
+    Object.entries(commitment).filter(
+      ([key]) =>
+        key !== "protocol" &&
+        key !== "action" &&
+        key !== "missionId" &&
+        key !== "agentId" &&
+        key !== "commandIssuedAt" &&
+        key !== "commandProof",
+    ),
+  ) as JsonObject;
 }
 
 async function lifecycleCommand(
@@ -599,8 +653,8 @@ function availability(value: JsonValue | undefined): {
   const availableFrom = requiredString(parsed, "availableFrom");
   const availableUntil = requiredString(parsed, "availableUntil");
   if (
-    !Number.isFinite(Date.parse(availableFrom)) ||
-    !Number.isFinite(Date.parse(availableUntil)) ||
+    !TimestampSchema.safeParse(availableFrom).success ||
+    !TimestampSchema.safeParse(availableUntil).success ||
     Date.parse(availableFrom) >= Date.parse(availableUntil)
   ) {
     throw taskError("Guild availability is invalid.", "GUILD_INPUT_INVALID");

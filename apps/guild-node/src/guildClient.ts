@@ -1,8 +1,11 @@
 import {
   ArtifactMetadataSchema,
+  artifactProofDigest,
   artifactSigningBytes,
   buildPact,
   canonicalJsonDigest,
+  commandBodyHash,
+  commandSigningBytes,
   MissionSchema,
   pactSigningBytes,
   type AllocationAssignment,
@@ -206,10 +209,34 @@ export class GuildClient {
       signal,
     );
     const draftId = requiredString(draft, "draftId");
+    const publishCommandId = commandId(input);
+    const issuedAt = new Date().toISOString();
+    const publishMaterial = {
+      commandId: publishCommandId,
+      action: "publish",
+      missionId: mission.missionId,
+      expectedSequence: 0,
+      actor: { agentId: config.agentId, keyId: config.keyId },
+      issuedAt,
+      payload: mission,
+    };
+    const bodyHash = await commandBodyHash(publishMaterial);
     const result = await this.#signedJson(
       "POST",
       `/api/drafts/${segment(draftId)}/publish`,
-      { requesterAgentId: config.agentId },
+      {
+        requesterAgentId: config.agentId,
+        keyId: config.keyId,
+        commandId: publishCommandId,
+        issuedAt,
+        proof: {
+          bodyHash,
+          signature: await signMessage(
+            config.privateJwk,
+            commandSigningBytes(bodyHash),
+          ),
+        },
+      },
       signal,
     );
     return this.#normalizeMutationResult(mission.missionId, result, signal);
@@ -221,16 +248,37 @@ export class GuildClient {
     signal?: AbortSignal,
   ): Promise<Record<string, unknown>> {
     const missionId = requiredString(input, "missionId");
+    const config = await this.#paired();
+    const issuedAt = new Date().toISOString();
+    const expectedSequence = await this.#expectedSequence(input, signal);
+    const id = commandId(input);
+    const proofMaterial = {
+      commandId: id,
+      action: requiredString(command, "type"),
+      missionId,
+      expectedSequence,
+      actor: { agentId: config.agentId, keyId: config.keyId },
+      issuedAt,
+      payload: command,
+    };
+    const bodyHash = await commandBodyHash(proofMaterial);
     const result = await this.#signedJson(
       "POST",
       `/api/missions/${segment(missionId)}/commands`,
       {
-        commandId: commandId(input),
-        expectedSequence: await this.#expectedSequence(input, signal),
-        actor: { agentId: await this.#agentId() },
+        commandId: id,
+        expectedSequence,
+        actor: proofMaterial.actor,
         source: "mcp",
-        issuedAt: new Date().toISOString(),
+        issuedAt,
         command,
+        proof: {
+          bodyHash,
+          signature: await signMessage(
+            config.privateJwk,
+            commandSigningBytes(bodyHash),
+          ),
+        },
       },
       signal,
     );
@@ -368,7 +416,13 @@ export class GuildClient {
         "artifact.contentDigest does not match artifact.content",
       );
     }
-    const metadata = ArtifactMetadataSchema.parse({
+    const outputId = requiredString(artifact, "outputId");
+    const dependencyArtifactIds = requiredStringArray(
+      artifact,
+      "dependencyArtifactIds",
+      true,
+    );
+    const unsignedMetadata = {
       protocol: "commitment/v1",
       kind: "artifact-metadata",
       artifactId: requiredString(artifact, "artifactId"),
@@ -382,12 +436,20 @@ export class GuildClient {
       mediaType: "application/json",
       publicLocation: artifactPublicLocation(config.baseUrl, missionId),
       contentDigest,
-      signature: await signMessage(
-        config.privateJwk,
-        artifactSigningBytes(pactDigest, contentDigest),
-      ),
       safetyStatus: "approved",
       completedAt: requiredString(artifact, "completedAt"),
+    } as const;
+    const proofDigest = await artifactProofDigest({
+      outputId,
+      metadata: { ...unsignedMetadata, signature: "" },
+      dependencyArtifactIds,
+    });
+    const metadata = ArtifactMetadataSchema.parse({
+      ...unsignedMetadata,
+      signature: await signMessage(
+        config.privateJwk,
+        artifactSigningBytes(pactDigest, proofDigest),
+      ),
     });
     return this.#command(
       input,
@@ -395,14 +457,10 @@ export class GuildClient {
         type: "submit_artifact",
         roleSlotId: metadata.roleSlotId,
         artifact: {
-          outputId: requiredString(artifact, "outputId"),
+          outputId,
           metadata,
           content,
-          dependencyArtifactIds: requiredStringArray(
-            artifact,
-            "dependencyArtifactIds",
-            true,
-          ),
+          dependencyArtifactIds,
         },
       },
       signal,

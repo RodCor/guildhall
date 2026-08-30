@@ -34,6 +34,8 @@ import {
 import {
   buildPact,
   canonicalJsonDigest,
+  commandBodyHash,
+  commandSigningBytes,
   importEd25519PublicJwk,
   MissionSchema,
   pactSigningBytes,
@@ -308,7 +310,7 @@ describe("live WebMCP to A2A party formation", () => {
     ).toBe(true);
     expect(verifyEventChain(packet.events)).toMatchObject({ valid: true });
     expect(packet.events.map((event) => event.source)).toEqual(
-      expect.arrayContaining(["webmcp", "a2a", "system"]),
+      expect.arrayContaining(["http", "a2a", "system"]),
     );
     expect(packet.events.map((event) => event.type)).toEqual(
       expect.arrayContaining([
@@ -327,7 +329,7 @@ describe("live WebMCP to A2A party formation", () => {
       packet.events
         .filter((event) => event.type === "pact_candidate_published")
         .map((event) => event.source),
-    ).toEqual(["webmcp", "a2a"]);
+    ).toEqual(["http", "a2a"]);
     expect(
       packet.events
         .filter((event) => event.type === "application_submitted")
@@ -578,12 +580,31 @@ function browserHandler(
         title: mission.title,
         payload: mission,
       });
+      const issuedAt = new Date().toISOString();
+      const bodyHash = await commandBodyHash({
+        commandId: context.commandId!,
+        action: "publish",
+        missionId: mission.missionId,
+        expectedSequence: 0,
+        actor: { agentId: REQUESTER_ID, keyId: owner.keyId },
+        issuedAt,
+        payload: mission,
+      });
       const result = await ownerPost(
         `/api/webmcp/drafts/${requiredString(draft, "draftId")}/publish`,
         owner.headers,
         {
           requesterAgentId: REQUESTER_ID,
+          keyId: owner.keyId,
           commandId: context.commandId,
+          issuedAt,
+          proof: {
+            bodyHash,
+            signature: await sign(
+              owner.privateKey,
+              commandSigningBytes(bodyHash),
+            ),
+          },
         },
       );
       return normalizeMutation(mission.missionId, result);
@@ -642,23 +663,25 @@ function browserHandler(
         assignments: parseAssignments(input.assignments),
         createdAt: new Date().toISOString(),
       });
+      const issuedAt = new Date().toISOString();
+      const command = {
+        type: "submit_proposal" as const,
+        proposerAgentId: REQUESTER_ID,
+        proposalRound,
+        pactDigest: await canonicalJsonDigest(pact),
+        pact,
+      };
       const result = await ownerPost(
         `/api/webmcp/missions/${missionId}/commands`,
         owner.headers,
-        {
-          commandId: context.commandId,
-          expectedSequence: requiredInteger(input, "expectedSequence"),
-          actor: { agentId: REQUESTER_ID },
-          source: "a2a",
-          issuedAt: new Date().toISOString(),
-          command: {
-            type: "submit_proposal",
-            proposerAgentId: REQUESTER_ID,
-            proposalRound,
-            pactDigest: await canonicalJsonDigest(pact),
-            pact,
-          },
-        },
+        await signedBrowserCommand(
+          owner,
+          missionId,
+          context.commandId!,
+          requiredInteger(input, "expectedSequence"),
+          issuedAt,
+          command,
+        ),
       );
       return normalizeMutation(missionId, result);
     }
@@ -666,29 +689,27 @@ function browserHandler(
       const missionId = requiredString(input, "missionId");
       const pactDigest = requiredString(input, "pactDigest");
       const acceptedAt = new Date().toISOString();
+      const command = {
+        type: "accept_pact" as const,
+        agentId: REQUESTER_ID,
+        acceptanceId: crypto.randomUUID(),
+        keyId: owner.keyId,
+        pactVersion: requiredInteger(input, "pactVersion"),
+        pactDigest,
+        signature: await sign(owner.privateKey, pactSigningBytes(pactDigest)),
+        acceptedAt,
+      };
       const result = await ownerPost(
         `/api/webmcp/missions/${missionId}/commands`,
         owner.headers,
-        {
-          commandId: context.commandId,
-          expectedSequence: requiredInteger(input, "expectedSequence"),
-          actor: { agentId: REQUESTER_ID },
-          source: "http",
-          issuedAt: acceptedAt,
-          command: {
-            type: "accept_pact",
-            agentId: REQUESTER_ID,
-            acceptanceId: crypto.randomUUID(),
-            keyId: owner.keyId,
-            pactVersion: requiredInteger(input, "pactVersion"),
-            pactDigest,
-            signature: await sign(
-              owner.privateKey,
-              pactSigningBytes(pactDigest),
-            ),
-            acceptedAt,
-          },
-        },
+        await signedBrowserCommand(
+          owner,
+          missionId,
+          context.commandId!,
+          requiredInteger(input, "expectedSequence"),
+          acceptedAt,
+          command,
+        ),
       );
       return normalizeMutation(missionId, result);
     }
@@ -696,6 +717,37 @@ function browserHandler(
       return { ...(await missionPacket(requiredString(input, "missionId"))) };
     }
     throw new TypeError(`Unexpected WebMCP action ${context.actionName}`);
+  };
+}
+
+async function signedBrowserCommand(
+  owner: BrowserOwner,
+  missionId: string,
+  commandId: string,
+  expectedSequence: number,
+  issuedAt: string,
+  command: Readonly<Record<string, unknown>>,
+): Promise<Record<string, unknown>> {
+  const bodyHash = await commandBodyHash({
+    commandId,
+    action: requiredString(command, "type"),
+    missionId,
+    expectedSequence,
+    actor: { agentId: REQUESTER_ID, keyId: owner.keyId },
+    issuedAt,
+    payload: command,
+  });
+  return {
+    commandId,
+    expectedSequence,
+    actor: { agentId: REQUESTER_ID, keyId: owner.keyId },
+    source: "http",
+    issuedAt,
+    command,
+    proof: {
+      bodyHash,
+      signature: await sign(owner.privateKey, commandSigningBytes(bodyHash)),
+    },
   };
 }
 

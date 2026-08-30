@@ -3,10 +3,12 @@ import {
   consumeAgentRequestNonce,
   listAgentKeys,
   readOwnedAgent,
+  type AgentKeyRecord,
   type CredentialPrincipal,
 } from "../repositories/index.js";
 import type { GuildhallEnv } from "../types.js";
 import { createAgentRequestSignatureMessage } from "@guildhall/trust-engine";
+import { TimestampSchema } from "@guildhall/contracts";
 import {
   hashOpaqueCredential,
   sha256Base64Url,
@@ -22,6 +24,8 @@ export type AgentAuthorization =
       readonly owner: Extract<OwnerAuthorization, { ok: true }>;
       readonly agentId: string;
       readonly keyId: string;
+      readonly signingKey: AgentKeyRecord;
+      readonly keyStatusCheckedAt: string;
     }
   | {
       readonly ok: true;
@@ -29,6 +33,8 @@ export type AgentAuthorization =
       readonly credential: CredentialPrincipal;
       readonly agentId: string;
       readonly keyId: string;
+      readonly signingKey: AgentKeyRecord;
+      readonly keyStatusCheckedAt: string;
     }
   | { readonly ok: false; readonly response: Response };
 
@@ -39,6 +45,7 @@ export async function authorizeAgentAction(
     readonly agentId: string;
     readonly bodyText: string;
     readonly requiredScope: string;
+    readonly keyId?: string;
   },
 ): Promise<AgentAuthorization> {
   const authorization = request.headers.get("Authorization");
@@ -54,9 +61,13 @@ export async function authorizeAgentAction(
     input.agentId,
   );
   if (ownedAgent === null) return denied();
-  const browserKey = (await listAgentKeys(env.GUILD_DB, input.agentId)).find(
+  const agentKeys = await listAgentKeys(env.GUILD_DB, input.agentId);
+  const keyStatusCheckedAt = new Date().toISOString();
+  const browserKey = agentKeys.find(
     (candidate) =>
-      candidate.source === "browser" && candidate.status === "active",
+      candidate.source === "browser" &&
+      candidate.status === "active" &&
+      (input.keyId === undefined || candidate.keyId === input.keyId),
   );
   return browserKey === undefined
     ? denied()
@@ -66,6 +77,8 @@ export async function authorizeAgentAction(
         owner,
         agentId: ownedAgent.agentId,
         keyId: browserKey.keyId,
+        signingKey: browserKey,
+        keyStatusCheckedAt,
       };
 }
 
@@ -108,13 +121,15 @@ async function authorizeGuildNode(
   }
   const issuedAtMs = Date.parse(issuedAt);
   if (
-    !Number.isFinite(issuedAtMs) ||
+    !TimestampSchema.safeParse(issuedAt).success ||
     Math.abs(Date.now() - issuedAtMs) > 5 * 60 * 1_000 ||
     !/^[A-Za-z0-9_-]{22,128}$/u.test(nonce)
   ) {
     return denied();
   }
-  const key = (await listAgentKeys(env.GUILD_DB, input.agentId)).find(
+  const agentKeys = await listAgentKeys(env.GUILD_DB, input.agentId);
+  const keyStatusCheckedAt = new Date().toISOString();
+  const key = agentKeys.find(
     (candidate) => candidate.keyId === keyId && candidate.status === "active",
   );
   if (
@@ -150,6 +165,8 @@ async function authorizeGuildNode(
     credential,
     agentId: credential.agentId,
     keyId,
+    signingKey: key,
+    keyStatusCheckedAt,
   };
 }
 

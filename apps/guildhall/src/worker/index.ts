@@ -10,11 +10,12 @@ import type {
 } from "@guildhall/mission-engine";
 
 import {
-  isCoordinatorCommand,
+  isUnverifiedAgentCommand,
   type MissionSnapshotPacket,
 } from "./durable/protocol.js";
 import { handleAgentRoute } from "./auth/agentRoutes.js";
 import { authorizeAgentAction } from "./auth/agentAuthorization.js";
+import { verifyAuthenticatedCommandProof } from "./auth/commandProof.js";
 import { handleOAuthRoute } from "./auth/oauth.js";
 import { handleSessionRoute } from "./auth/session.js";
 import { getAutonomyPolicy } from "./repositories/index.js";
@@ -79,7 +80,12 @@ export default {
       }
       const bodyText = await request.text();
       const body = parseJson(bodyText);
-      if (!isCoordinatorCommand(body) || body.actor === null) {
+      if (
+        !isUnverifiedAgentCommand(body) ||
+        body.actor === null ||
+        body.actor.keyId === undefined ||
+        body.proof === undefined
+      ) {
         return Response.json(
           {
             error: "INVALID_COMMAND",
@@ -119,8 +125,45 @@ export default {
         agentId: body.actor.agentId,
         bodyText,
         requiredScope: "missions:write",
+        keyId: body.actor.keyId,
       });
       if (!authorization.ok) return authorization.response;
+      if (
+        body.actor.keyId !== authorization.keyId ||
+        !commandIdentityMatches(
+          body.command,
+          authorization.agentId,
+          authorization.keyId,
+        )
+      ) {
+        return Response.json(
+          {
+            error: "COMMAND_NOT_AUTHORIZED",
+            message: "Command signer does not match the authenticated agent",
+          },
+          { status: 403 },
+        );
+      }
+      const verifiedProof = await verifyAuthenticatedCommandProof({
+        authorization,
+        commandId: body.commandId,
+        action: body.command.type,
+        missionId,
+        expectedSequence: body.expectedSequence,
+        issuedAt: body.issuedAt,
+        payload: body.command,
+        proof: body.proof,
+      });
+      if (verifiedProof === null) {
+        return Response.json(
+          {
+            error: "COMMAND_PROOF_INVALID",
+            message:
+              "The agent command signature is missing, stale, or invalid",
+          },
+          { status: 403 },
+        );
+      }
       const authenticatedCommand = {
         ...body,
         actor: {
@@ -131,32 +174,16 @@ export default {
               : authorization.credential.publicOwnerId,
           keyId: authorization.keyId,
         },
+        // The server records the authenticated network transport. A route name
+        // alone is not evidence that a browser invoked the WebMCP tool.
         source:
-          webMcpCommandMatch !== null
-            ? ("webmcp" as const)
-            : authorization.kind === "guild-node"
-              ? ("mcp" as const)
-              : ("http" as const),
-        command:
-          body.command.type === "apply"
-            ? {
-                ...body.command,
-                agentId: authorization.agentId,
-                keyId: authorization.keyId,
-              }
-            : body.command.type === "submit_capability_bid"
-              ? {
-                  ...body.command,
-                  agentId: authorization.agentId,
-                  keyId: authorization.keyId,
-                }
-              : body.command.type === "submit_assignment_proposal"
-                ? {
-                    ...body.command,
-                    proposerAgentId: authorization.agentId,
-                    keyId: authorization.keyId,
-                  }
-                : body.command,
+          authorization.kind === "guild-node"
+            ? ("mcp" as const)
+            : ("http" as const),
+        command: body.command,
+        proof: body.proof,
+        proofVerifiedAt: verifiedProof.verifiedAt,
+        keyStatusCheckedAt: verifiedProof.keyStatusCheckedAt,
       };
       const coordinator = env.MISSIONS.getByName(missionId);
       const replay = await coordinator.replayCommand(authenticatedCommand);
@@ -472,6 +499,37 @@ async function readinessResponse(env: GuildhallEnv): Promise<Response> {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function commandIdentityMatches(
+  command: LifecycleCommand,
+  agentId: string,
+  keyId: string,
+): boolean {
+  switch (command.type) {
+    case "apply":
+    case "submit_capability_bid":
+      return command.agentId === agentId && command.keyId === keyId;
+    case "withdraw":
+      return command.agentId === agentId;
+    case "submit_proposal":
+      return command.proposerAgentId === agentId;
+    case "submit_assignment_proposal":
+      return command.proposerAgentId === agentId && command.keyId === keyId;
+    case "accept_pact":
+      return command.agentId === agentId && command.keyId === keyId;
+    case "submit_artifact":
+      return (
+        command.artifact.metadata.producingAgentId === agentId &&
+        command.artifact.metadata.keyId === keyId
+      );
+    case "fill_role_slot":
+      return (
+        command.replacementAgentId === agentId && command.proof.keyId === keyId
+      );
+    default:
+      return true;
+  }
 }
 
 /** Authorization belongs at the public adapter boundary, after identity normalization. */

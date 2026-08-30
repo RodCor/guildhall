@@ -5,6 +5,7 @@ import {
   PactAcceptanceSchema,
   ReplacementProofSchema,
   ReceiptSchema,
+  artifactProofDigest,
   artifactSigningBytes,
   canonicalJsonDigest,
   importEd25519PrivateJwk,
@@ -51,6 +52,8 @@ import { executeBoundDemoMission } from "../executionOrchestrator.js";
 import {
   projectMissionCatalog,
   projectReceipt,
+  ensureCurrentIssuerKey,
+  issuerPublicJwk,
   listAgentKeys,
   type MissionCatalogProjection,
 } from "../repositories/index.js";
@@ -460,7 +463,7 @@ export class MissionCoordinator extends DurableObject<GuildhallEnv> {
             },
             message: artifactSigningBytes(
               artifact.metadata.pactDigest,
-              artifact.metadata.contentDigest,
+              await artifactProofDigest(artifact),
             ),
             policy: { kind: "new-proof" },
           });
@@ -1241,7 +1244,12 @@ export class MissionCoordinator extends DurableObject<GuildhallEnv> {
       emittedAt: issuedAt,
       source: "system",
       actor: null,
-      payload: { commandId: receiptId, command: receiptCommand },
+      payload: {
+        commandId: receiptId,
+        expectedSequence: state.sequence,
+        issuedAt,
+        command: receiptCommand,
+      },
       previousEventHash: priorChainHead,
     });
     const acceptedRecords = currentAcceptedArtifactRecords(
@@ -1427,6 +1435,14 @@ export class MissionCoordinator extends DurableObject<GuildhallEnv> {
           0,
         )
       : 0;
+    const issuerKeyId = this.requireIssuerKeyId();
+    const issuerJwk = this.requireIssuerJwk();
+    const publicIssuerJwk = issuerPublicJwk(issuerJwk);
+    await ensureCurrentIssuerKey(this.env.GUILD_DB, {
+      keyId: issuerKeyId,
+      publicJwk: publicIssuerJwk,
+      observedAt: issuedAt,
+    });
     const unsigned = {
       protocol: "commitment/v1" as const,
       kind: "receipt" as const,
@@ -1476,10 +1492,10 @@ export class MissionCoordinator extends DurableObject<GuildhallEnv> {
         monetaryValue: false as const,
       },
       reputationDeltas,
-      issuerKeyId: this.requireIssuerKeyId(),
+      issuerKeyId,
       issuedAt,
     };
-    const privateKey = await importEd25519PrivateJwk(this.requireIssuerJwk());
+    const privateKey = await importEd25519PrivateJwk(issuerJwk);
     const digest = await canonicalJsonDigest(unsigned);
     const issuerSignature = await signEd25519(
       privateKey,
@@ -1718,7 +1734,33 @@ export class MissionCoordinator extends DurableObject<GuildhallEnv> {
         actor: completeActor(command),
         payload: {
           commandId: command.commandId,
+          expectedSequence: command.expectedSequence ?? null,
+          issuedAt: command.issuedAt,
           command: command.command,
+          ...(command.proof === undefined
+            ? {}
+            : {
+                commandProof: command.proof,
+                commandProofMaterial: {
+                  commandId: command.commandId,
+                  action: command.proofAction ?? command.command.type,
+                  missionId: after.missionId,
+                  expectedSequence: command.expectedSequence,
+                  actor:
+                    command.actor === null
+                      ? null
+                      : {
+                          agentId: command.actor.agentId,
+                          keyId: command.actor.keyId,
+                        },
+                  issuedAt: command.issuedAt,
+                  payload: structuredClone(
+                    command.proofPayload ?? command.command,
+                  ),
+                },
+                proofVerifiedAt: command.proofVerifiedAt,
+                keyStatusCheckedAt: command.keyStatusCheckedAt,
+              }),
         },
         previousEventHash,
       });
@@ -2424,8 +2466,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-/** Transport retry time is audit metadata, not part of command identity. */
+/** Server verification time is audit metadata, not part of client command identity. */
 function coordinatorRequestHash(input: CoordinatorCommand): string {
-  const { issuedAt: _issuedAt, ...semanticCommand } = input;
-  return canonicalDigestSync(semanticCommand);
+  const {
+    proofVerifiedAt: _proofVerifiedAt,
+    keyStatusCheckedAt: _keyStatusCheckedAt,
+    ...semanticCommand
+  } = input;
+  if (semanticCommand.proof !== undefined) {
+    return canonicalDigestSync(semanticCommand);
+  }
+  const { issuedAt: _issuedAt, ...unsignedInternalCommand } = semanticCommand;
+  return canonicalDigestSync(unsignedInternalCommand);
 }

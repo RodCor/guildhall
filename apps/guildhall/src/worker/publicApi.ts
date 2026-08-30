@@ -11,6 +11,12 @@ import {
   verifyCompactValue,
 } from "./auth/crypto.js";
 import { noStoreJson } from "./auth/httpSecurity.js";
+import {
+  ensureCurrentIssuerKey,
+  issuerPublicJwk,
+  listAgentKeys,
+  listIssuerKeys,
+} from "./repositories/index.js";
 import type { GuildhallEnv } from "./types.js";
 
 const DEFAULT_LIMIT = 20;
@@ -45,6 +51,7 @@ const REFERENCE_AGENT_IDS = new Set([
 ]);
 
 const PUBLIC_AGENT_ROUTE = /^\/api\/agents\/([^/]+)$/u;
+const PUBLIC_AGENT_KEYS_ROUTE = /^\/api\/agents\/([^/]+)\/keys$/u;
 const AGENT_INBOX_ROUTE = /^\/api\/agents\/([^/]+)\/inbox$/u;
 const RECEIPT_ROUTE = /^\/api\/missions\/([^/]+)\/receipt$/u;
 
@@ -128,6 +135,24 @@ export async function handlePublicApiRoute(
   if (request.method !== "GET") return null;
   const url = new URL(request.url);
 
+  if (url.pathname === "/protocol/commitment/v1") {
+    return noStoreJson({
+      protocol: "commitment/v1",
+      extensionUri:
+        "https://guildhall.kimetsu-dev.workers.dev/protocol/commitment/v1",
+      canonicalization: "RFC 8785 JCS",
+      digest: "SHA-256 base64url without padding",
+      signatureAlgorithm: "Ed25519",
+      commandSigningDomain: "PACTBRIDGE-COMMAND-V1",
+      artifactSigningDomain: "PACTBRIDGE-ARTIFACT-V1",
+      receiptSigningDomain: "PACTBRIDGE-RECEIPT-V1",
+      issuerKeySet: "/.well-known/guildhall-issuer-keys.json",
+      agentKeySetTemplate: "/api/agents/{agentId}/keys",
+      revocationSemantics:
+        "A new proof is accepted only from a key observed active at keyStatusCheckedAt. proofVerifiedAt records cryptographic verification completion; later revocation does not invalidate an already accepted event.",
+    });
+  }
+
   if (url.pathname === "/fixtures/accessibility-dungeon-v1") {
     return new Response(ACCESSIBILITY_DUNGEON_FIXTURE_HTML, {
       headers: {
@@ -142,6 +167,9 @@ export async function handlePublicApiRoute(
 
   if (url.pathname === "/.well-known/guildhall-issuer-key.json") {
     return readIssuerKey(env);
+  }
+  if (url.pathname === "/.well-known/guildhall-issuer-keys.json") {
+    return readIssuerKeyHistory(env);
   }
 
   if (url.pathname === "/api/agents") {
@@ -170,6 +198,14 @@ export async function handlePublicApiRoute(
       : noStoreJson({ error: "MISSION_NOT_FOUND" }, { status: 404 });
   }
 
+  const agentKeysMatch = PUBLIC_AGENT_KEYS_ROUTE.exec(url.pathname);
+  if (agentKeysMatch !== null) {
+    const agentId = decodeURIComponent(agentKeysMatch[1]!);
+    return UUID_PATTERN.test(agentId)
+      ? readAgentKeyHistory(env.GUILD_DB, agentId)
+      : noStoreJson({ error: "AGENT_NOT_FOUND" }, { status: 404 });
+  }
+
   const agentMatch = PUBLIC_AGENT_ROUTE.exec(url.pathname);
   if (agentMatch !== null) {
     const agentId = decodeURIComponent(agentMatch[1]!);
@@ -179,6 +215,32 @@ export async function handlePublicApiRoute(
   }
 
   return null;
+}
+
+async function readAgentKeyHistory(
+  database: D1Database,
+  agentId: string,
+): Promise<Response> {
+  const keys = await listAgentKeys(database, agentId);
+  if (keys.length === 0) {
+    return noStoreJson({ error: "AGENT_NOT_FOUND" }, { status: 404 });
+  }
+  return noStoreJson({
+    protocol: "commitment/v1",
+    agentId,
+    algorithm: "Ed25519",
+    commandSigningDomain: "PACTBRIDGE-COMMAND-V1",
+    artifactSigningDomain: "PACTBRIDGE-ARTIFACT-V1",
+    keys: keys.map((key) => ({
+      keyId: key.keyId,
+      publicJwk: key.publicJwk,
+      source: key.source,
+      status: key.status,
+      createdAt: key.createdAt,
+      retiredAt: key.retiredAt,
+      revokedAt: key.revokedAt,
+    })),
+  });
 }
 
 async function listAgents(url: URL, env: GuildhallEnv): Promise<Response> {
@@ -369,29 +431,75 @@ async function readReceipt(
   return noStoreJson({ receipt: receipt.data });
 }
 
-function readIssuerKey(env: GuildhallEnv): Response {
+async function readIssuerKey(env: GuildhallEnv): Promise<Response> {
+  let current: Awaited<ReturnType<typeof registerConfiguredIssuerKey>>;
+  try {
+    current = await registerConfiguredIssuerKey(env);
+  } catch {
+    current = null;
+  }
+  if (current === null) {
+    return noStoreJson({ error: "ISSUER_KEY_UNAVAILABLE" }, { status: 503 });
+  }
+  return noStoreJson({
+    ...current,
+    receiptSigningDomain: "PACTBRIDGE-RECEIPT-V1",
+    keySetUrl: "/.well-known/guildhall-issuer-keys.json",
+  });
+}
+
+async function readIssuerKeyHistory(env: GuildhallEnv): Promise<Response> {
+  let keys: Awaited<ReturnType<typeof listIssuerKeys>>;
+  try {
+    await registerConfiguredIssuerKey(env);
+    keys = await listIssuerKeys(env.GUILD_DB);
+  } catch {
+    return noStoreJson({ error: "ISSUER_KEY_UNAVAILABLE" }, { status: 503 });
+  }
+  return noStoreJson({
+    protocol: "commitment/v1",
+    algorithm: "Ed25519",
+    receiptSigningDomain: "PACTBRIDGE-RECEIPT-V1",
+    keys,
+  });
+}
+
+async function registerConfiguredIssuerKey(env: GuildhallEnv): Promise<{
+  readonly keyId: string;
+  readonly algorithm: "Ed25519";
+  readonly publicJwk: JsonWebKey;
+} | null> {
   if (
     env.GUILD_ISSUER_KEY_ID === undefined ||
     env.GUILD_ISSUER_PRIVATE_JWK === undefined
   ) {
-    return noStoreJson({ error: "ISSUER_KEY_UNAVAILABLE" }, { status: 503 });
+    return null;
   }
   let parsed: unknown;
   try {
     parsed = JSON.parse(env.GUILD_ISSUER_PRIVATE_JWK) as unknown;
   } catch {
-    return noStoreJson({ error: "ISSUER_KEY_UNAVAILABLE" }, { status: 503 });
+    return null;
   }
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-    return noStoreJson({ error: "ISSUER_KEY_UNAVAILABLE" }, { status: 503 });
+    return null;
   }
-  const { d: _private, ...publicJwk } = parsed as Record<string, unknown>;
-  return noStoreJson({
+  let publicJwk: JsonWebKey;
+  try {
+    publicJwk = issuerPublicJwk(parsed as JsonWebKey);
+  } catch {
+    return null;
+  }
+  await ensureCurrentIssuerKey(env.GUILD_DB, {
+    keyId: env.GUILD_ISSUER_KEY_ID,
+    publicJwk,
+    observedAt: new Date().toISOString(),
+  });
+  return {
     keyId: env.GUILD_ISSUER_KEY_ID,
     algorithm: "Ed25519",
     publicJwk,
-    receiptSigningDomain: "PACTBRIDGE-RECEIPT-V1",
-  });
+  };
 }
 
 const PUBLIC_AGENT_SELECT = `
@@ -517,6 +625,7 @@ function toPublicAgent(
     transportStatus: row.transport_status,
     totalPoints: row.total_points,
     completedMissions: row.completed_missions,
+    keySetUrl: `/api/agents/${row.agent_id}/keys`,
     capabilities,
   };
 }

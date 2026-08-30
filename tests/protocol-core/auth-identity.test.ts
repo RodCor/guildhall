@@ -9,7 +9,11 @@ import {
 import { handleOAuthRoute } from "../../apps/guildhall/src/worker/auth/oauth";
 import { getHistoricalPairingProof } from "../../apps/guildhall/src/worker/repositories";
 import { createAgentRequestSignatureMessage } from "../../packages/trust-engine/src";
-import { pactSigningBytes } from "../../packages/contracts/src";
+import {
+  commandBodyHash,
+  commandSigningBytes,
+  pactSigningBytes,
+} from "../../packages/contracts/src";
 
 const worker = (exports as unknown as { default: Fetcher }).default;
 
@@ -445,6 +449,7 @@ describe("GitHub ownership and Guild Node identity", () => {
     const publicSnapshot = (await publicMission.json()) as {
       events: Array<{
         actor: { ownerId: string; agentId: string; keyId: string } | null;
+        source: string;
       }>;
     };
     expect(publicSnapshot.events[0]?.actor).toEqual({
@@ -452,28 +457,34 @@ describe("GitHub ownership and Guild Node identity", () => {
       agentId: agent.agentId,
       keyId: nodeKeyId,
     });
+    expect(publicSnapshot.events[0]?.source).toBe("mcp");
     const proofDigest = "Q".repeat(43);
     const pactSignature = await sign(
       nodePair.privateKey,
       pactSigningBytes(proofDigest),
     );
-    const acceptanceBody = {
-      commandId: crypto.randomUUID(),
-      expectedSequence: 1,
-      actor: { agentId: agent.agentId },
-      source: "mcp",
-      issuedAt: new Date().toISOString(),
-      command: {
-        type: "accept_pact",
-        acceptanceId: crypto.randomUUID(),
-        agentId: agent.agentId,
-        keyId: nodeKeyId,
-        pactVersion: 1,
-        pactDigest: proofDigest,
-        signature: pactSignature,
-        acceptedAt: new Date().toISOString(),
-      },
-    } as const;
+    const acceptanceBody = await withNodeCommandProof(
+      firstMissionId,
+      nodeKeyId,
+      nodePair.privateKey,
+      {
+        commandId: crypto.randomUUID(),
+        expectedSequence: 1,
+        actor: { agentId: agent.agentId, keyId: nodeKeyId },
+        source: "mcp",
+        issuedAt: new Date().toISOString(),
+        command: {
+          type: "accept_pact",
+          acceptanceId: crypto.randomUUID(),
+          agentId: agent.agentId,
+          keyId: nodeKeyId,
+          pactVersion: 1,
+          pactDigest: proofDigest,
+          signature: pactSignature,
+          acceptedAt: new Date().toISOString(),
+        },
+      } as const,
+    );
     const validProofWrongStage = await signedNodeRequest({
       url: `/api/missions/${firstMissionId}/commands`,
       body: acceptanceBody,
@@ -499,28 +510,52 @@ describe("GitHub ownership and Guild Node identity", () => {
     });
     expect(tamperedProof.status).toBe(403);
 
+    const staleIssuedAt = new Date(Date.now() - 10 * 60 * 1_000).toISOString();
+    const staleProof = await signedNodeRequest({
+      url: `/api/missions/${firstMissionId}/commands`,
+      body: await withNodeCommandProof(
+        firstMissionId,
+        nodeKeyId,
+        nodePair.privateKey,
+        {
+          ...acceptanceBody,
+          commandId: crypto.randomUUID(),
+          issuedAt: staleIssuedAt,
+        },
+      ),
+      credential: nodeCredential,
+      keyId: nodeKeyId,
+      privateKey: nodePair.privateKey,
+    });
+    expect(staleProof.status).toBe(403);
+
     const victimAgentId = crypto.randomUUID();
     const deputyAttempt = await signedNodeRequest({
       url: `/api/missions/${firstMissionId}/commands`,
-      body: {
-        commandId: crypto.randomUUID(),
-        expectedSequence: 1,
-        actor: { agentId: agent.agentId },
-        source: "mcp",
-        issuedAt: new Date().toISOString(),
-        command: {
-          type: "apply",
-          agentId: victimAgentId,
-          keyId: nodeKeyId,
-          missionVersion: 1,
-          relevantCapabilities: ["accessibility-audit"],
-          proposedContribution: "Attempt to act as another agent.",
-          availability: {
-            availableFrom: "2026-08-26T12:00:00.000Z",
-            availableUntil: "2026-08-27T12:00:00.000Z",
+      body: await withNodeCommandProof(
+        firstMissionId,
+        nodeKeyId,
+        nodePair.privateKey,
+        {
+          commandId: crypto.randomUUID(),
+          expectedSequence: 1,
+          actor: { agentId: agent.agentId, keyId: nodeKeyId },
+          source: "mcp",
+          issuedAt: new Date().toISOString(),
+          command: {
+            type: "apply",
+            agentId: victimAgentId,
+            keyId: nodeKeyId,
+            missionVersion: 1,
+            relevantCapabilities: ["accessibility-audit"],
+            proposedContribution: "Attempt to act as another agent.",
+            availability: {
+              availableFrom: "2026-08-26T12:00:00.000Z",
+              availableUntil: "2026-08-27T12:00:00.000Z",
+            },
           },
         },
-      },
+      ),
       credential: nodeCredential,
       keyId: nodeKeyId,
       privateKey: nodePair.privateKey,
@@ -529,25 +564,30 @@ describe("GitHub ownership and Guild Node identity", () => {
     const publicCommandMatch = `sk-proj-${"P".repeat(28)}`;
     const unsafeCommand = await signedNodeRequest({
       url: `/api/missions/${firstMissionId}/commands`,
-      body: {
-        commandId: crypto.randomUUID(),
-        expectedSequence: 1,
-        actor: { agentId: agent.agentId },
-        source: "mcp",
-        issuedAt: new Date().toISOString(),
-        command: {
-          type: "apply",
-          agentId: agent.agentId,
-          keyId: nodeKeyId,
-          missionVersion: 1,
-          relevantCapabilities: ["accessibility-audit"],
-          proposedContribution: publicCommandMatch,
-          availability: {
-            availableFrom: "2026-08-26T12:00:00.000Z",
-            availableUntil: "2026-08-27T12:00:00.000Z",
+      body: await withNodeCommandProof(
+        firstMissionId,
+        nodeKeyId,
+        nodePair.privateKey,
+        {
+          commandId: crypto.randomUUID(),
+          expectedSequence: 1,
+          actor: { agentId: agent.agentId, keyId: nodeKeyId },
+          source: "mcp",
+          issuedAt: new Date().toISOString(),
+          command: {
+            type: "apply",
+            agentId: agent.agentId,
+            keyId: nodeKeyId,
+            missionVersion: 1,
+            relevantCapabilities: ["accessibility-audit"],
+            proposedContribution: publicCommandMatch,
+            availability: {
+              availableFrom: "2026-08-26T12:00:00.000Z",
+              availableUntil: "2026-08-27T12:00:00.000Z",
+            },
           },
         },
-      },
+      ),
       credential: nodeCredential,
       keyId: nodeKeyId,
       privateKey: nodePair.privateKey,
@@ -729,27 +769,75 @@ async function signedNodeRequest(input: {
   });
 }
 
-function publishFromNode(
+async function publishFromNode(
   missionId: string,
   agentId: string,
   credential: string,
   keyId: string,
   privateKey: CryptoKey,
 ): Promise<Response> {
+  const commandId = crypto.randomUUID();
+  const issuedAt = new Date().toISOString();
+  const command = { type: "publish" } as const;
+  const bodyHash = await commandBodyHash({
+    commandId,
+    action: command.type,
+    missionId,
+    expectedSequence: 0,
+    actor: { agentId, keyId },
+    issuedAt,
+    payload: command,
+  });
   return signedNodeRequest({
     url: `/api/missions/${missionId}/commands`,
     body: {
-      commandId: crypto.randomUUID(),
+      commandId,
       expectedSequence: 0,
-      actor: { agentId },
+      actor: { agentId, keyId },
       source: "mcp",
-      issuedAt: new Date().toISOString(),
-      command: { type: "publish" },
+      issuedAt,
+      command,
+      proof: {
+        bodyHash,
+        signature: await sign(privateKey, commandSigningBytes(bodyHash)),
+      },
     },
     credential,
     keyId,
     privateKey,
   });
+}
+
+async function withNodeCommandProof<
+  T extends {
+    readonly commandId: string;
+    readonly expectedSequence: number;
+    readonly actor: { readonly agentId: string; readonly keyId: string };
+    readonly issuedAt: string;
+    readonly command: Readonly<Record<string, unknown>>;
+  },
+>(
+  missionId: string,
+  keyId: string,
+  privateKey: CryptoKey,
+  body: T,
+): Promise<T & { readonly proof: { bodyHash: string; signature: string } }> {
+  const bodyHash = await commandBodyHash({
+    commandId: body.commandId,
+    action: String(body.command.type),
+    missionId,
+    expectedSequence: body.expectedSequence,
+    actor: { agentId: body.actor.agentId, keyId },
+    issuedAt: body.issuedAt,
+    payload: body.command,
+  });
+  return {
+    ...body,
+    proof: {
+      bodyHash,
+      signature: await sign(privateKey, commandSigningBytes(bodyHash)),
+    },
+  };
 }
 
 function setCookieLines(response: Response): readonly string[] {

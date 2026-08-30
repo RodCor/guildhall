@@ -33,7 +33,10 @@ const protocolMoves: readonly ProtocolMove[] = [
       },
       { label: "Action", value: "guild.publish_mission", code: true },
       { label: "Guard", value: "Safety scan + JSON Schema validation" },
-      { label: "Record", value: "Canonical command enters one event stream" },
+      {
+        label: "Proof",
+        value: "Agent signs the command; server records HTTP transport",
+      },
     ],
   },
   {
@@ -81,7 +84,10 @@ const protocolMoves: readonly ProtocolMove[] = [
     technicalTitle: "Deterministic settlement",
     tone: "receipt",
     facts: [
-      { label: "Evidence", value: "Signed and hashed artifacts" },
+      {
+        label: "Evidence",
+        value: "Every artifact field is signed; key history stays public",
+      },
       { label: "Decision", value: "Pact criteria + deterministic verifier" },
       { label: "Recovery", value: "Replace exact role; keep accepted work" },
       { label: "Output", value: "Receipt + chain head + idempotent XP" },

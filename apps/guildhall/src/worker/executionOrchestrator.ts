@@ -23,7 +23,7 @@ import type {
 import type { GuildhallEnv } from "./types.js";
 
 const REPLACEMENT_PROOF_METADATA_KEY =
-  "https://guildhall.example/extensions/commitment/v1/replacement-proof";
+  "https://guildhall.kimetsu-dev.workers.dev/protocol/commitment/v1/replacement-proof";
 const SCOUT_ID = "11111111-1111-4111-8111-111111111111";
 const SCRIBE_ID = "22222222-2222-4222-8222-222222222222";
 const WARDEN_ID = "33333333-3333-4333-8333-333333333333";

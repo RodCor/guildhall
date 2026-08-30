@@ -17,6 +17,7 @@ import {
 import {
   ArtifactMetadataSchema,
   ReplacementProofSchema,
+  artifactProofDigest,
   artifactSigningBytes,
   canonicalJsonDigest,
 } from "../../packages/contracts/src";
@@ -673,7 +674,11 @@ async function verifyArtifact(
   );
   const proof = artifactSigningBytes(
     metadata.pactDigest,
-    metadata.contentDigest,
+    await artifactProofDigest({
+      outputId: metadata.artifactId,
+      metadata,
+      dependencyArtifactIds: [],
+    }),
   );
   const proofBuffer = new ArrayBuffer(proof.byteLength);
   new Uint8Array(proofBuffer).set(proof);

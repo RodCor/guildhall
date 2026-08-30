@@ -1,6 +1,7 @@
 import {
   ArtifactMetadataSchema,
   ReplacementProofSchema,
+  artifactProofDigest,
   artifactSigningBytes,
   canonicalJsonDigest,
   replacementSigningBytes,
@@ -10,7 +11,7 @@ import type { A2AArtifact, JsonObject } from "@guildhall/a2a-worker";
 import type { HostedAgentKind } from "./agent-card";
 
 export const REPLACEMENT_PROOF_METADATA_KEY =
-  "https://guildhall.example/extensions/commitment/v1/replacement-proof";
+  "https://guildhall.kimetsu-dev.workers.dev/protocol/commitment/v1/replacement-proof";
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
@@ -146,6 +147,8 @@ export async function createSignedArtifact(input: {
   readonly attempt: 1 | 2;
   readonly artifactType: "accessibility-findings" | "remediation-plan";
   readonly content: JsonObject;
+  readonly outputId?: string;
+  readonly dependencyArtifactIds?: readonly string[];
 }): Promise<A2AArtifact> {
   const identity = hostedIdentity(input.kind, input.publicKeyX, input.keyId);
   const contentDigest = await canonicalJsonDigest(input.content);
@@ -157,15 +160,7 @@ export async function createSignedArtifact(input: {
     false,
     ["sign"],
   );
-  const artifactProof = artifactSigningBytes(input.pactDigest, contentDigest);
-  const signingInput = new ArrayBuffer(artifactProof.byteLength);
-  new Uint8Array(signingInput).set(artifactProof);
-  const signature = encodeBase64Url(
-    new Uint8Array(
-      await crypto.subtle.sign("Ed25519", privateKey, signingInput),
-    ),
-  );
-  const metadata = ArtifactMetadataSchema.parse({
+  const unsignedMetadata = {
     protocol: "commitment/v1",
     kind: "artifact-metadata",
     artifactId,
@@ -179,9 +174,25 @@ export async function createSignedArtifact(input: {
     mediaType: "application/json",
     publicLocation: `${input.origin}/artifacts/${artifactId}`,
     contentDigest,
-    signature,
     safetyStatus: "approved",
     completedAt: input.completedAt,
+  } as const;
+  const proofDigest = await artifactProofDigest({
+    outputId: input.outputId ?? artifactId,
+    metadata: { ...unsignedMetadata, signature: "" },
+    dependencyArtifactIds: input.dependencyArtifactIds ?? [],
+  });
+  const artifactProof = artifactSigningBytes(input.pactDigest, proofDigest);
+  const signingInput = new ArrayBuffer(artifactProof.byteLength);
+  new Uint8Array(signingInput).set(artifactProof);
+  const signature = encodeBase64Url(
+    new Uint8Array(
+      await crypto.subtle.sign("Ed25519", privateKey, signingInput),
+    ),
+  );
+  const metadata = ArtifactMetadataSchema.parse({
+    ...unsignedMetadata,
+    signature,
   });
 
   return {
@@ -195,9 +206,12 @@ export async function createSignedArtifact(input: {
         ? "Deterministic findings from the approved public fixture."
         : "Deterministic remediation steps covering each supplied finding.",
     parts: [{ data: input.content, mediaType: "application/json" }],
-    extensions: ["https://guildhall.example/extensions/commitment/v1"],
+    extensions: [
+      "https://guildhall.kimetsu-dev.workers.dev/protocol/commitment/v1",
+    ],
     metadata: {
-      "https://guildhall.example/extensions/commitment/v1": metadata,
+      "https://guildhall.kimetsu-dev.workers.dev/protocol/commitment/v1":
+        metadata,
     },
   };
 }

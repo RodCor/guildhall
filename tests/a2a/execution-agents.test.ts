@@ -6,6 +6,7 @@ import {
 import {
   ArtifactMetadataSchema,
   ReplacementProofSchema,
+  artifactProofDigest,
   artifactSigningBytes,
   canonicalJsonDigest,
   importEd25519PublicJwk,
@@ -508,7 +509,14 @@ async function expectValidArtifactSignature(
   expect(
     await verifyEd25519(
       publicKey,
-      artifactSigningBytes(metadata.pactDigest, metadata.contentDigest),
+      artifactSigningBytes(
+        metadata.pactDigest,
+        await artifactProofDigest({
+          outputId: metadata.artifactId,
+          metadata,
+          dependencyArtifactIds: [],
+        }),
+      ),
       metadata.signature,
     ),
   ).toBe(true);

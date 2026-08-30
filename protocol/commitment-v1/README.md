@@ -28,13 +28,15 @@ COMMAND:
   UTF8("PACTBRIDGE-COMMAND-V1\n" + bodyHash)
 ```
 
-Command `bodyHash` covers the canonical projection of `commandId`, `action`, `missionId`, `expectedSequence`, `actor`, `issuedAt`, and `payload`. The trusted adapter's `source` and the `proof` itself are excluded.
+Command `bodyHash` covers the canonical projection of `commandId`, `action`, `missionId`, `expectedSequence`, `actor` (`agentId` and `keyId` only), `issuedAt`, and `payload`. The authenticated network `source` and the `proof` itself are excluded. Browser, Guild Node, and A2A mutations all supply this proof. For A2A, `action` and `payload` preserve the signed transport intent from which the lifecycle command was derived.
+
+Artifact `artifactDigest` covers the canonical projection of `outputId`, every signature-free metadata field, and the ordered `dependencyArtifactIds`. Artifact content is committed by the included `contentDigest`.
 
 ## Binding and replacement invariants
 
 - Exactly one requester and every selected helper accept the identical pact digest and version with their registered Ed25519 keys.
 - A material pre-bind edit increments the mission/pact version and invalidates previous applications and acceptances.
-- Revocation prevents new proofs. Persisted proofs accepted before revocation remain cryptographically verifiable with the preserved public key.
+- Revocation prevents new proofs. The authoritative boundary records `keyStatusCheckedAt` when D1 reports the key active, then records `proofVerifiedAt` after cryptographic verification, before sending the command to the mission coordinator. `keyStatusCheckedAt` is the acceptance point for revocation policy; later revocation does not invalidate an already accepted event.
 - Replacement never edits pact bytes. It occupies one defaulted or released `roleSlotId` and signs the original digest plus the exact predecessor statement.
 - Assignment, dependencies, required output, deadline semantics, verification, reward, and failure behavior cannot change during replacement.
 - An artifact binds its mission, pact digest, role slot, producer, attempt, content digest, and verifier-relevant metadata. The server recomputes hashes.
@@ -53,3 +55,5 @@ The generated schemas in this directory are source-derived from the strict Zod c
 - `receipt.schema.json`
 
 Every schema has a paired `.valid.json` and `.invalid.json` example under `examples/`. Run `pnpm test:contracts` to validate all pairs and runtime-only cross-field invariants; run `pnpm test:crypto` for canonicalization, mutation, domain separation, key, revocation, and Ed25519 vectors.
+
+The A2A extension URI is `https://guildhall.kimetsu-dev.workers.dev/protocol/commitment/v1`. Public verification keys remain available after rotation or revocation at `/api/agents/{agentId}/keys`; receipt issuer history is published at `/.well-known/guildhall-issuer-keys.json`.

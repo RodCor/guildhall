@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   artifactSigningBytes,
+  artifactProofDigest,
   canonicalJson,
   canonicalJsonBytes,
   canonicalJsonDigest,
@@ -120,6 +121,56 @@ describe("commitment/v1 signature domains", () => {
         "agent-scribe",
       ),
     ).toThrow(/control characters/u);
+  });
+});
+
+describe("complete artifact commitment", () => {
+  it("changes the proof digest when any public artifact field changes", async () => {
+    const base = {
+      outputId: "10000000-0000-4000-8000-000000000001",
+      metadata: {
+        protocol: "commitment/v1",
+        kind: "artifact-metadata",
+        artifactId: "10000000-0000-4000-8000-000000000002",
+        missionId: "10000000-0000-4000-8000-000000000003",
+        pactDigest: "P".repeat(43),
+        roleSlotId: "10000000-0000-4000-8000-000000000004",
+        producingAgentId: "10000000-0000-4000-8000-000000000005",
+        keyId: "10000000-0000-4000-8000-000000000006",
+        attempt: 1,
+        artifactType: "accessibility-findings",
+        mediaType: "application/json",
+        publicLocation: "https://guildhall.test/artifacts/one",
+        contentDigest: "C".repeat(43),
+        signature: "S".repeat(86),
+        safetyStatus: "approved",
+        completedAt: "2026-08-28T12:00:00.000Z",
+      },
+      dependencyArtifactIds: ["10000000-0000-4000-8000-000000000007"],
+    };
+    const expected = await artifactProofDigest(base);
+    const mutations = [
+      { ...base, outputId: "10000000-0000-4000-8000-000000000008" },
+      { ...base, dependencyArtifactIds: [] },
+      ...Object.keys(base.metadata)
+        .filter((key) => key !== "signature")
+        .map((key) => ({
+          ...base,
+          metadata: {
+            ...base.metadata,
+            [key]: `${String(base.metadata[key as keyof typeof base.metadata])}-changed`,
+          },
+        })),
+    ];
+    for (const mutation of mutations) {
+      await expect(artifactProofDigest(mutation)).resolves.not.toBe(expected);
+    }
+    await expect(
+      artifactProofDigest({
+        ...base,
+        metadata: { ...base.metadata, signature: "T".repeat(86) },
+      }),
+    ).resolves.toBe(expected);
   });
 });
 
@@ -248,10 +299,32 @@ describe("Ed25519 proofs", () => {
       reason: "PROOF_ACCEPTED_AFTER_REVOCATION",
     });
   });
+
+  it("verifies pre-rotation history but rejects new proofs from retired keys", async () => {
+    const fixture = await proofFixture({
+      status: "retired",
+      retiredAt: "2026-08-26T12:00:00.000Z",
+    });
+    await expect(
+      verifyRegisteredEd25519Proof({
+        ...fixture,
+        policy: { kind: "new-proof" },
+      }),
+    ).resolves.toEqual({ valid: false, reason: "KEY_RETIRED" });
+    await expect(
+      verifyRegisteredEd25519Proof({
+        ...fixture,
+        policy: {
+          kind: "historical-proof",
+          acceptedAt: "2026-08-26T11:59:59.999Z",
+        },
+      }),
+    ).resolves.toMatchObject({ valid: true });
+  });
 });
 
 async function proofFixture(
-  keyStatus: Pick<RegisteredEd25519Key, "status" | "revokedAt">,
+  keyStatus: Pick<RegisteredEd25519Key, "status" | "retiredAt" | "revokedAt">,
 ) {
   const pair = await generateEd25519KeyPair();
   const publicJwk = await crypto.subtle.exportKey("jwk", pair.publicKey);

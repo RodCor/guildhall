@@ -7,6 +7,8 @@ import {
 import {
   PactSchema,
   canonicalJsonDigest,
+  commandBodyHash,
+  commandSigningBytes,
   pactSigningBytes,
 } from "@guildhall/contracts";
 import { createAgentRequestSignatureMessage } from "@guildhall/trust-engine";
@@ -598,7 +600,34 @@ export async function sendGuildAction(
     throw new GuildRecruitmentStageError("IDENTITY_MATERIAL", error);
   }
   const messageId = crypto.randomUUID();
-  const input = { ...request.input, commandId: messageId };
+  const input: JsonObject = { ...request.input, commandId: messageId };
+  const expectedSequence = input.expectedSequence;
+  if (
+    typeof expectedSequence !== "number" ||
+    !Number.isSafeInteger(expectedSequence) ||
+    expectedSequence < 0
+  ) {
+    throw new GuildRecruitmentStageError(
+      "COMMAND_PROOF_INPUT",
+      new TypeError("A mutating A2A action requires expectedSequence."),
+    );
+  }
+  const issuedAt = (connection.now?.() ?? new Date()).toISOString();
+  const unsignedCommitment = request.commitment ?? {};
+  const commandMaterial = {
+    commandId: messageId,
+    action: request.action,
+    missionId: request.missionId,
+    expectedSequence,
+    actor: { agentId: identity.agentId, keyId: identity.keyId },
+    issuedAt,
+    payload: { input, commitment: unsignedCommitment },
+  };
+  const bodyHash = await commandBodyHash(commandMaterial);
+  const commandProof = {
+    bodyHash,
+    signature: await sign(privateJwk, commandSigningBytes(bodyHash)),
+  };
   let client: ReturnType<typeof createA2AHttpJsonClient>;
   try {
     client = createA2AHttpJsonClient({
@@ -630,7 +659,9 @@ export async function sendGuildAction(
             action: request.action,
             missionId: request.missionId,
             agentId: identity.agentId,
-            ...(request.commitment ?? {}),
+            ...unsignedCommitment,
+            commandIssuedAt: issuedAt,
+            commandProof,
           },
         },
         extensions: [COMMITMENT_V1_EXTENSION_URI],

@@ -7,7 +7,10 @@ import {
 import { describe, expect, it, vi } from "vitest";
 
 import type { MissionCoordinator } from "../../apps/guildhall/src/worker/durable/MissionCoordinator";
-import type { CoordinatorCommand } from "../../apps/guildhall/src/worker/durable/protocol";
+import {
+  isCoordinatorCommand,
+  type CoordinatorCommand,
+} from "../../apps/guildhall/src/worker/durable/protocol";
 import {
   createAgent,
   registerAgentKey,
@@ -23,8 +26,11 @@ import {
   randomBase64UrlToken,
 } from "../../apps/guildhall/src/worker/auth/crypto";
 import {
+  artifactProofDigest,
   artifactSigningBytes,
   canonicalJsonDigest,
+  commandBodyHash,
+  commandSigningBytes,
   signEd25519,
 } from "../../packages/contracts/src";
 import { verifyEventChain } from "../../packages/trust-engine/src";
@@ -399,26 +405,49 @@ describe("MissionCoordinator transactional protocol core", () => {
   });
 
   it("exposes the minimal canonical HTTP command API", async () => {
-    const authHeaders = await seedHttpOwner();
+    const owner = await seedHttpOwner();
     const missionId = missionUuid("http-api");
     const created = await guildhallWorker.fetch(
       `https://guildhall.test/api/missions/${missionId}`,
       {
         method: "POST",
-        headers: { "content-type": "application/json", ...authHeaders },
+        headers: { "content-type": "application/json", ...owner.headers },
         body: JSON.stringify({ requesterAgentId: REQUESTER }),
       },
     );
     expect(created.status).toBe(201);
 
+    const commandId = crypto.randomUUID();
+    const issuedAt = new Date().toISOString();
+    const lifecycleCommand = { type: "publish" } as const;
+    const bodyHash = await commandBodyHash({
+      commandId,
+      action: lifecycleCommand.type,
+      missionId,
+      expectedSequence: 0,
+      actor: { agentId: REQUESTER, keyId: owner.keyId },
+      issuedAt,
+      payload: lifecycleCommand,
+    });
     const published = await guildhallWorker.fetch(
       `https://guildhall.test/api/missions/${missionId}/commands`,
       {
         method: "POST",
-        headers: { "content-type": "application/json", ...authHeaders },
+        headers: { "content-type": "application/json", ...owner.headers },
         body: JSON.stringify({
-          ...command({ type: "publish" }, { expectedSequence: 0 }),
-          actor: { agentId: REQUESTER },
+          commandId,
+          expectedSequence: 0,
+          actor: { agentId: REQUESTER, keyId: owner.keyId },
+          source: "http",
+          issuedAt,
+          command: lifecycleCommand,
+          proof: {
+            bodyHash,
+            signature: await signEd25519(
+              owner.privateKey,
+              commandSigningBytes(bodyHash),
+            ),
+          },
         }),
       },
     );
@@ -433,9 +462,34 @@ describe("MissionCoordinator transactional protocol core", () => {
     );
     expect(await snapshot.json()).toMatchObject({ latestSequence: 1 });
   });
+
+  it("requires server verification timestamps whenever a command proof is present", () => {
+    expect(
+      isCoordinatorCommand({
+        commandId: crypto.randomUUID(),
+        expectedSequence: 0,
+        actor: {
+          agentId: REQUESTER,
+          ownerId: "github:9001",
+          keyId: crypto.randomUUID(),
+        },
+        source: "http",
+        issuedAt: new Date().toISOString(),
+        command: { type: "publish" },
+        proof: {
+          bodyHash: "A".repeat(43),
+          signature: "A".repeat(86),
+        },
+      }),
+    ).toBe(false);
+  });
 });
 
-async function seedHttpOwner(): Promise<Record<string, string>> {
+async function seedHttpOwner(): Promise<{
+  readonly headers: Record<string, string>;
+  readonly keyId: string;
+  readonly privateKey: CryptoKey;
+}> {
   const ownerId = "90000000-0000-4000-8000-000000000001";
   const sessionToken = randomBase64UrlToken();
   const csrfToken = randomBase64UrlToken();
@@ -466,8 +520,9 @@ async function seedHttpOwner(): Promise<Record<string, string>> {
     "verify",
   ])) as CryptoKeyPair;
   const publicJwk = await crypto.subtle.exportKey("jwk", keyPair.publicKey);
+  const keyId = await deriveEd25519KeyId("browser", publicJwk);
   await registerAgentKey(env.GUILD_DB, {
-    keyId: await deriveEd25519KeyId("browser", publicJwk),
+    keyId,
     ownerId: principal.ownerId,
     agentId: REQUESTER,
     publicJwk,
@@ -475,9 +530,13 @@ async function seedHttpOwner(): Promise<Record<string, string>> {
     createdAt: now,
   });
   return {
-    Cookie: `__Host-guild_session=${sessionToken}; __Host-guild_csrf=${csrfToken}`,
-    Origin: "https://guildhall.test",
-    "X-Guild-CSRF": csrfToken,
+    headers: {
+      Cookie: `__Host-guild_session=${sessionToken}; __Host-guild_csrf=${csrfToken}`,
+      Origin: "https://guildhall.test",
+      "X-Guild-CSRF": csrfToken,
+    },
+    keyId,
+    privateKey: keyPair.privateKey,
   };
 }
 
@@ -659,6 +718,28 @@ async function signedArtifactCommand(
   content: Readonly<Record<string, unknown>>,
 ): Promise<CoordinatorCommand> {
   const contentDigest = await canonicalJsonDigest(content);
+  const metadata = {
+    protocol: "commitment/v1" as const,
+    kind: "artifact-metadata" as const,
+    artifactId: crypto.randomUUID(),
+    missionId: missionUuid(name),
+    pactDigest: PACT_DIGEST_V2,
+    roleSlotId: ROLE_RED,
+    producingAgentId: HELPER_RED,
+    keyId: signer.keyId,
+    attempt: 1 as const,
+    artifactType: "accessibility-findings" as const,
+    mediaType: "application/json" as const,
+    publicLocation: `https://guildhall.test/artifacts/${OUTPUT_RED}`,
+    contentDigest,
+    safetyStatus: "approved" as const,
+    completedAt: new Date().toISOString(),
+  };
+  const artifactDigest = await artifactProofDigest({
+    outputId: OUTPUT_RED,
+    metadata: { ...metadata, signature: "" },
+    dependencyArtifactIds: [],
+  });
   return {
     commandId: crypto.randomUUID(),
     actor: { agentId: HELPER_RED, keyId: signer.keyId },
@@ -670,25 +751,11 @@ async function signedArtifactCommand(
       artifact: {
         outputId: OUTPUT_RED,
         metadata: {
-          protocol: "commitment/v1",
-          kind: "artifact-metadata",
-          artifactId: crypto.randomUUID(),
-          missionId: missionUuid(name),
-          pactDigest: PACT_DIGEST_V2,
-          roleSlotId: ROLE_RED,
-          producingAgentId: HELPER_RED,
-          keyId: signer.keyId,
-          attempt: 1,
-          artifactType: "accessibility-findings",
-          mediaType: "application/json",
-          publicLocation: `https://guildhall.test/artifacts/${OUTPUT_RED}`,
-          contentDigest,
+          ...metadata,
           signature: await signEd25519(
             signer.privateKey,
-            artifactSigningBytes(PACT_DIGEST_V2, contentDigest),
+            artifactSigningBytes(PACT_DIGEST_V2, artifactDigest),
           ),
-          safetyStatus: "approved",
-          completedAt: new Date().toISOString(),
         },
         content,
         dependencyArtifactIds: [],
