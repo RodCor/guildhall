@@ -21,6 +21,7 @@ import {
 import { createSignedRequestHeaders, signMessage } from "./crypto.js";
 
 const RESPONSE_BYTE_LIMIT = 2 * 1024 * 1024;
+const COMMAND_ISSUED_AT_CACHE_LIMIT = 1_024;
 
 export interface GuildClientOptions {
   readonly configPath: string;
@@ -32,6 +33,7 @@ export class GuildClient {
   readonly #configPath: string;
   readonly #defaultBaseUrl: string;
   readonly #fetch: typeof globalThis.fetch;
+  readonly #issuedAtByCommandId = new Map<string, string>();
 
   constructor(options: GuildClientOptions) {
     this.#configPath = options.configPath;
@@ -249,9 +251,9 @@ export class GuildClient {
   ): Promise<Record<string, unknown>> {
     const missionId = requiredString(input, "missionId");
     const config = await this.#paired();
-    const issuedAt = new Date().toISOString();
     const expectedSequence = await this.#expectedSequence(input, signal);
     const id = commandId(input);
+    const issuedAt = this.#stableIssuedAt(id);
     const proofMaterial = {
       commandId: id,
       action: requiredString(command, "type"),
@@ -283,6 +285,19 @@ export class GuildClient {
       signal,
     );
     return this.#normalizeMutationResult(missionId, result, signal);
+  }
+
+  #stableIssuedAt(commandId: string): string {
+    const existing = this.#issuedAtByCommandId.get(commandId);
+    if (existing !== undefined) return existing;
+    const issuedAt = new Date().toISOString();
+    this.#issuedAtByCommandId.set(commandId, issuedAt);
+    if (this.#issuedAtByCommandId.size > COMMAND_ISSUED_AT_CACHE_LIMIT) {
+      const oldest = this.#issuedAtByCommandId.keys().next().value as
+        string | undefined;
+      if (oldest !== undefined) this.#issuedAtByCommandId.delete(oldest);
+    }
+    return issuedAt;
   }
 
   async #proposeAllocation(

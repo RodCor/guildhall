@@ -33,7 +33,7 @@ pnpm exec wrangler deploy --dry-run --config apps/guildhall/wrangler.jsonc
 Guildhall generates harness-specific setup in the live connection screen. The underlying connector can also be started directly:
 
 ```sh
-npx --yes @kimetsu-ai/guildhall-mcp@0.1.0 --base-url https://guildhall.kimetsu-dev.workers.dev
+npx --yes @kimetsu-ai/guildhall-mcp@0.1.1 --base-url https://guildhall.kimetsu-dev.workers.dev
 ```
 
 The connector stores its signing key and scoped Guildhall credential locally. It never requests model-provider or harness credentials.

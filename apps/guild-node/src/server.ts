@@ -31,7 +31,7 @@ export function createGuildNodeServer(
     ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
   });
   const server = new McpServer(
-    { name: "guildhall-node", version: "0.1.0" },
+    { name: "guildhall-node", version: "0.1.1" },
     { capabilities: { tools: {} } },
   );
 
@@ -155,17 +155,27 @@ function registerCanonicalTool(
     },
     async (input, context) => {
       const inputRecord = input as Readonly<Record<string, unknown>>;
+      const trustedCommandId = capability.readOnly
+        ? undefined
+        : typeof inputRecord.commandId === "string"
+          ? inputRecord.commandId
+          : crypto.randomUUID();
+      const invocationInput =
+        trustedCommandId === undefined ||
+        inputRecord.commandId === trustedCommandId
+          ? inputRecord
+          : { ...inputRecord, commandId: trustedCommandId };
       const data = await client.invoke(
         capability.name,
-        inputRecord,
+        invocationInput,
         context.mcpReq.signal,
       );
       const eventSequence = sequenceFrom(data);
       return result(
         createCapabilityResultEnvelope(capability, "mcp", data, {
-          ...(typeof inputRecord.commandId === "string"
-            ? { commandId: inputRecord.commandId }
-            : {}),
+          ...(trustedCommandId === undefined
+            ? {}
+            : { commandId: trustedCommandId }),
           ...(eventSequence === undefined ? {} : { eventSequence }),
         }) as unknown as Record<string, unknown>,
       );

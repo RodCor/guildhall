@@ -14,7 +14,7 @@ import { promisify } from "node:util";
 import { build } from "esbuild";
 
 const CONNECTOR_NAME = "@kimetsu-ai/guildhall-mcp";
-const CONNECTOR_VERSION = "0.1.0";
+const CONNECTOR_VERSION = "0.1.1";
 const execFileAsync = promisify(execFile);
 const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const stagingDirectory = join(
@@ -30,7 +30,7 @@ const packageOutputDirectory = join(
   "guild-node",
   "dist",
 );
-const archiveName = "kimetsu-ai-guildhall-mcp-0.1.0.tgz";
+const archiveName = "kimetsu-ai-guildhall-mcp-0.1.1.tgz";
 const archivePath = join(packageOutputDirectory, archiveName);
 
 assertWorkspacePath(stagingDirectory);
