@@ -15,6 +15,7 @@
     "deploy:check": "tsx scripts/deploy-check.ts",
     "deploy:doctor": "tsx scripts/deploy-doctor.ts",
     "format": "prettier --write .",
+    "scale:production": "tsx scripts/scale-production.ts",
     "test": "vitest run && pnpm test:protocol-core",
     "test:contracts": "vitest run tests/protocol/contracts.test.ts tests/protocol/schema-examples.test.ts",
     "test:crypto": "vitest run tests/protocol/crypto.test.ts",
