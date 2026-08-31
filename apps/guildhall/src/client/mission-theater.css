@@ -1699,7 +1699,7 @@ section.live-guild-section {
 .hud-branch-runner {
   position: absolute;
   top: 0;
-  left: calc(100% * 4 / 6);
+  left: calc(100% * 5 / 6);
   width: calc(100% / 6);
   height: 1px;
   opacity: 0;
@@ -1722,12 +1722,12 @@ section.live-guild-section {
   translate: -50% 0;
 }
 
-.hud-branch-step[data-step="failure"] {
-  left: calc(100% * 4 / 6);
+.hud-branch-step[data-step="mismatch"] {
+  left: calc(100% * 5 / 6);
 }
 
-.hud-branch-step[data-step="replacement"] {
-  left: calc(100% * 5 / 6);
+.hud-branch-step[data-step="correction"] {
+  left: calc(100% * 4 / 6);
 }
 
 .hud-step {
@@ -1788,25 +1788,22 @@ section.live-guild-section {
   box-shadow: 0 0 0 5px rgba(131, 215, 194, 0.09);
 }
 
-.track-failure .hud-main-runner,
-.track-replacement .hud-main-runner {
+.track-mismatch .hud-main-runner,
+.track-correction .hud-main-runner {
   opacity: 0;
 }
 
-.track-failure .hud-branch-visual,
-.track-replacement .hud-branch-visual,
-.track-verify .hud-branch-visual,
-.track-reward .hud-branch-visual {
+.branch-discovered .hud-branch-visual {
   opacity: 1;
 }
 
-.track-failure .branch-path-failure,
-.track-replacement .branch-path-failure {
+.track-mismatch .branch-path-mismatch,
+.track-correction .branch-path-mismatch {
   stroke: rgba(223, 120, 109, 0.72);
 }
 
-.track-replacement .branch-path-replace,
-.track-replacement .branch-path-return {
+.track-correction .branch-path-correction,
+.track-correction .branch-path-return {
   stroke: rgba(130, 155, 227, 0.72);
 }
 
@@ -1815,44 +1812,44 @@ section.live-guild-section {
   stroke: rgba(131, 215, 194, 0.38);
 }
 
-.track-failure .hud-branch-runner {
+.track-mismatch .hud-branch-runner {
   opacity: 1;
   animation: branch-to-failure 2s linear both;
 }
 
-.track-replacement .hud-branch-runner {
+.track-correction .hud-branch-runner {
   opacity: 1;
   animation: recovery-branch-route 5s linear both;
 }
 
-.track-failure .hud-branch-runner .hud-progress-orb,
-.track-failure .hud-step-active > span {
+.track-mismatch .hud-branch-runner .hud-progress-orb,
+.track-mismatch .hud-step-active > span {
   border-color: #ffd9d4;
   color: #190807;
   background: var(--hud-danger);
   box-shadow: 0 0 0 5px rgba(223, 120, 109, 0.13);
 }
 
-.track-failure .hud-step-active {
+.track-mismatch .hud-step-active {
   color: #ffaca3;
   animation-delay: 1950ms;
 }
 
-.track-replacement .hud-branch-runner .hud-progress-orb,
-.track-replacement .hud-step-active > span {
+.track-correction .hud-branch-runner .hud-progress-orb,
+.track-correction .hud-step-active > span {
   border-color: #dce4ff;
   color: #07101f;
   background: var(--hud-warden);
   box-shadow: 0 0 0 5px rgba(130, 155, 227, 0.14);
 }
 
-.track-replacement .hud-step[data-step="work"] {
+.track-correction .hud-step[data-step="work"] {
   color: var(--hud-text);
   font-weight: 800;
   animation: work-return 5s linear both;
 }
 
-.track-replacement .hud-step-active {
+.track-correction .hud-step-active {
   color: var(--hud-text);
   animation: replacement-discover 5s linear both;
 }
@@ -2392,7 +2389,7 @@ section.live-guild-section {
   animation-delay: 130ms;
 }
 
-.aether-stage[data-chapter="failure"] .trace-second {
+.aether-stage[data-chapter="mismatch"] .trace-second {
   opacity: 1;
   background: linear-gradient(
     90deg,
@@ -2402,7 +2399,7 @@ section.live-guild-section {
   );
 }
 
-.aether-stage[data-chapter="failure"] .trace-second::after {
+.aether-stage[data-chapter="mismatch"] .trace-second::after {
   transform-origin: right center;
   background: linear-gradient(
     90deg,
@@ -2414,12 +2411,12 @@ section.live-guild-section {
   animation: trace-fail 920ms ease-out both;
 }
 
-.aether-stage[data-chapter="replacement"] .trace-second::before {
+.aether-stage[data-chapter="correction"] .trace-scout::before {
   transform-origin: left center;
   animation: trace-sweep 820ms ease-out both;
 }
 
-.aether-stage[data-chapter="replacement"] .trace-second::after {
+.aether-stage[data-chapter="correction"] .trace-scout::after {
   transform-origin: right center;
   animation: trace-sweep 820ms 900ms ease-out both;
 }
@@ -2443,7 +2440,7 @@ section.live-guild-section {
   animation-delay: 520ms;
 }
 
-.aether-stage[data-chapter="replacement"] .node-second .hud-agent-sigil {
+.aether-stage[data-chapter="correction"] .node-scout .hud-agent-sigil {
   animation: agent-signal 760ms 3 240ms var(--hud-ease);
 }
 
@@ -2985,13 +2982,13 @@ section.live-guild-section {
     transform: translate(0, var(--hud-branch-drop));
   }
   45% {
-    transform: translate(100%, var(--hud-branch-drop));
+    transform: translate(-100%, var(--hud-branch-drop));
   }
   64% {
-    transform: translate(78%, 34px);
+    transform: translate(-78%, 34px);
   }
   82% {
-    transform: translate(42%, 12px);
+    transform: translate(-42%, 12px);
   }
   100% {
     transform: translate(0, 0);

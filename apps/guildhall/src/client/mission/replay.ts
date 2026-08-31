@@ -21,13 +21,18 @@ const EVENT_COPY: Readonly<
     tone: "protocol",
   },
   application_submitted: {
-    title: "Adventurer Answered",
-    detail: "An independent agent offered capability evidence for the quest.",
+    title: "Helper Applied",
+    detail: "An independent agent offered registered capability evidence.",
+    tone: "neutral",
+  },
+  application_withdrawn: {
+    title: "Application Refreshed",
+    detail: "The helper replaced stale availability before party formation.",
     tone: "neutral",
   },
   party_reserved: {
     title: "Party Reserved",
-    detail: "The guild selected at most 2 helpers and reserved their roles.",
+    detail: "The guild selected the eligible helper and reserved its role.",
     tone: "protocol",
   },
   capability_bid_submitted: {
@@ -69,8 +74,9 @@ const EVENT_COPY: Readonly<
     tone: "neutral",
   },
   artifact_submitted: {
-    title: "Artifact Delivered",
-    detail: "A signed, hashed, public-safe result entered the mission ledger.",
+    title: "PR Evidence Delivered",
+    detail:
+      "A signed repository, pull request, base branch, and exact head SHA entered the ledger.",
     tone: "protocol",
   },
   role_defaulted: {
@@ -86,38 +92,56 @@ const EVENT_COPY: Readonly<
     tone: "recovery",
   },
   verification_started: {
-    title: "Oracle Awakened",
+    title: "Public Verifier Started",
     detail:
-      "Deterministic checks began against the accepted pact and fixture digest.",
+      "Guildhall began checking the signed evidence against the public GitHub pull request.",
+    tone: "protocol",
+  },
+  verification_deferred: {
+    title: "Verifier Retrying",
+    detail:
+      "The public check was temporarily unavailable; no points or correction were consumed.",
     tone: "protocol",
   },
   verification_failed: {
-    title: "Correction Required",
+    title: "Head SHA Mismatch",
     detail:
-      "Evidence failed a semantic criterion; 1 bounded correction may follow.",
+      "The pull request advanced beyond attempt 1; one bounded correction may follow.",
     tone: "danger",
   },
   verification_passed: {
-    title: "Oracle Confirmed",
+    title: "GitHub Evidence Confirmed",
     detail:
-      "Every required output, dependency, signature, and criterion passed.",
+      "Repository, base branch, pull request, signature, and exact head SHA passed.",
     tone: "victory",
   },
   receipt_issued: {
-    title: "Renown Awarded",
+    title: "300 Points Awarded",
     detail:
-      "The guild issued 1 signed receipt and only now applied XP and reputation.",
+      "The guild issued 1 signed receipt and only now applied verified reputation.",
     tone: "victory",
   },
 };
 
 export function storyBeat(event: Record<string, unknown>): StoryBeat {
   const eventType = stringValue(event.type, "unknown_event");
-  const copy = EVENT_COPY[eventType] ?? {
-    title: titleFromEvent(eventType),
-    detail: "The canonical mission ledger advanced by 1 public event.",
-    tone: "neutral" as const,
-  };
+  const command = objectValue(objectValue(event.payload)?.command);
+  const artifact = objectValue(command?.artifact);
+  const metadata = objectValue(artifact?.metadata);
+  const attempt = integerValue(metadata?.attempt);
+  const copy =
+    eventType === "artifact_submitted" && attempt === 2
+      ? {
+          title: "Correction Delivered",
+          detail:
+            "Attempt 2 signed the pull request’s new exact head without changing the pact.",
+          tone: "recovery" as const,
+        }
+      : (EVENT_COPY[eventType] ?? {
+          title: titleFromEvent(eventType),
+          detail: "The canonical mission ledger advanced by 1 public event.",
+          tone: "neutral" as const,
+        });
   return {
     sequence: integerValue(event.sequence),
     eventId: stringValue(event.eventId, `${eventType}-event`),
@@ -173,4 +197,10 @@ function stringValue(value: unknown, fallback = "Not available"): string {
 
 function integerValue(value: unknown): number {
   return typeof value === "number" && Number.isSafeInteger(value) ? value : 0;
+}
+
+function objectValue(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
 }

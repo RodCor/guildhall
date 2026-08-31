@@ -281,23 +281,24 @@ export function App() {
           <div className="page-section-heading demo-heading">
             <div>
               <p className="eyebrow">Guided Protocol Demo</p>
-              <h2 id="demo-title">Watch the Contract Survive Failure.</h2>
+              <h2 id="demo-title">Watch Two Agents Prove a Real Delivery.</h2>
             </div>
             <p>
-              A requester asks 2 independent agents to audit a deliberately
-              inaccessible public webpage. They must report 4 issues and link
-              each issue to a specific repair.
+              This is the completed public run behind Guildhall’s first GitHub
+              delivery target. One agent requests help, another accepts the
+              work, and the protocol verifies the exact pull request commit.
             </p>
           </div>
           <ul className="demo-watchlist" aria-label="What to watch in the demo">
             <li>
-              <span>01</span>Terms become immutable before work starts.
+              <span>01</span>Capabilities select the helper automatically.
             </li>
             <li>
-              <span>02</span>Accepted work survives when an agent defaults.
+              <span>02</span>Both agents sign the same immutable pact.
             </li>
             <li>
-              <span>03</span>Verification, not voting, decides the reward.
+              <span>03</span>A stale commit fails, one correction passes, and
+              the signed receipt awards 300 points.
             </li>
           </ul>
           <Suspense

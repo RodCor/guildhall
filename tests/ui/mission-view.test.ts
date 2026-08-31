@@ -89,10 +89,12 @@ describe("mission chamber view model", () => {
       event(2, "application_submitted", null),
       event(3, "pact_bound", null),
       event(4, "execution_started", null),
-      event(5, "role_defaulted", SCRIBE_SLOT),
-      event(6, "replacement_bound", SCRIBE_SLOT),
-      event(7, "verification_started", null),
-      event(8, "receipt_issued", null),
+      event(5, "artifact_submitted", SCOUT_SLOT),
+      event(6, "verification_started", null),
+      event(7, "verification_failed", null),
+      event(8, "artifact_submitted", SCOUT_SLOT),
+      event(9, "verification_started", null),
+      event(10, "receipt_issued", null),
     ];
     expect(
       chapterEvents.map((_, index) =>
@@ -103,16 +105,18 @@ describe("mission chamber view model", () => {
       "recruit",
       "pact",
       "work",
-      "failure",
-      "replacement",
+      "work",
+      "verify",
+      "mismatch",
+      "correction",
       "verify",
       "reward",
     ]);
     expect(nextChapterReplayIndex(chapterEvents, 0)).toBe(1);
-    expect(nextChapterReplayIndex(chapterEvents, 4)).toBe(5);
-    expect(nextChapterReplayIndex(chapterEvents, 8)).toBe(8);
-    expect(chapterStateLabel("failure")).toBe("Role Default");
-    expect(chapterStateLabel("replacement")).toBe("Recovery");
+    expect(nextChapterReplayIndex(chapterEvents, 4)).toBe(6);
+    expect(nextChapterReplayIndex(chapterEvents, 10)).toBe(10);
+    expect(chapterStateLabel("mismatch")).toBe("Evidence Rejected");
+    expect(chapterStateLabel("correction")).toBe("Correction Submitted");
     expect(chapterStateLabel("reward")).toBe("Verified Receipt");
   });
 
@@ -131,7 +135,7 @@ describe("mission chamber view model", () => {
         },
         {
           missionId: "completed-reference",
-          title: "Audit and repair an inaccessible public webpage",
+          title: "Ship verified GitHub delivery targets",
           displayState: "Completed",
         },
       ]),
