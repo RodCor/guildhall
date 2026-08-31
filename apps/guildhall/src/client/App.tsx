@@ -291,14 +291,16 @@ export function App() {
           </div>
           <ul className="demo-watchlist" aria-label="What to watch in the demo">
             <li>
-              <span>01</span>Capabilities select the helper automatically.
+              <span>01</span>Follow who sends each command, which protocol
+              carries it, and who receives it.
             </li>
             <li>
-              <span>02</span>Both agents sign the same immutable pact.
+              <span>02</span>Watch the exact public payload and two signatures
+              lock one immutable pact.
             </li>
             <li>
-              <span>03</span>A stale commit fails, one correction passes, and
-              the signed receipt awards 300 points.
+              <span>03</span>Compare the stale SHA with GitHub, then see the
+              correction pass and split 300 points.
             </li>
           </ul>
           <Suspense

@@ -6,6 +6,7 @@ import {
   mergeMissionPacket,
   missionChapterId,
   nextChapterReplayIndex,
+  replayChapterDelay,
   spectatorReplayMissionId,
 } from "../../apps/guildhall/src/client/mission/TechnicalMission";
 import {
@@ -118,6 +119,25 @@ describe("mission chamber view model", () => {
     expect(chapterStateLabel("mismatch")).toBe("Evidence Rejected");
     expect(chapterStateLabel("correction")).toBe("Correction Submitted");
     expect(chapterStateLabel("reward")).toBe("Verified Receipt");
+  });
+
+  it("leaves enough dwell time to read every protocol animation", () => {
+    const chapterEvents = [
+      event(1, "mission_published", null),
+      event(2, "application_submitted", null),
+      event(3, "pact_bound", null),
+      event(4, "artifact_submitted", SCOUT_SLOT),
+      event(5, "verification_started", null),
+      event(6, "verification_failed", null),
+      event(7, "artifact_submitted", SCOUT_SLOT),
+      event(8, "verification_started", null),
+      event(9, "receipt_issued", null),
+    ];
+
+    expect(replayChapterDelay(chapterEvents, 1)).toBe(4_200);
+    expect(replayChapterDelay(chapterEvents, 6)).toBe(5_200);
+    expect(replayChapterDelay(chapterEvents, 7)).toBe(6_200);
+    expect(replayChapterDelay(chapterEvents, 9)).toBe(4_800);
   });
 
   it("selects only a completed reference ledger for spectator replay", () => {

@@ -31,7 +31,7 @@ type Lens = "story" | "technical";
 type StreamState = "connecting" | "live" | "polling";
 
 const STREAM_FALLBACK_MS = 15_000;
-const REPLAY_STEP_MS = 3_000;
+const REPLAY_STEP_MS = 4_200;
 
 const numberFormatter = new Intl.NumberFormat(undefined, {
   maximumFractionDigits: 2,
@@ -308,7 +308,7 @@ export function TechnicalMission({
       return;
     }
     const delay =
-      bounded === 0 ? 300 : replayChapterDelay(packet.events, bounded);
+      bounded === 0 ? 650 : replayChapterDelay(packet.events, bounded);
     const timeout = window.setTimeout(() => {
       setReplayIndex(nextChapterReplayIndex(packet.events, bounded));
     }, delay);
@@ -324,7 +324,8 @@ export function TechnicalMission({
 
   useEffect(() => {
     if (!playing || eventCount === 0 || packet === null) return;
-    const delay = replayChapterDelay(packet.events, replayIndex);
+    const delay =
+      replayIndex === 0 ? 650 : replayChapterDelay(packet.events, replayIndex);
     const timeout = window.setTimeout(() => {
       setReplayIndex((current) => {
         const next = nextChapterReplayIndex(packet.events, current);
@@ -753,6 +754,12 @@ function MissionChamber({
     remediationCount: 0,
     eventCount: visibleEvents.length,
   });
+  const pactDigest = text(candidate?.pactDigest);
+  const artifactHeadShas = (packet.artifacts ?? [])
+    .map((artifact) =>
+      text(record(record(artifact.metadata)?.deliveryEvidence)?.headSha, ""),
+    )
+    .filter(Boolean);
   const stepIndex = HUD_STEPS.findIndex((step) => step.id === chapterId);
 
   return (
@@ -771,7 +778,9 @@ function MissionChamber({
           pactStillBound={evidenceMismatch}
           correctionSubmitted={correctionSubmitted}
           acceptanceCount={acceptanceCount}
-          artifactCount={artifactCount}
+          pactDigest={pactDigest}
+          initialHeadSha={artifactHeadShas[0] ?? ""}
+          correctedHeadSha={artifactHeadShas.at(-1) ?? ""}
         />
 
         <article className="hud-narration" key={chapterId}>
@@ -803,7 +812,7 @@ function MissionChamber({
               type="button"
               onClick={onTogglePlay}
             >
-              Play 30-Second Demo <span aria-hidden="true">→</span>
+              Play Demo <span aria-hidden="true">→</span>
             </button>
           ) : null}
 
@@ -844,7 +853,7 @@ function MissionChamber({
                 className="primary-action"
                 onClick={onTogglePlay}
               >
-                {playing ? "Pause Demo" : "Replay 30-Second Demo"}
+                {playing ? "Pause Demo" : "Replay Demo"}
               </button>
             </div>
           ) : null}
@@ -1030,7 +1039,7 @@ function HudStepTrack({
   return (
     <nav
       className={`hud-step-track track-${chapterId}${branchDiscovered ? " branch-discovered" : ""}`}
-      aria-label="30-second mission demo progress"
+      aria-label="Mission demo progress"
       style={progressStyle}
     >
       <ol className="sr-only">
@@ -1244,6 +1253,370 @@ function AgentTrace({
   );
 }
 
+interface ProtocolMomentProps {
+  readonly chapterId: DemoChapterId;
+  readonly requesterName: string;
+  readonly helperName: string;
+  readonly pactDigest: string;
+  readonly initialHeadSha: string;
+  readonly correctedHeadSha: string;
+}
+
+function ProtocolMoment({
+  chapterId,
+  requesterName,
+  helperName,
+  pactDigest,
+  initialHeadSha,
+  correctedHeadSha,
+}: ProtocolMomentProps) {
+  const route = protocolMomentRoute(chapterId);
+  const firstSha = sceneHash(initialHeadSha, "91646c1");
+  const finalSha = sceneHash(correctedHeadSha, "acac9c3");
+  const digest = sceneHash(pactDigest, "fwaurx2");
+
+  return (
+    <div className={`protocol-moment moment-${chapterId}`} key={chapterId}>
+      <div className="moment-route">
+        <span>{route.source}</span>
+        <i aria-hidden="true">→</i>
+        <strong>{route.transport}</strong>
+        <i aria-hidden="true">→</i>
+        <span>{route.target}</span>
+      </div>
+
+      <div className="moment-card">{protocolMomentBody()}</div>
+
+      <ol className="moment-sequence">
+        <li>
+          <span aria-hidden="true" />
+          Action
+        </li>
+        <li>
+          <span aria-hidden="true" />
+          Signed proof
+        </li>
+        <li>
+          <span aria-hidden="true" />
+          Public state
+        </li>
+      </ol>
+    </div>
+  );
+
+  function protocolMomentBody(): ReactNode {
+    switch (chapterId) {
+      case "publish":
+        return (
+          <>
+            <MomentHeader
+              eyebrow="WebMCP command"
+              operation="guild.publish_mission"
+              badge="PUBLIC"
+            />
+            <dl className="moment-payload publish-payload">
+              <MomentRow label="Repository" value="RodCor/guildhall" />
+              <MomentRow label="Target" value="main · Pull request" />
+              <MomentRow label="Party" value="1 qualified helper" />
+              <MomentRow label="Reward" value="300 points · locked" />
+            </dl>
+          </>
+        );
+      case "recruit":
+        return (
+          <>
+            <MomentHeader
+              eyebrow="Capability match"
+              operation="find qualified agent"
+              badge="2 / 2"
+            />
+            <div className="capability-scan">
+              <div>
+                <span>Required</span>
+                <strong>TypeScript</strong>
+                <strong>Protocol Security</strong>
+              </div>
+              <div className="scan-lock" aria-hidden="true">
+                <span />
+                <b>✓</b>
+              </div>
+              <div>
+                <span>Matched</span>
+                <strong>{helperName}</strong>
+                <small>Independent Guild Node</small>
+              </div>
+            </div>
+          </>
+        );
+      case "pact":
+        return (
+          <>
+            <MomentHeader
+              eyebrow="PactBridge"
+              operation="bind exact work order"
+              badge="LOCKING"
+            />
+            <div className="pact-digest-card">
+              <span>Pact v2 digest</span>
+              <code translate="no">{digest}</code>
+            </div>
+            <div className="signature-pair">
+              <span>
+                <i aria-hidden="true">✓</i>
+                <small>Requester</small>
+                <strong>{requesterName}</strong>
+              </span>
+              <span>
+                <i aria-hidden="true">✓</i>
+                <small>Helper</small>
+                <strong>{helperName}</strong>
+              </span>
+            </div>
+            <p className="immutable-lock">
+              <span aria-hidden="true">▣</span> Scope · GitHub target ·
+              criterion · reward
+            </p>
+          </>
+        );
+      case "work":
+        return (
+          <>
+            <MomentHeader
+              eyebrow="A2A envelope"
+              operation="artifact_submitted"
+              badge="ATTEMPT 1"
+            />
+            <div className="evidence-envelope">
+              <span className="envelope-seal" aria-hidden="true">
+                ✓
+              </span>
+              <dl>
+                <MomentRow label="Delivery" value="GitHub pull request #1" />
+                <MomentRow label="Base" value="main" />
+                <MomentRow label="Signed head" value={firstSha} code />
+              </dl>
+              <small>Agent signature verified before acceptance</small>
+            </div>
+          </>
+        );
+      case "mismatch":
+        return (
+          <>
+            <MomentHeader
+              eyebrow="Public verification"
+              operation="compare exact PR head"
+              badge="REJECTED"
+              tone="danger"
+            />
+            <div className="sha-comparison comparison-failed">
+              <div>
+                <span>Signed attempt 1</span>
+                <code translate="no">{firstSha}</code>
+              </div>
+              <b aria-hidden="true">≠</b>
+              <div>
+                <span>GitHub live head</span>
+                <code translate="no">{finalSha}</code>
+              </div>
+            </div>
+            <p className="verification-result result-danger">
+              <strong>PR_HEAD_SHA_MISMATCH</strong>
+              <span>0 points · 1 correction opened</span>
+            </p>
+          </>
+        );
+      case "correction":
+        return (
+          <>
+            <MomentHeader
+              eyebrow="A2A correction"
+              operation="replace signed evidence"
+              badge="ATTEMPT 2"
+              tone="recovery"
+            />
+            <div className="sha-correction">
+              <span className="sha-old">
+                <small>Stale</small>
+                <code translate="no">{firstSha}</code>
+              </span>
+              <i aria-hidden="true">→</i>
+              <span className="sha-new">
+                <small>New signed head</small>
+                <code translate="no">{finalSha}</code>
+              </span>
+            </div>
+            <p className="immutable-lock lock-preserved">
+              <span aria-hidden="true">▣</span> Pact {digest} stays unchanged
+            </p>
+          </>
+        );
+      case "verify":
+        return (
+          <>
+            <MomentHeader
+              eyebrow="Tokenless verifier"
+              operation="GET public GitHub PR"
+              badge="CHECKING"
+            />
+            <div className="public-request">
+              <code translate="no">api.github.com / pulls / 1</code>
+              <span>No GitHub token</span>
+            </div>
+            <ol className="verification-checks">
+              <li>
+                <span>✓</span>
+                <strong>Repository</strong>
+                <small>RodCor/guildhall</small>
+              </li>
+              <li>
+                <span>✓</span>
+                <strong>Open PR + base</strong>
+                <small>open → main</small>
+              </li>
+              <li>
+                <span>✓</span>
+                <strong>Exact head SHA</strong>
+                <small>{finalSha} matches</small>
+              </li>
+            </ol>
+          </>
+        );
+      case "reward":
+        return (
+          <>
+            <MomentHeader
+              eyebrow="Guildhall receipt"
+              operation="issue verified reputation"
+              badge="SIGNED"
+              tone="reward"
+            />
+            <div className="receipt-total">
+              <span>VERIFIED</span>
+              <strong>300</strong>
+              <small>reputation points</small>
+            </div>
+            <div className="reward-split">
+              <span>
+                <small>TypeScript</small>
+                <strong>+150</strong>
+              </span>
+              <span>
+                <small>Protocol Security</small>
+                <strong>+150</strong>
+              </span>
+            </div>
+            <p className="receipt-proof-line">
+              <span>✓ Receipt signature</span>
+              <span>✓ Event chain</span>
+            </p>
+          </>
+        );
+      case "ready":
+      default:
+        return (
+          <>
+            <MomentHeader
+              eyebrow="Guild capability"
+              operation="ready for agent command"
+              badge="READY"
+            />
+            <div className="ready-call-flow">
+              <span>Your agent</span>
+              <i aria-hidden="true">→</i>
+              <strong>WebMCP</strong>
+              <i aria-hidden="true">→</i>
+              <span>Public guild</span>
+            </div>
+            <p className="ready-boundary">
+              Public task data only. No model credentials cross the boundary.
+            </p>
+          </>
+        );
+    }
+  }
+}
+
+function MomentHeader({
+  eyebrow,
+  operation,
+  badge,
+  tone = "default",
+}: {
+  readonly eyebrow: string;
+  readonly operation: string;
+  readonly badge: string;
+  readonly tone?: "default" | "danger" | "recovery" | "reward";
+}) {
+  return (
+    <header className="moment-header">
+      <span>
+        <small>{eyebrow}</small>
+        <strong>{operation}</strong>
+      </span>
+      <b className={`moment-badge badge-${tone}`}>{badge}</b>
+    </header>
+  );
+}
+
+function MomentRow({
+  label,
+  value,
+  code = false,
+}: {
+  readonly label: string;
+  readonly value: string;
+  readonly code?: boolean;
+}) {
+  return (
+    <div>
+      <dt>{label}</dt>
+      <dd>{code ? <code translate="no">{value}</code> : value}</dd>
+    </div>
+  );
+}
+
+function protocolMomentRoute(chapterId: DemoChapterId): {
+  readonly source: string;
+  readonly transport: string;
+  readonly target: string;
+} {
+  switch (chapterId) {
+    case "publish":
+      return { source: "Requester", transport: "WebMCP", target: "Guildhall" };
+    case "recruit":
+      return { source: "Guildhall", transport: "MCP", target: "Helper" };
+    case "pact":
+      return {
+        source: "Two agents",
+        transport: "PactBridge",
+        target: "One digest",
+      };
+    case "work":
+    case "correction":
+      return { source: "Helper", transport: "A2A", target: "Guildhall" };
+    case "mismatch":
+    case "verify":
+      return {
+        source: "Guildhall",
+        transport: "Public HTTPS",
+        target: "GitHub",
+      };
+    case "reward":
+      return {
+        source: "Verifier",
+        transport: "Signed receipt",
+        target: "Helper",
+      };
+    case "ready":
+    default:
+      return { source: "Agent", transport: "WebMCP", target: "Public guild" };
+  }
+}
+
+function sceneHash(value: string, fallback: string): string {
+  return value === "" ? fallback : value.slice(0, 7);
+}
+
 function GuildglassScene({
   chapterId,
   requesterName,
@@ -1255,7 +1628,9 @@ function GuildglassScene({
   pactStillBound,
   correctionSubmitted,
   acceptanceCount,
-  artifactCount,
+  pactDigest,
+  initialHeadSha,
+  correctedHeadSha,
 }: {
   readonly chapterId: DemoChapterId;
   readonly requesterName: string;
@@ -1267,11 +1642,12 @@ function GuildglassScene({
   readonly pactStillBound: boolean;
   readonly correctionSubmitted: boolean;
   readonly acceptanceCount: number;
-  readonly artifactCount: number;
+  readonly pactDigest: string;
+  readonly initialHeadSha: string;
+  readonly correctedHeadSha: string;
 }) {
   const chapterIndex = HUD_STEPS.findIndex((step) => step.id === chapterId);
   const isMismatch = chapterId === "mismatch";
-  const isVerifying = chapterId === "verify" || chapterId === "reward";
   const isReward = chapterId === "reward";
 
   return (
@@ -1283,7 +1659,7 @@ function GuildglassScene({
       <div className="mission-shard">
         <span className="shard-index">CASE 001</span>
         <strong>Verified GitHub Delivery</strong>
-        <small>1 PR, 1 helper, 1 correction</small>
+        <small>Real PR · Real signatures · Real receipt</small>
       </div>
 
       <div className={`scene-action scene-action-${chapterId}`} key={chapterId}>
@@ -1357,46 +1733,14 @@ function GuildglassScene({
         <small>{pactBound ? `${acceptanceCount}/2` : "0/2"}</small>
       </div>
 
-      <div
-        className={`artifact-token findings-token${artifactCount >= 1 ? " artifact-visible" : ""}`}
-      >
-        <span>01</span>
-        <strong>PR ATTEMPT 1</strong>
-        <small>stale head SHA</small>
-      </div>
-      <div
-        className={`artifact-token fixes-token${artifactCount >= 2 ? " artifact-visible" : ""}`}
-      >
-        <span>02</span>
-        <strong>PR ATTEMPT 2</strong>
-        <small>exact head SHA</small>
-      </div>
-
-      <div
-        className={`verification-plane${isVerifying ? " verification-visible" : ""}`}
-      >
-        <div className="verification-ingest">
-          <span>PR #1</span>
-          <i>+</i>
-          <span>HEAD SHA</span>
-        </div>
-        <div>
-          <span>✓</span>
-          <strong>Repository + Base</strong>
-          <small>RodCor/guildhall → main</small>
-        </div>
-        <div>
-          <span>✓</span>
-          <strong>Exact Commit</strong>
-          <small>signed SHA matches GitHub</small>
-        </div>
-      </div>
-
-      <div className={`receipt-bloom${isReward ? " receipt-visible" : ""}`}>
-        <span>VERIFIED RECEIPT</span>
-        <strong>+300</strong>
-        <small>REPUTATION POINTS</small>
-      </div>
+      <ProtocolMoment
+        chapterId={chapterId}
+        requesterName={requesterName}
+        helperName={helperName}
+        pactDigest={pactDigest}
+        initialHeadSha={initialHeadSha}
+        correctedHeadSha={correctedHeadSha}
+      />
     </div>
   );
 }
@@ -1404,21 +1748,21 @@ function GuildglassScene({
 function sceneActionLabel(chapterId: DemoChapterId): string {
   switch (chapterId) {
     case "publish":
-      return "WebMCP published the public mission";
+      return "Requester calls guild.publish_mission";
     case "recruit":
-      return "MCP matched 1 capability-qualified helper";
+      return "Registry matches both required capabilities";
     case "pact":
-      return "PactBridge locked 2/2 signatures";
+      return "Both agents sign the same pact digest";
     case "work":
-      return "A2A accepted signed PR evidence";
+      return "Helper sends signed attempt 1 over A2A";
     case "mismatch":
-      return "Verifier rejected the stale head SHA";
+      return "GitHub live state rejects the signed evidence";
     case "correction":
-      return "A2A submitted the corrected head SHA";
+      return "Helper signs attempt 2; the pact stays fixed";
     case "verify":
-      return "Verifier reads the public GitHub PR";
+      return "Verifier reads GitHub without credentials";
     case "reward":
-      return "Guildhall issued the signed receipt";
+      return "Signed receipt unlocks 300 points";
     case "ready":
     default:
       return "Guild capability ready";
@@ -1821,7 +2165,7 @@ function ReplayControls({
           {playing
             ? "Pause Demo"
             : replayIndex >= eventCount
-              ? "Replay 30-Second Demo"
+              ? "Replay Demo"
               : "Resume Demo"}
         </button>
         {!followLive ? (
@@ -2136,7 +2480,9 @@ function MissionLoadingStage() {
           pactStillBound={false}
           correctionSubmitted={false}
           acceptanceCount={0}
-          artifactCount={0}
+          pactDigest=""
+          initialHeadSha=""
+          correctedHeadSha=""
         />
         <article className="hud-narration">
           <div className="hud-step-kicker">
@@ -2183,7 +2529,9 @@ function EmptyMissionStage({
           pactStillBound={false}
           correctionSubmitted={false}
           acceptanceCount={0}
-          artifactCount={0}
+          pactDigest=""
+          initialHeadSha=""
+          correctedHeadSha=""
         />
         <article className="hud-narration">
           <div className="hud-step-kicker">
@@ -2211,7 +2559,7 @@ function EmptyMissionStage({
               onClick={onRun}
               disabled={busy}
             >
-              {busy ? "Opening Demo…" : "Run 30-Second Demo"}{" "}
+              {busy ? "Opening Demo…" : "Run Demo"}{" "}
               <span aria-hidden="true">→</span>
             </button>
           )}
@@ -2776,17 +3124,17 @@ export function spectatorReplayMissionId(
   );
 }
 
-function replayChapterDelay(
+export function replayChapterDelay(
   events: readonly Record<string, unknown>[],
   replayIndex: number,
 ): number {
   const chapter = missionChapterId(events.slice(0, replayIndex));
   return chapter === "mismatch"
-    ? 3_800
+    ? 5_200
     : chapter === "correction"
-      ? 5_800
+      ? 6_200
       : chapter === "reward"
-        ? 3_600
+        ? 4_800
         : REPLAY_STEP_MS;
 }
 
