@@ -87,15 +87,13 @@ export async function autonomouslyJoinGuildMission(
   );
   if (negotiation !== null) return negotiation;
   for (const capability of interests) {
-    const catalogUrl = new URL("/api/missions", broker.origin);
-    catalogUrl.searchParams.set("capability", capability);
-    catalogUrl.searchParams.set("displayState", "Recruiting");
-    catalogUrl.searchParams.set("limit", "10");
-    if (connection.targetMissionId !== undefined) {
-      catalogUrl.searchParams.set("catalogKind", "reference");
-    }
-    const catalog = await publicRecord(fetchImpl, catalogUrl);
-    const missions = Array.isArray(catalog.missions) ? catalog.missions : [];
+    const missions = await matchingMissionCards(
+      connection,
+      fetchImpl,
+      broker.origin,
+      capability,
+      "Recruiting",
+    );
     for (const cardValue of missions) {
       const card = record(cardValue);
       if (card === null || typeof card.missionId !== "string") continue;
@@ -180,15 +178,13 @@ async function advanceNegotiatingMission(
   interests: readonly string[],
 ): Promise<AutonomousRecruitmentResult | null> {
   for (const capability of interests) {
-    const catalogUrl = new URL("/api/missions", origin);
-    catalogUrl.searchParams.set("capability", capability);
-    catalogUrl.searchParams.set("displayState", "Negotiating");
-    catalogUrl.searchParams.set("limit", "10");
-    if (connection.targetMissionId !== undefined) {
-      catalogUrl.searchParams.set("catalogKind", "reference");
-    }
-    const catalog = await publicRecord(fetchImpl, catalogUrl);
-    const missions = Array.isArray(catalog.missions) ? catalog.missions : [];
+    const missions = await matchingMissionCards(
+      connection,
+      fetchImpl,
+      origin,
+      capability,
+      "Negotiating",
+    );
     for (const cardValue of missions) {
       const card = record(cardValue);
       if (card === null || typeof card.missionId !== "string") continue;
@@ -305,6 +301,39 @@ async function advanceNegotiatingMission(
     }
   }
   return null;
+}
+
+async function matchingMissionCards(
+  connection: GuildConnection,
+  fetchImpl: typeof globalThis.fetch,
+  origin: string,
+  capability: string,
+  displayState: "Recruiting" | "Negotiating",
+): Promise<readonly Record<string, unknown>[]> {
+  if (connection.targetMissionId === undefined) {
+    const catalogUrl = new URL("/api/missions", origin);
+    catalogUrl.searchParams.set("capability", capability);
+    catalogUrl.searchParams.set("displayState", displayState);
+    catalogUrl.searchParams.set("limit", "10");
+    const catalog = await publicRecord(fetchImpl, catalogUrl);
+    return records(catalog.missions);
+  }
+
+  const missionId = connection.targetMissionId;
+  const packet = await publicRecord(
+    fetchImpl,
+    new URL(`/api/missions/${encodeURIComponent(missionId)}`, origin),
+  );
+  const definition = record(packet.definition);
+  const latestEvent = records(packet.events).at(-1);
+  if (
+    definition === null ||
+    !stringValues(definition.requiredCapabilities).includes(capability) ||
+    latestEvent?.displayState !== displayState
+  ) {
+    return [];
+  }
+  return [{ missionId }];
 }
 
 export async function stableAutonomousAcceptance(input: {

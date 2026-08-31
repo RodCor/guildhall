@@ -93,7 +93,7 @@ describe("live WebMCP to A2A party formation", () => {
     const formationDeadline = new Date(now + 60 * 60_000).toISOString();
     const deliveryDeadline = new Date(now + 3 * 60 * 60_000).toISOString();
     const missionInput = {
-      title: "Map and remediate the accessibility dungeon",
+      title: "Prove community mission formation end to end",
       goal: "Produce public deterministic findings and a linked remediation plan.",
       publicInputs: [
         {
@@ -194,6 +194,12 @@ describe("live WebMCP to A2A party formation", () => {
         result: { coordination: "independent-signed-a2a" },
       },
     });
+    const communityBoardAfterRally = await publicJson<{
+      missions: Array<{ missionId: string }>;
+    }>("/api/missions?limit=10");
+    expect(
+      communityBoardAfterRally.missions.map((mission) => mission.missionId),
+    ).toContain(missionId);
     let recruiting = await missionPacket(missionId);
     expect(recruiting.snapshot).toMatchObject({
       stage: "RESERVE",
