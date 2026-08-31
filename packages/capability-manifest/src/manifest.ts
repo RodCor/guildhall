@@ -58,6 +58,67 @@ const CAPABILITY_NAME = schema({
 const SEQUENCE = schema({ type: "integer", minimum: 0 });
 const PARTY_SIZE = schema({ type: "integer", minimum: 1, maximum: 2 });
 const NON_NEGATIVE_SCORE = schema({ type: "number", minimum: 0, maximum: 1 });
+const GITHUB_REPOSITORY = schema({
+  type: "string",
+  minLength: 3,
+  maxLength: 201,
+  pattern: "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9._-]{1,100}$",
+});
+const GIT_REF = schema({ type: "string", minLength: 1, maxLength: 255 });
+const COMMIT_SHA = schema({
+  type: "string",
+  minLength: 40,
+  maxLength: 40,
+  pattern: "^[0-9a-f]{40}$",
+});
+
+const EXECUTION_TARGET = schema({
+  anyOf: [
+    objectSchema({ kind: schema({ const: "guildhall" }) }, ["kind"]),
+    objectSchema(
+      {
+        kind: schema({ const: "github" }),
+        repository: GITHUB_REPOSITORY,
+        baseRef: GIT_REF,
+        writeMode: enumSchema(["fork-pr", "branch-pr"]),
+        checkPolicy: enumSchema(["all-success", "not-required"]),
+      },
+      ["kind", "repository", "baseRef", "writeMode", "checkPolicy"],
+    ),
+  ],
+});
+
+const DELIVERY_TARGET = schema({
+  anyOf: [
+    objectSchema({ kind: schema({ const: "guildhall-artifact" }) }, ["kind"]),
+    objectSchema({ kind: schema({ const: "github-pull-request" }) }, ["kind"]),
+  ],
+});
+
+const GITHUB_CHECK_EVIDENCE = objectSchema(
+  {
+    name: schema({ type: "string", minLength: 1, maxLength: 200 }),
+    status: schema({ const: "completed" }),
+    conclusion: enumSchema(["success", "neutral", "skipped"]),
+    detailsUrl: schema({ type: "string", pattern: "^https://" }),
+  },
+  ["name", "status", "conclusion"],
+);
+
+const GITHUB_PR_EVIDENCE = objectSchema(
+  {
+    kind: schema({ const: "github-pull-request" }),
+    repository: GITHUB_REPOSITORY,
+    pullRequestUrl: schema({
+      type: "string",
+      pattern: "^https://github\\.com/",
+    }),
+    baseRef: GIT_REF,
+    headSha: COMMIT_SHA,
+    checks: arraySchema(GITHUB_CHECK_EVIDENCE, 0, 64, false),
+  },
+  ["kind", "repository", "pullRequestUrl", "baseRef", "headSha", "checks"],
+);
 
 const DISPLAY_STATE = enumSchema([
   "Draft",
@@ -96,10 +157,14 @@ const REQUIRED_OUTPUT = objectSchema(
       "accessibility-findings",
       "remediation-plan",
       "verification-evidence",
+      "analysis-report",
+      "code-change",
+      "deployment-evidence",
     ]),
     description: schema({ type: "string", minLength: 1, maxLength: 1_000 }),
     mediaType: schema({ const: "application/json" }),
     publicLocation: schema({ const: "mission-artifact" }),
+    delivery: DELIVERY_TARGET,
   },
   ["outputId", "type", "mediaType", "publicLocation"],
 );
@@ -109,7 +174,7 @@ const VERIFICATION_CRITERION = objectSchema(
     criterionId: IDENTIFIER,
     description: schema({ type: "string", minLength: 1, maxLength: 1_000 }),
     required: schema({ const: true }),
-    method: schema({ const: "deterministic" }),
+    method: enumSchema(["deterministic", "public-github"]),
   },
   ["criterionId", "description", "required", "method"],
 );
@@ -146,6 +211,7 @@ const MISSION_CARD = objectSchema(
     pointReward: schema({ type: "integer", minimum: 1, maximum: 10_000 }),
     applicantCount: schema({ type: "integer", minimum: 0 }),
     displayState: DISPLAY_STATE,
+    catalogKind: enumSchema(["community", "reference"]),
   },
   [
     "missionId",
@@ -163,6 +229,7 @@ const MISSION_CARD = objectSchema(
     "pointReward",
     "applicantCount",
     "displayState",
+    "catalogKind",
   ],
 );
 
@@ -321,6 +388,7 @@ export const guildCapabilityManifest = deepFreeze([
       capability: CAPABILITY_NAME,
       displayState: DISPLAY_STATE,
       difficulty: enumSchema(["novice", "adept", "expert"]),
+      catalogKind: enumSchema(["community", "reference", "all"]),
       limit: schema({ type: "integer", minimum: 1, maximum: 50 }),
     }),
     dataSchema: LIST_DATA,
@@ -355,6 +423,7 @@ export const guildCapabilityManifest = deepFreeze([
         title: schema({ type: "string", minLength: 1, maxLength: 120 }),
         goal: schema({ type: "string", minLength: 1, maxLength: 2_000 }),
         publicInputs: arraySchema(PUBLIC_INPUT, 1, 8, false),
+        executionTarget: EXECUTION_TARGET,
         requiredCapabilities: arraySchema(CAPABILITY_NAME, 1, 16, true),
         minimumPartySize: PARTY_SIZE,
         preferredPartySize: PARTY_SIZE,
@@ -589,10 +658,14 @@ export const guildCapabilityManifest = deepFreeze([
               "accessibility-findings",
               "remediation-plan",
               "verification-evidence",
+              "analysis-report",
+              "code-change",
+              "deployment-evidence",
             ]),
             mediaType: schema({ const: "application/json" }),
             contentDigest: DIGEST,
             publicLocation: schema({ const: "mission-artifact" }),
+            deliveryEvidence: GITHUB_PR_EVIDENCE,
             content: schema({
               type: "object",
               minProperties: 1,

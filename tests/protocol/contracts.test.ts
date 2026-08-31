@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import {
+  ArtifactMetadataSchema,
   MissionSchema,
   PactSchema,
   ReceiptSchema,
@@ -50,6 +51,70 @@ describe("commitment/v1 runtime contracts", () => {
         ...mission,
         minimumPartySize: 2,
         preferredPartySize: 1,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("binds GitHub execution, pull-request delivery, and public verification", () => {
+    const mission = MissionSchema.parse(missionFixture);
+    const githubMission = MissionSchema.parse({
+      ...mission,
+      executionTarget: {
+        kind: "github",
+        repository: "kimetsu-ai/guildhall",
+        baseRef: "main",
+        writeMode: "fork-pr",
+        checkPolicy: "all-success",
+      },
+      requiredOutputs: [
+        {
+          ...mission.requiredOutputs[0],
+          type: "code-change",
+          delivery: { kind: "github-pull-request" },
+        },
+      ],
+      verificationCriteria: mission.verificationCriteria.map((criterion) => ({
+        ...criterion,
+        method: "public-github",
+      })),
+    });
+
+    expect(githubMission.executionTarget?.kind).toBe("github");
+    expect(
+      MissionSchema.safeParse({
+        ...githubMission,
+        executionTarget: { kind: "guildhall" },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects non-canonical GitHub pull-request evidence", () => {
+    expect(
+      ArtifactMetadataSchema.safeParse({
+        protocol: "commitment/v1",
+        kind: "artifact-metadata",
+        artifactId: "10000000-0000-4000-8000-000000000001",
+        missionId: "10000000-0000-4000-8000-000000000002",
+        pactDigest: "D".repeat(43),
+        roleSlotId: "10000000-0000-4000-8000-000000000003",
+        producingAgentId: "10000000-0000-4000-8000-000000000004",
+        keyId: "10000000-0000-4000-8000-000000000005",
+        attempt: 1,
+        artifactType: "code-change",
+        mediaType: "application/json",
+        publicLocation: "https://guildhall.example/artifact/1",
+        deliveryEvidence: {
+          kind: "github-pull-request",
+          repository: "kimetsu-ai/guildhall",
+          pullRequestUrl: "https://example.com/kimetsu-ai/guildhall/pull/1",
+          baseRef: "main",
+          headSha: "a".repeat(40),
+          checks: [],
+        },
+        contentDigest: "E".repeat(43),
+        signature: "F".repeat(86),
+        safetyStatus: "approved",
+        completedAt: "2026-08-31T12:00:00.000Z",
       }).success,
     ).toBe(false);
   });

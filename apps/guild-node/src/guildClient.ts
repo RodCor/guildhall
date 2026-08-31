@@ -76,7 +76,7 @@ export class GuildClient {
         );
       case "guild.list_missions":
         return this.#publicGet(
-          `/api/missions${query(input, ["cursor", "capability", "limit"])}`,
+          `/api/missions${query(input, ["cursor", "capability", "displayState", "difficulty", "catalogKind", "limit"])}`,
           signal,
         );
       case "guild.inspect_mission":
@@ -189,6 +189,7 @@ export class GuildClient {
         "title",
         "goal",
         "publicInputs",
+        "executionTarget",
         "requiredCapabilities",
         "minimumPartySize",
         "preferredPartySize",
@@ -450,6 +451,9 @@ export class GuildClient {
       artifactType: requiredString(artifact, "type"),
       mediaType: "application/json",
       publicLocation: artifactPublicLocation(config.baseUrl, missionId),
+      ...(artifact.deliveryEvidence === undefined
+        ? {}
+        : { deliveryEvidence: requiredRecord(artifact, "deliveryEvidence") }),
       contentDigest,
       safetyStatus: "approved",
       completedAt: requiredString(artifact, "completedAt"),

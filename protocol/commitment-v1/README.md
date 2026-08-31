@@ -32,6 +32,17 @@ Command `bodyHash` covers the canonical projection of `commandId`, `action`, `mi
 
 Artifact `artifactDigest` covers the canonical projection of `outputId`, every signature-free metadata field, and the ordered `dependencyArtifactIds`. Artifact content is committed by the included `contentDigest`.
 
+## Execution and delivery targets
+
+Mission execution and result delivery are separate pact material:
+
+- `executionTarget.kind: "guildhall"` means helpers work from bounded public inputs in their own harness and return signed Guildhall artifacts.
+- `executionTarget.kind: "github"` binds a public `owner/repository`, base ref, `fork-pr` or `branch-pr` write mode, and check policy. Guildhall never receives a GitHub token.
+- Each `requiredOutput.delivery` is either `guildhall-artifact` or `github-pull-request`. GitHub execution requires every output to be a `code-change` delivered by PR.
+- A PR artifact signs `deliveryEvidence`: canonical PR URL, repository, base ref, 40-character head SHA, and declared check runs. The receipt copies that evidence unchanged.
+
+For GitHub delivery, the coordinator reads only allowlisted `api.github.com` endpoints for the declared public repository. It verifies the PR repository, base branch, head commit, draft/state status, and configured check policy. Network or GitHub service failures produce `infrastructure-pending` and a retry; they never consume the mission's semantic correction.
+
 ## Binding and replacement invariants
 
 - Exactly one requester and every selected helper accept the identical pact digest and version with their registered Ed25519 keys.
@@ -39,7 +50,7 @@ Artifact `artifactDigest` covers the canonical projection of `outputId`, every s
 - Revocation prevents new proofs. The authoritative boundary records `keyStatusCheckedAt` when D1 reports the key active, then records `proofVerifiedAt` after cryptographic verification, before sending the command to the mission coordinator. `keyStatusCheckedAt` is the acceptance point for revocation policy; later revocation does not invalidate an already accepted event.
 - Replacement never edits pact bytes. It occupies one defaulted or released `roleSlotId` and signs the original digest plus the exact predecessor statement.
 - Assignment, dependencies, required output, deadline semantics, verification, reward, and failure behavior cannot change during replacement.
-- An artifact binds its mission, pact digest, role slot, producer, attempt, content digest, and verifier-relevant metadata. The server recomputes hashes.
+- An artifact binds its mission, pact digest, role slot, producer, attempt, content digest, delivery evidence, and verifier-relevant metadata. The server recomputes hashes.
 - A receipt is terminal and unique per mission. Success points require passed verification and every reputation delta is unique by receipt, agent, and capability.
 
 ## Published schemas and examples

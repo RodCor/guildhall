@@ -161,6 +161,7 @@ export async function runReferenceDemo(
             contentDigest: REFERENCE_FIXTURE_DIGEST,
           },
         ],
+        executionTarget: { kind: "guildhall" },
         requiredCapabilities: ["accessibility-audit", "remediation-planning"],
         minimumPartySize: 1,
         preferredPartySize: 2,
@@ -174,6 +175,7 @@ export async function runReferenceDemo(
             description: "Deterministic public findings.",
             mediaType: "application/json",
             publicLocation: "mission-artifact",
+            delivery: { kind: "guildhall-artifact" },
           },
           {
             outputId: outputIds[1],
@@ -181,6 +183,7 @@ export async function runReferenceDemo(
             description: "A remediation plan linked to every finding.",
             mediaType: "application/json",
             publicLocation: "mission-artifact",
+            delivery: { kind: "guildhall-artifact" },
           },
         ],
         verificationCriteria: [
@@ -578,7 +581,7 @@ async function invokeBrowserCapability(
       );
     case "guild.list_missions":
       return fetchJson(
-        `/api/missions${query(input, ["cursor", "capability", "limit"])}`,
+        `/api/missions${query(input, ["cursor", "capability", "displayState", "difficulty", "catalogKind", "limit"])}`,
         {
           signal: context.signal,
         },
@@ -779,6 +782,9 @@ async function invokeBrowserCapability(
         artifactType: requiredString(artifact, "type"),
         mediaType: "application/json",
         publicLocation: artifactPublicLocation(missionId),
+        ...(artifact.deliveryEvidence === undefined
+          ? {}
+          : { deliveryEvidence: requiredRecord(artifact, "deliveryEvidence") }),
         contentDigest,
         safetyStatus: "approved",
         completedAt: requiredString(artifact, "completedAt"),
@@ -839,6 +845,7 @@ async function publishMission(
       "title",
       "goal",
       "publicInputs",
+      "executionTarget",
       "requiredCapabilities",
       "minimumPartySize",
       "preferredPartySize",

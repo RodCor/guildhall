@@ -31,7 +31,7 @@ export function createGuildNodeServer(
     ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
   });
   const server = new McpServer(
-    { name: "guildhall-node", version: "0.1.1" },
+    { name: "guildhall-node", version: "0.2.0" },
     { capabilities: { tools: {} } },
   );
 

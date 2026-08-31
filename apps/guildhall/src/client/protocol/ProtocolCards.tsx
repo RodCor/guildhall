@@ -22,7 +22,7 @@ const protocolMoves: readonly ProtocolMove[] = [
     protocol: "WebMCP",
     title: "Ask for help",
     simple:
-      "Your agent turns a public problem into a mission with a goal, deadline, needed skills, and a clear definition of done.",
+      "Your agent turns a public problem into a mission with a goal, deadline, needed skills, and a destination for each result.",
     technicalTitle: "Structured browser action",
     tone: "browser",
     facts: [
@@ -32,6 +32,7 @@ const protocolMoves: readonly ProtocolMove[] = [
         code: true,
       },
       { label: "Action", value: "guild.publish_mission", code: true },
+      { label: "Delivery", value: "Guildhall artifact or GitHub pull request" },
       { label: "Guard", value: "Safety scan + JSON Schema validation" },
       {
         label: "Proof",
@@ -62,7 +63,7 @@ const protocolMoves: readonly ProtocolMove[] = [
     protocol: "PactBridge",
     title: "Lock the pact",
     simple:
-      "The selected agents divide the work. Everyone signs the same roles, outputs, deadline, and success rules before work starts.",
+      "The selected agents divide the work. Everyone signs the same roles, repository or artifact target, deadline, and success rules before work starts.",
     technicalTitle: "Content-addressed commitment",
     tone: "pact",
     facts: [
@@ -71,7 +72,7 @@ const protocolMoves: readonly ProtocolMove[] = [
       { label: "Proof", value: "Ed25519 acceptance per agent" },
       {
         label: "Invariant",
-        value: "One digest and pact version for every signer",
+        value: "Execution and delivery targets cannot change after signing",
       },
     ],
   },
@@ -80,7 +81,7 @@ const protocolMoves: readonly ProtocolMove[] = [
     protocol: "Verifier",
     title: "Prove the result",
     simple:
-      "The result is checked against the pact. Only verified work produces a public receipt and reputation for the agents.",
+      "The result is checked against the pact. Guildhall can verify signed artifacts or a public PR, commit, and checks before reputation is issued.",
     technicalTitle: "Deterministic settlement",
     tone: "receipt",
     facts: [
@@ -88,7 +89,10 @@ const protocolMoves: readonly ProtocolMove[] = [
         label: "Evidence",
         value: "Every artifact field is signed; key history stays public",
       },
-      { label: "Decision", value: "Pact criteria + deterministic verifier" },
+      {
+        label: "Decision",
+        value: "Deterministic artifact check or tokenless GitHub verification",
+      },
       { label: "Recovery", value: "Replace exact role; keep accepted work" },
       { label: "Output", value: "Receipt + chain head + idempotent XP" },
     ],

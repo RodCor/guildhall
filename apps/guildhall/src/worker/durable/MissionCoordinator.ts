@@ -37,6 +37,7 @@ import {
   createRedactedPublicPayload,
   scanPublicPayload,
   verifyAccessibilityDungeon,
+  verifyGitHubPullRequestDelivery,
   ACCESSIBILITY_DUNGEON_FIXTURE_DIGEST,
   ACCESSIBILITY_DUNGEON_FIXTURE_ID,
   ON_TIME_TIMELINESS_DELTA,
@@ -180,6 +181,7 @@ export type DeadlineType =
   | "negotiation"
   | "delivery"
   | "correction"
+  | "verification_retry"
   | "a2a_retry"
   | "d1_retry";
 
@@ -188,12 +190,14 @@ const DEADLINE_TYPES = new Set<DeadlineType>([
   "negotiation",
   "delivery",
   "correction",
+  "verification_retry",
   "a2a_retry",
   "d1_retry",
 ]);
 
 const PROJECTION_RETRY_BASE_MS = 1_000;
 const A2A_RETRY_MS = 30_000;
+const VERIFICATION_RETRY_MS = 30_000;
 
 class RedactionPauseError extends Error {
   constructor(readonly code: string) {
@@ -679,19 +683,11 @@ export class MissionCoordinator extends DurableObject<GuildhallEnv> {
       state.deliveredOutputIds,
     );
     const startedAt = new Date().toISOString();
-    const verification = verifyAccessibilityDungeon({
+    const commonVerificationInput = {
       verificationRunId: crypto.randomUUID(),
       pact,
       pactDigest: candidatePact.pactDigest,
       attempt: (state.correctionCount + 1) as 1 | 2,
-      fixture: {
-        fixtureId: ACCESSIBILITY_DUNGEON_FIXTURE_ID,
-        contentDigest: ACCESSIBILITY_DUNGEON_FIXTURE_DIGEST,
-        publicLocation: new URL(
-          "/fixtures/accessibility-dungeon-v1",
-          this.env.PUBLIC_ORIGIN,
-        ).toString(),
-      },
       artifacts,
       replacements: this.readReplacements(),
       infrastructureStatus: input.infrastructureStatus,
@@ -699,7 +695,21 @@ export class MissionCoordinator extends DurableObject<GuildhallEnv> {
       ...(input.infrastructureStatus === "available"
         ? { completedAt: new Date().toISOString() }
         : {}),
-    });
+    } as const;
+    const verification =
+      pact.executionTarget?.kind === "github"
+        ? await verifyGitHubPullRequestDelivery(commonVerificationInput)
+        : verifyAccessibilityDungeon({
+            ...commonVerificationInput,
+            fixture: {
+              fixtureId: ACCESSIBILITY_DUNGEON_FIXTURE_ID,
+              contentDigest: ACCESSIBILITY_DUNGEON_FIXTURE_DIGEST,
+              publicLocation: new URL(
+                "/fixtures/accessibility-dungeon-v1",
+                this.env.PUBLIC_ORIGIN,
+              ).toString(),
+            },
+          });
     const failedRoleSlotIds = [
       ...new Set(
         verification.criteria
@@ -752,6 +762,22 @@ export class MissionCoordinator extends DurableObject<GuildhallEnv> {
           JSON.stringify(verification),
           now,
         );
+        if (verification.status === "infrastructure-pending") {
+          this.ctx.storage.sql.exec(
+            `INSERT INTO deadlines(deadline_type, due_at, handled_at)
+             VALUES ('verification_retry', ?, NULL)
+             ON CONFLICT(deadline_type) DO UPDATE SET
+               due_at = excluded.due_at,
+               handled_at = NULL`,
+            Date.now() + VERIFICATION_RETRY_MS,
+          );
+        } else {
+          this.ctx.storage.sql.exec(
+            `UPDATE deadlines SET handled_at = ?
+             WHERE deadline_type = 'verification_retry' AND handled_at IS NULL`,
+            now,
+          );
+        }
       }
       return response;
     });
@@ -1001,6 +1027,37 @@ export class MissionCoordinator extends DurableObject<GuildhallEnv> {
       .toArray();
 
     for (const deadline of deadlines) {
+      if (deadline.deadline_type === "verification_retry") {
+        let handled = false;
+        try {
+          const result = await this.runVerification({
+            infrastructureStatus: "available",
+          });
+          handled = result.verification.status !== "infrastructure-pending";
+        } catch (error: unknown) {
+          console.error(
+            JSON.stringify({
+              deadlineType: "verification_retry",
+              errorName: error instanceof Error ? error.name : "UnknownError",
+              message: "public delivery verification retry failed",
+            }),
+          );
+        }
+        if (handled) {
+          this.ctx.storage.sql.exec(
+            `UPDATE deadlines SET handled_at = ?
+             WHERE deadline_type = 'verification_retry' AND handled_at IS NULL`,
+            new Date().toISOString(),
+          );
+        } else {
+          this.ctx.storage.sql.exec(
+            `UPDATE deadlines SET due_at = ?
+             WHERE deadline_type = 'verification_retry' AND handled_at IS NULL`,
+            now + VERIFICATION_RETRY_MS,
+          );
+        }
+        continue;
+      }
       if (deadline.deadline_type === "a2a_retry") {
         let handled = false;
         try {
@@ -1456,6 +1513,9 @@ export class MissionCoordinator extends DurableObject<GuildhallEnv> {
         roleSlotId: artifact.metadata.roleSlotId,
         producingAgentId: artifact.metadata.producingAgentId,
         contentDigest: artifact.metadata.contentDigest,
+        ...(artifact.metadata.deliveryEvidence === undefined
+          ? {}
+          : { deliveryEvidence: artifact.metadata.deliveryEvidence }),
       })),
       verification:
         verification === null

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { canonicalJsonDigest } from "../../packages/contracts/src/index.js";
+import {
+  PactSchema,
+  canonicalJsonDigest,
+} from "../../packages/contracts/src/index.js";
 import {
   deriveDisplayState,
   initialLifecycleState,
@@ -739,6 +742,68 @@ describe("pure mission lifecycle", () => {
     state = apply(state, { type: "verify" });
     state = apply(state, { type: "verification_passed" });
     expect(deriveDisplayState(state)).toBe("Completed");
+  });
+
+  it("requires signed GitHub PR evidence to match the immutable delivery target", () => {
+    const bound = boundParty([scout], [scoutSlot]);
+    if (bound.candidatePact === null) throw new Error("Expected bound pact");
+    const githubPact = PactSchema.parse({
+      ...bound.candidatePact.pact,
+      executionTarget: {
+        kind: "github",
+        repository: "kimetsu-ai/guildhall",
+        baseRef: "main",
+        writeMode: "fork-pr",
+        checkPolicy: "all-success",
+      },
+      requiredOutputs: bound.candidatePact.pact.requiredOutputs.map(
+        (output) => ({
+          ...output,
+          type: "code-change",
+          delivery: { kind: "github-pull-request" },
+        }),
+      ),
+      verificationCriteria: bound.candidatePact.pact.verificationCriteria.map(
+        (criterion) => ({ ...criterion, method: "public-github" }),
+      ),
+    });
+    const state: LifecycleState = {
+      ...bound,
+      candidatePact: { ...bound.candidatePact, pact: githubPact },
+    };
+    const withoutEvidence = submitArtifact(state, scoutSlot.roleSlotId);
+    expect(transition(state, withoutEvidence)).toMatchObject({
+      ok: false,
+      code: "INVALID_COMMAND",
+    });
+
+    const withEvidence: typeof withoutEvidence = {
+      ...withoutEvidence,
+      artifact: {
+        ...withoutEvidence.artifact,
+        metadata: {
+          ...withoutEvidence.artifact.metadata,
+          deliveryEvidence: {
+            kind: "github-pull-request",
+            repository: "kimetsu-ai/guildhall",
+            pullRequestUrl: "https://github.com/kimetsu-ai/guildhall/pull/42",
+            baseRef: "main",
+            headSha: "a".repeat(40),
+            checks: [
+              {
+                name: "test",
+                status: "completed",
+                conclusion: "success",
+              },
+            ],
+          },
+        },
+      },
+    };
+    expect(transition(state, withEvidence)).toMatchObject({
+      ok: true,
+      state: { stage: "DELIVER" },
+    });
   });
 
   it("cancels an unbound mission when public content is redacted", () => {

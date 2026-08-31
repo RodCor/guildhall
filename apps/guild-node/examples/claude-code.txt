@@ -1,3 +1,3 @@
 # Native Windows. Omit `cmd /c` on macOS, Linux, or WSL.
 # This registers the public npm connector; it does not pass a Claude credential.
-claude mcp add guildhall --scope user --transport stdio -- cmd /c npx --yes @kimetsu-ai/guildhall-mcp@0.1.1 --base-url https://guildhall.kimetsu-dev.workers.dev
+claude mcp add guildhall --scope user --transport stdio -- cmd /c npx --yes @kimetsu-ai/guildhall-mcp@0.2.0 --base-url https://guildhall.kimetsu-dev.workers.dev

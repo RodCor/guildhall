@@ -1465,6 +1465,7 @@ function MissionBrief({ packet }: { readonly packet: MissionPacket }) {
   const publicInput = recordList(definition?.publicInputs)[0];
   const outputs = recordList(definition?.requiredOutputs);
   const criteria = recordList(definition?.verificationCriteria);
+  const executionTarget = record(definition?.executionTarget);
   const capabilities = Array.isArray(definition?.requiredCapabilities)
     ? definition.requiredCapabilities
         .map((value) => text(value))
@@ -1475,6 +1476,19 @@ function MissionBrief({ packet }: { readonly packet: MissionPacket }) {
   const helperMinimum = numberValue(definition?.minimumPartySize, 1);
   const helperMaximum = numberValue(definition?.maximumPartySize, 2);
   const baseReward = numberValue(definition?.pointReward, 100);
+  const githubRepository = text(executionTarget?.repository);
+  const usesGitHub = executionTarget?.kind === "github";
+  const inputLabel = (() => {
+    if (inputHref === null) return text(publicInput?.inputId, "Public input");
+    try {
+      return (
+        new URL(inputHref).pathname.split("/").filter(Boolean).at(-1) ??
+        "Public input"
+      );
+    } catch {
+      return "Public input";
+    }
+  })();
 
   return (
     <article className="mission-record" aria-labelledby="mission-record-title">
@@ -1503,9 +1517,9 @@ function MissionBrief({ packet }: { readonly packet: MissionPacket }) {
           <dt>Public Input</dt>
           <dd>
             {inputHref === null ? (
-              "accessibility-dungeon-v1"
+              inputLabel
             ) : (
-              <a href={inputHref}>accessibility-dungeon-v1 ↗</a>
+              <a href={inputHref}>{inputLabel} ↗</a>
             )}
           </dd>
         </div>
@@ -1515,7 +1529,20 @@ function MissionBrief({ packet }: { readonly packet: MissionPacket }) {
         </div>
         <div>
           <dt>Pass Criteria</dt>
-          <dd>{criteria.length || 2} deterministic checks</dd>
+          <dd>
+            {criteria.length || 2}{" "}
+            {usesGitHub ? "public GitHub" : "deterministic"} checks
+          </dd>
+        </div>
+        <div>
+          <dt>Execution</dt>
+          <dd>{usesGitHub ? githubRepository : "Public agent harness"}</dd>
+        </div>
+        <div>
+          <dt>Delivery</dt>
+          <dd>
+            {usesGitHub ? "Verified pull request" : "Guildhall artifacts"}
+          </dd>
         </div>
         <div>
           <dt>Party Rule</dt>
@@ -1845,12 +1872,22 @@ function RewardChest({
   const artifactLinks = artifacts.flatMap((artifact) => {
     const metadata = record(artifact.metadata);
     const location = safePublicHref(text(metadata?.publicLocation, ""));
-    if (location === null) return [];
+    const deliveryEvidence = record(metadata?.deliveryEvidence);
+    const pullRequest = safePublicHref(
+      text(deliveryEvidence?.pullRequestUrl, ""),
+    );
     return [
-      {
-        label: humanize(text(metadata?.artifactType, "Public artifact")),
-        location,
-      },
+      ...(pullRequest === null
+        ? []
+        : [{ label: "verified pull request", location: pullRequest }]),
+      ...(location === null || location === pullRequest
+        ? []
+        : [
+            {
+              label: humanize(text(metadata?.artifactType, "Public artifact")),
+              location,
+            },
+          ]),
     ];
   });
   return (

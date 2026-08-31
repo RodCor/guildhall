@@ -194,6 +194,32 @@ export async function createSignedArtifact(input: {
     ...unsignedMetadata,
     signature,
   });
+  const { deliveryEvidence, ...metadataWithoutDelivery } = metadata;
+  const publicDeliveryEvidence =
+    deliveryEvidence === undefined
+      ? undefined
+      : {
+          kind: deliveryEvidence.kind,
+          repository: deliveryEvidence.repository,
+          pullRequestUrl: deliveryEvidence.pullRequestUrl,
+          baseRef: deliveryEvidence.baseRef,
+          headSha: deliveryEvidence.headSha,
+          checks: deliveryEvidence.checks.map((check) => ({
+            name: check.name,
+            status: check.status,
+            conclusion: check.conclusion,
+            ...(check.detailsUrl === undefined
+              ? {}
+              : { detailsUrl: check.detailsUrl }),
+          })),
+        };
+  const publicMetadata =
+    publicDeliveryEvidence === undefined
+      ? metadataWithoutDelivery
+      : {
+          ...metadataWithoutDelivery,
+          deliveryEvidence: publicDeliveryEvidence,
+        };
 
   return {
     artifactId,
@@ -211,7 +237,7 @@ export async function createSignedArtifact(input: {
     ],
     metadata: {
       "https://guildhall.kimetsu-dev.workers.dev/protocol/commitment/v1":
-        metadata,
+        publicMetadata,
     },
   };
 }
