@@ -59,6 +59,13 @@ interface AutonomyPolicy {
   readonly updatedAt: string | null;
 }
 
+interface PairingPacket {
+  readonly agentId: string;
+  readonly code: string;
+  readonly challenge: string;
+  readonly expiresAt: string;
+}
+
 type ProfileField =
   "characterName" | "characterClass" | "slug" | "technicalName" | "publicBio";
 
@@ -672,6 +679,20 @@ function AgentManagerDialog({
   const [autonomyConfirmationId, setAutonomyConfirmationId] = useState<
     string | null
   >(null);
+  const [pairingPacket, setPairingPacket] = useState<PairingPacket | null>(
+    null,
+  );
+  const [pairingLoadingAgentId, setPairingLoadingAgentId] = useState<
+    string | null
+  >(null);
+  const [pairingError, setPairingError] = useState<{
+    readonly agentId: string;
+    readonly message: string;
+  } | null>(null);
+  const [pairingCopyState, setPairingCopyState] = useState<
+    "idle" | "copied" | "failed"
+  >("idle");
+  const [pairingNow, setPairingNow] = useState(() => Date.now());
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -684,6 +705,16 @@ function AgentManagerDialog({
   useEffect(() => {
     setFormDirty(false);
   }, [editingAgent?.agentId, mode]);
+
+  useEffect(() => {
+    if (pairingPacket === null) return;
+    setPairingNow(Date.now());
+    const intervalId = window.setInterval(
+      () => setPairingNow(Date.now()),
+      1_000,
+    );
+    return () => window.clearInterval(intervalId);
+  }, [pairingPacket]);
 
   useEffect(() => {
     if (!formDirty) return;
@@ -706,6 +737,52 @@ function AgentManagerDialog({
 
   function requestBack() {
     if (!busy && confirmDiscard()) onBack();
+  }
+
+  async function startPairing(agent: AgentSummary) {
+    setPairingLoadingAgentId(agent.agentId);
+    setPairingError(null);
+    setPairingCopyState("idle");
+    try {
+      const response = await ownerMutation(
+        `/api/agents/${encodeURIComponent(agent.agentId)}/pairing`,
+        "POST",
+        {},
+      );
+      const body: unknown = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw apiRequestErrorFromBody(
+          body,
+          "The one-time pairing packet could not be created.",
+        );
+      }
+      const packet = parsePairingPacket(body, agent.agentId);
+      if (packet === null) {
+        throw new Error("Guildhall returned an invalid pairing packet.");
+      }
+      setPairingPacket(packet);
+    } catch (error) {
+      setPairingError({
+        agentId: agent.agentId,
+        message: errorMessage(
+          error,
+          "The one-time pairing packet could not be created.",
+        ),
+      });
+    } finally {
+      setPairingLoadingAgentId(null);
+    }
+  }
+
+  async function copyPairingPacket(packet: PairingPacket) {
+    const copied = await copyText(
+      JSON.stringify(
+        { code: packet.code, challenge: packet.challenge },
+        null,
+        2,
+      ),
+    );
+    setPairingCopyState(copied ? "copied" : "failed");
   }
 
   const isEditing = mode === "edit" && editingAgent !== null;
@@ -801,6 +878,26 @@ function AgentManagerDialog({
                 const confirmingSigner = signerConfirmationId === agent.agentId;
                 const confirmingAutonomy =
                   autonomyConfirmationId === agent.agentId;
+                const agentPairing =
+                  pairingPacket?.agentId === agent.agentId
+                    ? pairingPacket
+                    : null;
+                const pairingRemainingSeconds =
+                  agentPairing === null
+                    ? 0
+                    : Math.max(
+                        0,
+                        Math.ceil(
+                          (Date.parse(agentPairing.expiresAt) - pairingNow) /
+                            1_000,
+                        ),
+                      );
+                const pairingExpired =
+                  agentPairing !== null && pairingRemainingSeconds === 0;
+                const agentPairingError =
+                  pairingError?.agentId === agent.agentId
+                    ? pairingError.message
+                    : null;
                 return (
                   <li key={agent.agentId} data-active={isActive || undefined}>
                     <div className="agent-connection-main">
@@ -988,6 +1085,105 @@ function AgentManagerDialog({
                         >
                           Enable Publishing
                         </button>
+                      )}
+                    </div>
+
+                    <div className="account-pairing-row">
+                      {agentPairing === null ? (
+                        <>
+                          <div>
+                            <span className="account-section-label">
+                              Local harness pairing
+                            </span>
+                            <strong>
+                              Connect Codex, Claude Code, Cursor, or Pi
+                            </strong>
+                            <p>
+                              Create a code and challenge for this agent. They
+                              expire after 10 minutes and work once.
+                            </p>
+                            {agentPairingError === null ? null : (
+                              <p className="account-pairing-error" role="alert">
+                                {agentPairingError}
+                              </p>
+                            )}
+                          </div>
+                          <button
+                            className="quiet-action"
+                            type="button"
+                            onClick={() => void startPairing(agent)}
+                            disabled={busy || pairingLoadingAgentId !== null}
+                          >
+                            {pairingLoadingAgentId === agent.agentId
+                              ? "Creating…"
+                              : "Create Pairing Packet"}
+                          </button>
+                        </>
+                      ) : (
+                        <div className="account-pairing-packet">
+                          <div className="account-pairing-heading">
+                            <div>
+                              <span className="account-section-label">
+                                One-time pairing packet
+                              </span>
+                              <strong>
+                                {pairingExpired
+                                  ? "This packet has expired"
+                                  : `Expires in ${formatPairingCountdown(pairingRemainingSeconds)}`}
+                              </strong>
+                            </div>
+                            <span
+                              className="account-status-pill"
+                              data-tone={pairingExpired ? "expired" : "ready"}
+                            >
+                              {pairingExpired ? "Expired" : "Ready"}
+                            </span>
+                          </div>
+                          <dl className="account-pairing-values">
+                            <div>
+                              <dt>Code</dt>
+                              <dd>
+                                <code>{agentPairing.code}</code>
+                              </dd>
+                            </div>
+                            <div>
+                              <dt>Challenge</dt>
+                              <dd>
+                                <code>{agentPairing.challenge}</code>
+                              </dd>
+                            </div>
+                          </dl>
+                          <p>
+                            Copy both values into <code>guild.pair_node</code>.
+                            Closing this dialog clears them from the page.
+                          </p>
+                          <div className="account-pairing-actions">
+                            <button
+                              className="text-action"
+                              type="button"
+                              onClick={() => void startPairing(agent)}
+                              disabled={busy || pairingLoadingAgentId !== null}
+                            >
+                              {pairingLoadingAgentId === agent.agentId
+                                ? "Creating…"
+                                : "Create New Packet"}
+                            </button>
+                            <button
+                              className="quiet-action"
+                              type="button"
+                              onClick={() =>
+                                void copyPairingPacket(agentPairing)
+                              }
+                              disabled={pairingExpired}
+                            >
+                              {pairingCopyState === "copied"
+                                ? "Packet Copied"
+                                : pairingCopyState === "failed"
+                                  ? "Select Values Manually"
+                                  : "Copy Code + Challenge"}
+                            </button>
+                          </div>
+                        </div>
                       )}
                     </div>
 
@@ -1265,6 +1461,40 @@ function shortFingerprint(value: string): string {
   const normalized = value.trim();
   if (normalized.length <= 14) return normalized;
   return `${normalized.slice(0, 7)}…${normalized.slice(-5)}`;
+}
+
+function parsePairingPacket(
+  value: unknown,
+  agentId: string,
+): PairingPacket | null {
+  if (!isRecord(value)) return null;
+  const { code, challenge, expiresAt } = value;
+  if (
+    typeof code !== "string" ||
+    !/^[A-Za-z0-9_-]{43,128}$/u.test(code) ||
+    typeof challenge !== "string" ||
+    !challenge.startsWith(`GUILDHALL-PAIRING-V1\n${agentId}\n`) ||
+    typeof expiresAt !== "string" ||
+    !Number.isFinite(Date.parse(expiresAt))
+  ) {
+    return null;
+  }
+  return { agentId, code, challenge, expiresAt };
+}
+
+function formatPairingCountdown(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+async function copyText(value: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(value);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function slugPart(value: string): string {
