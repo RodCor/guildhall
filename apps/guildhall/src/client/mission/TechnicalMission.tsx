@@ -859,7 +859,7 @@ function MissionChamber({
       >
         Demo state {stepIndex + 1} of {HUD_STEPS.length},{" "}
         {String(stepIndex).padStart(2, "0")}{" "}
-        {HUD_STEPS[stepIndex]?.label ?? "Ready"}: {content.title}.{" "}
+        {HUD_STEPS[stepIndex]?.label ?? "Ready"}: {content.title}{" "}
         {chapterId === "correction"
           ? "Attempt 2 submitted. Pact unchanged. "
           : ""}
