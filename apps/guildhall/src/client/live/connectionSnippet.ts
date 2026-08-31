@@ -1,7 +1,7 @@
 export type ConnectMode = "browser" | "codex" | "claude" | "cursor" | "pi";
 
 export const CONNECTOR_PACKAGE = "@kimetsu-ai/guildhall-mcp";
-export const CONNECTOR_VERSION = "0.1.0";
+export const CONNECTOR_VERSION = "latest";
 
 export function connectionSnippet(
   mode: ConnectMode,

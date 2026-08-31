@@ -90,7 +90,7 @@
       "properties": {
         "verifierId": {
           "type": "string",
-          "const": "accessibility-dungeon-v1"
+          "enum": ["accessibility-dungeon-v1", "github-pull-request-v1"]
         },
         "version": {
           "type": "string",

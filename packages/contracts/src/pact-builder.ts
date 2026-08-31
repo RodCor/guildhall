@@ -73,6 +73,9 @@ export async function buildPact(input: {
     pactVersion: input.pactVersion,
     goal: input.mission.goal,
     publicInputs: input.mission.publicInputs,
+    ...(input.mission.executionTarget === undefined
+      ? {}
+      : { executionTarget: input.mission.executionTarget }),
     minimumPartySize: input.mission.minimumPartySize,
     maximumPartySize: input.mission.maximumPartySize,
     participants: [
@@ -113,6 +116,10 @@ export function pactMatchesMission(pact: Pact, mission: Mission): boolean {
     pact.missionVersion === mission.missionVersion &&
     pact.goal === mission.goal &&
     sameJson(pact.publicInputs, mission.publicInputs) &&
+    sameJson(
+      pact.executionTarget ?? { kind: "guildhall" },
+      mission.executionTarget ?? { kind: "guildhall" },
+    ) &&
     pact.minimumPartySize === mission.minimumPartySize &&
     pact.maximumPartySize === mission.maximumPartySize &&
     sameSet(

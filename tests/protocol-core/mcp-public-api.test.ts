@@ -11,6 +11,7 @@ import {
   createAgent,
   registerAgentKey,
   registerScopedCredential,
+  revokeAgentKey,
   upsertGithubOwnerAndSession,
 } from "../../apps/guildhall/src/worker/repositories";
 import {
@@ -18,12 +19,75 @@ import {
   projectMissionCatalog,
 } from "../../apps/guildhall/src/worker/repositories/missionCatalog";
 import { createAgentRequestSignatureMessage } from "../../packages/trust-engine/src";
+import { handlePublicApiRoute } from "../../apps/guildhall/src/worker/publicApi";
+import type { GuildhallEnv } from "../../apps/guildhall/src/worker/types";
 
 const ORIGIN = "https://guildhall.test";
 const worker = (exports as unknown as { default: Fetcher }).default;
 const encoder = new TextEncoder();
 
 describe("bounded public REST projections", () => {
+  it("publishes current and historical issuer verification keys", async () => {
+    const first = await issuerFixture();
+    const second = await issuerFixture();
+    const baseEnv = env as unknown as GuildhallEnv;
+    const firstEnv = {
+      ...baseEnv,
+      GUILD_ISSUER_KEY_ID: first.keyId,
+      GUILD_ISSUER_PRIVATE_JWK: JSON.stringify(first.privateJwk),
+    };
+    const current = await handlePublicApiRoute(
+      new Request(`${ORIGIN}/.well-known/guildhall-issuer-key.json`),
+      firstEnv,
+    );
+    expect(current?.status).toBe(200);
+    expect(await current!.json()).toMatchObject({
+      keyId: first.keyId,
+      publicJwk: {
+        kty: "OKP",
+        crv: "Ed25519",
+        x: first.publicJwk.x,
+      },
+      keySetUrl: "/.well-known/guildhall-issuer-keys.json",
+    });
+
+    const secondEnv = {
+      ...baseEnv,
+      GUILD_ISSUER_KEY_ID: second.keyId,
+      GUILD_ISSUER_PRIVATE_JWK: JSON.stringify(second.privateJwk),
+    };
+    const history = await handlePublicApiRoute(
+      new Request(`${ORIGIN}/.well-known/guildhall-issuer-keys.json`),
+      secondEnv,
+    );
+    expect(history?.status).toBe(200);
+    const historyBody = (await history!.json()) as {
+      keys: readonly Record<string, unknown>[];
+    };
+    expect(historyBody.keys).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          keyId: first.keyId,
+          status: "retired",
+          publicJwk: expect.objectContaining({
+            kty: "OKP",
+            crv: "Ed25519",
+            x: first.publicJwk.x,
+          }),
+        }),
+        expect.objectContaining({
+          keyId: second.keyId,
+          status: "active",
+          publicJwk: expect.objectContaining({
+            kty: "OKP",
+            crv: "Ed25519",
+            x: second.publicJwk.x,
+          }),
+        }),
+      ]),
+    );
+  });
+
   it("lists and reads public agent cards without owner, key, or credential data", async () => {
     const owner = await seedOwner("public-agents", 8_700_001);
     const first = await seedAgent(owner.ownerId, "public-one", {
@@ -36,6 +100,26 @@ describe("bounded public REST projections", () => {
       completedMissions: 2,
       capability: "remediation-planning",
     });
+    const signingPair = await crypto.subtle.generateKey("Ed25519", true, [
+      "sign",
+      "verify",
+    ]);
+    const publicJwk = await crypto.subtle.exportKey(
+      "jwk",
+      signingPair.publicKey,
+    );
+    const keyId = await deriveEd25519KeyId("browser", publicJwk);
+    const keyCreatedAt = new Date().toISOString();
+    await registerAgentKey(env.GUILD_DB, {
+      keyId,
+      ownerId: owner.ownerId,
+      agentId: first,
+      publicJwk,
+      source: "browser",
+      createdAt: keyCreatedAt,
+    });
+    const revokedAt = new Date(Date.now() + 1_000).toISOString();
+    await revokeAgentKey(env.GUILD_DB, owner.ownerId, first, keyId, revokedAt);
 
     const firstPage = await fetchApi("/api/agents?limit=1");
     expect(firstPage.status).toBe(200);
@@ -76,7 +160,27 @@ describe("bounded public REST projections", () => {
       /ownerId|githubUserId|session|credential|publicJwk|keyId/iu,
     );
     expect(JSON.parse(profileText)).toMatchObject({
-      profile: { agentId: first, technicalName: "Protocol Public One" },
+      profile: {
+        agentId: first,
+        technicalName: "Protocol Public One",
+        keySetUrl: `/api/agents/${first}/keys`,
+      },
+    });
+    expect(
+      await json(await fetchApi(`/api/agents/${first}/keys`)),
+    ).toMatchObject({
+      protocol: "commitment/v1",
+      agentId: first,
+      algorithm: "Ed25519",
+      keys: [
+        {
+          keyId,
+          publicJwk: { kty: "OKP", crv: "Ed25519", x: publicJwk.x },
+          source: "browser",
+          status: "revoked",
+          revokedAt,
+        },
+      ],
     });
 
     expect(
@@ -288,6 +392,20 @@ describe("bounded public REST projections", () => {
     ).toEqual({ receipt: null });
   });
 });
+
+async function issuerFixture(): Promise<{
+  readonly keyId: string;
+  readonly privateJwk: JsonWebKey;
+  readonly publicJwk: JsonWebKey;
+}> {
+  const pair = await crypto.subtle.generateKey("Ed25519", true, [
+    "sign",
+    "verify",
+  ]);
+  const privateJwk = await crypto.subtle.exportKey("jwk", pair.privateKey);
+  const { d: _private, ...publicJwk } = privateJwk;
+  return { keyId: crypto.randomUUID(), privateJwk, publicJwk };
+}
 
 describe("signed Guild Node inbox", () => {
   it("authenticates an empty-body GET and advances an opaque forward cursor", async () => {

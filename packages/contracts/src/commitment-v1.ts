@@ -7,6 +7,7 @@ import {
   UuidSchema,
 } from "./common.js";
 import {
+  ExecutionTargetSchema,
   FailureBehaviorSchema,
   PublicInputSchema,
   RequiredOutputSchema,
@@ -43,6 +44,8 @@ export const PactSchema = z
     pactVersion: z.number().int().positive(),
     goal: z.string().min(1).max(2_000),
     publicInputs: z.array(PublicInputSchema).min(1).max(8),
+    /** Optional for legacy pacts; absence means public artifact-only execution. */
+    executionTarget: ExecutionTargetSchema.optional(),
     minimumPartySize: z.number().int().min(1).max(2),
     maximumPartySize: z.number().int().min(1).max(2),
     participants: z.array(PactParticipantSchema).min(2).max(3),
@@ -155,6 +158,32 @@ export const PactSchema = z
           message:
             "Role points must allocate at least one point per capability",
           path: ["roleSlots", index, "pointAllocation"],
+        });
+      }
+    }
+    const executionKind = pact.executionTarget?.kind ?? "guildhall";
+    const githubOutputs = pact.requiredOutputs.filter(
+      (output) => output.delivery?.kind === "github-pull-request",
+    );
+    if (
+      (executionKind === "github" &&
+        githubOutputs.length !== pact.requiredOutputs.length) ||
+      (executionKind !== "github" && githubOutputs.length > 0)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Pact execution and delivery targets must agree",
+        path: ["executionTarget"],
+      });
+    }
+    const expectedMethod =
+      executionKind === "github" ? "public-github" : "deterministic";
+    for (const [index, criterion] of pact.verificationCriteria.entries()) {
+      if (criterion.method !== expectedMethod) {
+        context.addIssue({
+          code: "custom",
+          message: `${executionKind} pacts require ${expectedMethod} verification`,
+          path: ["verificationCriteria", index, "method"],
         });
       }
     }

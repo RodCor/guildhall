@@ -5,9 +5,12 @@ import type {
 } from "@guildhall/mission-engine";
 import {
   ArtifactSubmissionSchema,
+  CommandProofSchema,
   PactSchema,
   ReplacementProofSchema,
+  TimestampSchema,
   type ArtifactSubmission,
+  type CommandProof,
   type MissionEvent,
   type Receipt,
   type ReplacementProof,
@@ -33,6 +36,14 @@ export interface CoordinatorCommand {
   readonly source: ProvenanceSource;
   readonly issuedAt: string;
   readonly command: LifecycleCommand;
+  readonly proof?: CommandProof;
+  /** Server time when the proof key was confirmed active and the proof verified. */
+  readonly proofVerifiedAt?: string;
+  /** Authoritative D1 read time at which the signing key was active. */
+  readonly keyStatusCheckedAt?: string;
+  /** Transport-level action/payload when they differ from the lifecycle command. */
+  readonly proofAction?: string;
+  readonly proofPayload?: unknown;
 }
 
 export interface AcceptedCommandResult {
@@ -122,6 +133,20 @@ const allowedSources = new Set<ProvenanceSource>([
 export function isCoordinatorCommand(
   value: unknown,
 ): value is CoordinatorCommand {
+  return isCoordinatorCommandAtBoundary(value, "coordinator");
+}
+
+/** Parse an agent-supplied envelope before the server adds proof audit facts. */
+export function isUnverifiedAgentCommand(
+  value: unknown,
+): value is CoordinatorCommand {
+  return isCoordinatorCommandAtBoundary(value, "unverified-agent");
+}
+
+function isCoordinatorCommandAtBoundary(
+  value: unknown,
+  boundary: "unverified-agent" | "coordinator",
+): value is CoordinatorCommand {
   if (!isRecord(value)) return false;
   if (
     !hasOnlyKeys(value, [
@@ -131,6 +156,11 @@ export function isCoordinatorCommand(
       "source",
       "issuedAt",
       "command",
+      "proof",
+      "proofVerifiedAt",
+      "keyStatusCheckedAt",
+      "proofAction",
+      "proofPayload",
     ]) ||
     typeof value.commandId !== "string" ||
     value.commandId.length === 0 ||
@@ -140,7 +170,35 @@ export function isCoordinatorCommand(
         value.expectedSequence < 0)) ||
     !allowedSources.has(value.source as ProvenanceSource) ||
     typeof value.issuedAt !== "string" ||
-    !Number.isFinite(Date.parse(value.issuedAt)) ||
+    !TimestampSchema.safeParse(value.issuedAt).success ||
+    (value.proof !== undefined &&
+      !CommandProofSchema.safeParse(value.proof).success) ||
+    (value.proofVerifiedAt !== undefined &&
+      !TimestampSchema.safeParse(value.proofVerifiedAt).success) ||
+    (value.keyStatusCheckedAt !== undefined &&
+      !TimestampSchema.safeParse(value.keyStatusCheckedAt).success) ||
+    (boundary === "coordinator" &&
+      value.proof !== undefined &&
+      (value.actor === null ||
+        value.proofVerifiedAt === undefined ||
+        value.keyStatusCheckedAt === undefined)) ||
+    (boundary === "unverified-agent" &&
+      (value.proofVerifiedAt !== undefined ||
+        value.keyStatusCheckedAt !== undefined ||
+        value.proofAction !== undefined ||
+        value.proofPayload !== undefined)) ||
+    (value.proof === undefined &&
+      (value.proofVerifiedAt !== undefined ||
+        value.keyStatusCheckedAt !== undefined ||
+        value.proofAction !== undefined ||
+        value.proofPayload !== undefined)) ||
+    (typeof value.proofVerifiedAt === "string" &&
+      typeof value.keyStatusCheckedAt === "string" &&
+      Date.parse(value.keyStatusCheckedAt) >
+        Date.parse(value.proofVerifiedAt)) ||
+    (value.proofAction !== undefined &&
+      (typeof value.proofAction !== "string" ||
+        !/^[a-z][a-z0-9_.-]{1,79}$/u.test(value.proofAction))) ||
     !isLifecycleCommand(value.command)
   ) {
     return false;
@@ -199,7 +257,7 @@ function isLifecycleCommand(value: unknown): value is LifecycleCommand {
         stringArray(value.completedOutputIds) &&
         value.completedOutputIds.length <= 8 &&
         typeof value.occurredAt === "string" &&
-        Number.isFinite(Date.parse(value.occurredAt))
+        TimestampSchema.safeParse(value.occurredAt).success
       );
     case "safety_redact":
       return (
@@ -267,7 +325,7 @@ function isLifecycleCommand(value: unknown): value is LifecycleCommand {
         /^[A-Za-z0-9_-]{43}$/u.test(String(value.pactDigest)) &&
         /^[A-Za-z0-9_-]{86}$/u.test(String(value.signature)) &&
         typeof value.acceptedAt === "string" &&
-        Number.isFinite(Date.parse(value.acceptedAt))
+        TimestampSchema.safeParse(value.acceptedAt).success
       );
     case "submit_proposal":
       return (
@@ -337,7 +395,7 @@ function isLifecycleCommand(value: unknown): value is LifecycleCommand {
         nonEmpty(value.evidence.failureFixture) &&
         value.evidence.retryable === false &&
         typeof value.evidence.observedAt === "string" &&
-        Number.isFinite(Date.parse(value.evidence.observedAt))
+        TimestampSchema.safeParse(value.evidence.observedAt).success
       );
     case "submit_artifact":
       return (
@@ -400,8 +458,8 @@ function isAvailability(value: unknown): boolean {
     hasOnlyKeys(value, ["availableFrom", "availableUntil"]) &&
     typeof value.availableFrom === "string" &&
     typeof value.availableUntil === "string" &&
-    Number.isFinite(Date.parse(value.availableFrom)) &&
-    Number.isFinite(Date.parse(value.availableUntil)) &&
+    TimestampSchema.safeParse(value.availableFrom).success &&
+    TimestampSchema.safeParse(value.availableUntil).success &&
     Date.parse(value.availableFrom) < Date.parse(value.availableUntil)
   );
 }

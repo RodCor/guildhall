@@ -101,6 +101,36 @@ function assertSemanticInput(
         "guild.publish_mission formationDeadline must precede deliveryDeadline.",
       );
     }
+    const execution = input.executionTarget as
+      Readonly<Record<string, unknown>> | undefined;
+    const outputs = input.requiredOutputs as readonly Readonly<
+      Record<string, unknown>
+    >[];
+    const criteria = input.verificationCriteria as readonly Readonly<
+      Record<string, unknown>
+    >[];
+    const executionKind = execution?.kind ?? "guildhall";
+    const githubOutputs = outputs.filter(
+      (output) =>
+        (output.delivery as Readonly<Record<string, unknown>> | undefined)
+          ?.kind === "github-pull-request",
+    );
+    if (
+      (executionKind === "github" && githubOutputs.length !== outputs.length) ||
+      (executionKind !== "github" && githubOutputs.length > 0) ||
+      githubOutputs.some((output) => output.type !== "code-change")
+    ) {
+      throw new TypeError(
+        "guild.publish_mission executionTarget must match its delivery targets.",
+      );
+    }
+    const expectedMethod =
+      executionKind === "github" ? "public-github" : "deterministic";
+    if (criteria.some((criterion) => criterion.method !== expectedMethod)) {
+      throw new TypeError(
+        `guild.publish_mission ${String(executionKind)} verification criteria must use ${expectedMethod}.`,
+      );
+    }
   }
   if (name === "guild.apply_to_mission") {
     const availability = input.availability as Readonly<

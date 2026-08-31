@@ -12,6 +12,11 @@ import {
   upsertGithubOwnerAndSession,
 } from "../../apps/guildhall/src/worker/repositories";
 import { verifyMissionEventChain } from "../../packages/trust-engine/src";
+import {
+  commandBodyHash,
+  commandSigningBytes,
+  signEd25519,
+} from "../../packages/contracts/src";
 
 const worker = (exports as unknown as { default: Fetcher }).default;
 
@@ -154,7 +159,7 @@ describe("private draft and public safety boundary", () => {
       {
         method: "POST",
         headers: ownerHeaders(identity),
-        body: JSON.stringify({ requesterAgentId: identity.agentId }),
+        body: JSON.stringify(await publicationBody(identity, mission)),
       },
     );
     expect(publication.status).toBe(201);
@@ -252,6 +257,8 @@ interface SeededIdentity {
   readonly agentId: string;
   readonly sessionToken: string;
   readonly csrfToken: string;
+  readonly keyId: string;
+  readonly privateKey: CryptoKey;
 }
 
 async function seedOwnerAgent(label: string): Promise<SeededIdentity> {
@@ -286,8 +293,9 @@ async function seedOwnerAgent(label: string): Promise<SeededIdentity> {
     "verify",
   ])) as CryptoKeyPair;
   const publicJwk = await crypto.subtle.exportKey("jwk", keyPair.publicKey);
+  const keyId = await deriveEd25519KeyId("browser", publicJwk);
   await registerAgentKey(env.GUILD_DB, {
-    keyId: await deriveEd25519KeyId("browser", publicJwk),
+    keyId,
     ownerId: principal.ownerId,
     agentId,
     publicJwk,
@@ -299,6 +307,38 @@ async function seedOwnerAgent(label: string): Promise<SeededIdentity> {
     agentId,
     sessionToken,
     csrfToken,
+    keyId,
+    privateKey: keyPair.privateKey,
+  };
+}
+
+async function publicationBody(
+  identity: SeededIdentity,
+  mission: Readonly<Record<string, unknown>>,
+): Promise<Record<string, unknown>> {
+  const commandId = crypto.randomUUID();
+  const issuedAt = new Date().toISOString();
+  const bodyHash = await commandBodyHash({
+    commandId,
+    action: "publish",
+    missionId: String(mission.missionId),
+    expectedSequence: 0,
+    actor: { agentId: identity.agentId, keyId: identity.keyId },
+    issuedAt,
+    payload: mission,
+  });
+  return {
+    requesterAgentId: identity.agentId,
+    keyId: identity.keyId,
+    commandId,
+    issuedAt,
+    proof: {
+      bodyHash,
+      signature: await signEd25519(
+        identity.privateKey,
+        commandSigningBytes(bodyHash),
+      ),
+    },
   };
 }
 

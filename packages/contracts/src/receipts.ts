@@ -6,6 +6,7 @@ import {
   TimestampSchema,
   UuidSchema,
 } from "./common.js";
+import { GitHubPullRequestEvidenceSchema } from "./artifacts.js";
 
 export const ReceiptArtifactSchema = z
   .object({
@@ -13,6 +14,7 @@ export const ReceiptArtifactSchema = z
     roleSlotId: UuidSchema,
     producingAgentId: UuidSchema,
     contentDigest: Sha256DigestSchema,
+    deliveryEvidence: GitHubPullRequestEvidenceSchema.optional(),
   })
   .strict();
 

@@ -7,9 +7,12 @@ import {
 } from "@guildhall/capability-manifest";
 import {
   ArtifactMetadataSchema,
+  artifactProofDigest,
   artifactSigningBytes,
   buildPact,
   canonicalJsonDigest,
+  commandBodyHash,
+  commandSigningBytes,
   MissionSchema,
   pactSigningBytes,
   type AllocationAssignment,
@@ -158,6 +161,7 @@ export async function runReferenceDemo(
             contentDigest: REFERENCE_FIXTURE_DIGEST,
           },
         ],
+        executionTarget: { kind: "guildhall" },
         requiredCapabilities: ["accessibility-audit", "remediation-planning"],
         minimumPartySize: 1,
         preferredPartySize: 2,
@@ -171,6 +175,7 @@ export async function runReferenceDemo(
             description: "Deterministic public findings.",
             mediaType: "application/json",
             publicLocation: "mission-artifact",
+            delivery: { kind: "guildhall-artifact" },
           },
           {
             outputId: outputIds[1],
@@ -178,6 +183,7 @@ export async function runReferenceDemo(
             description: "A remediation plan linked to every finding.",
             mediaType: "application/json",
             publicLocation: "mission-artifact",
+            delivery: { kind: "guildhall-artifact" },
           },
         ],
         verificationCriteria: [
@@ -575,7 +581,7 @@ async function invokeBrowserCapability(
       );
     case "guild.list_missions":
       return fetchJson(
-        `/api/missions${query(input, ["cursor", "capability", "limit"])}`,
+        `/api/missions${query(input, ["cursor", "capability", "displayState", "difficulty", "catalogKind", "limit"])}`,
         {
           signal: context.signal,
         },
@@ -589,7 +595,7 @@ async function invokeBrowserCapability(
         { signal: context.signal },
       );
     case "guild.publish_mission":
-      return publishMission(input, context, activeAgentId);
+      return publishMission(input, context, activeAgentId, activeAgentKeyId);
     case "guild.rally_reference_party":
       return ownerJson(
         "/api/demo/rally",
@@ -622,6 +628,7 @@ async function invokeBrowserCapability(
         },
         context,
         activeAgentId,
+        activeAgentKeyId,
       );
     }
     case "guild.withdraw_application":
@@ -630,6 +637,7 @@ async function invokeBrowserCapability(
         { type: "withdraw", agentId: requireActiveAgent(activeAgentId) },
         context,
         activeAgentId,
+        activeAgentKeyId,
       );
     case "guild.propose_allocation": {
       const negotiationStep = requiredString(input, "negotiationStep");
@@ -651,6 +659,7 @@ async function invokeBrowserCapability(
           },
           context,
           activeAgentId,
+          activeAgentKeyId,
         );
       }
       const missionId = requiredString(input, "missionId");
@@ -691,6 +700,7 @@ async function invokeBrowserCapability(
             },
         context,
         activeAgentId,
+        activeAgentKeyId,
       );
     }
     case "guild.accept_pact": {
@@ -698,12 +708,13 @@ async function invokeBrowserCapability(
         requireActiveKey(activeAgentKeyId),
       );
       const pactDigest = requiredString(input, "pactDigest");
+      const acceptanceId = requireCommandId(context.commandId);
       return sendCommand(
         input,
         {
           type: "accept_pact",
           agentId: requireActiveAgent(activeAgentId),
-          acceptanceId: context.commandId,
+          acceptanceId,
           keyId: identity.keyId,
           pactVersion: requiredInteger(input, "pactVersion"),
           pactDigest,
@@ -715,6 +726,7 @@ async function invokeBrowserCapability(
         },
         context,
         activeAgentId,
+        activeAgentKeyId,
       );
     }
     case "guild.report_progress":
@@ -734,6 +746,7 @@ async function invokeBrowserCapability(
         },
         context,
         activeAgentId,
+        activeAgentKeyId,
       );
     case "guild.submit_artifact": {
       const identity = await ensureBrowserSigningIdentity(
@@ -750,7 +763,13 @@ async function invokeBrowserCapability(
           "artifact.contentDigest does not match artifact.content",
         );
       }
-      const metadata = ArtifactMetadataSchema.parse({
+      const outputId = requiredString(artifact, "outputId");
+      const dependencyArtifactIds = requiredStringArray(
+        artifact,
+        "dependencyArtifactIds",
+        true,
+      );
+      const unsignedMetadata = {
         protocol: "commitment/v1",
         kind: "artifact-metadata",
         artifactId: requiredString(artifact, "artifactId"),
@@ -763,13 +782,24 @@ async function invokeBrowserCapability(
         artifactType: requiredString(artifact, "type"),
         mediaType: "application/json",
         publicLocation: artifactPublicLocation(missionId),
+        ...(artifact.deliveryEvidence === undefined
+          ? {}
+          : { deliveryEvidence: requiredRecord(artifact, "deliveryEvidence") }),
         contentDigest,
-        signature: await signBrowserMessage(
-          identity.privateKey,
-          artifactSigningBytes(pactDigest, contentDigest),
-        ),
         safetyStatus: "approved",
         completedAt: requiredString(artifact, "completedAt"),
+      } as const;
+      const proofDigest = await artifactProofDigest({
+        outputId,
+        metadata: { ...unsignedMetadata, signature: "" },
+        dependencyArtifactIds,
+      });
+      const metadata = ArtifactMetadataSchema.parse({
+        ...unsignedMetadata,
+        signature: await signBrowserMessage(
+          identity.privateKey,
+          artifactSigningBytes(pactDigest, proofDigest),
+        ),
       });
       return sendCommand(
         input,
@@ -777,18 +807,15 @@ async function invokeBrowserCapability(
           type: "submit_artifact",
           roleSlotId: metadata.roleSlotId,
           artifact: {
-            outputId: requiredString(artifact, "outputId"),
+            outputId,
             metadata,
             content,
-            dependencyArtifactIds: requiredStringArray(
-              artifact,
-              "dependencyArtifactIds",
-              true,
-            ),
+            dependencyArtifactIds,
           },
         },
         context,
         activeAgentId,
+        activeAgentKeyId,
       );
     }
     case "guild.inspect_receipt":
@@ -803,8 +830,10 @@ async function publishMission(
   input: Readonly<Record<string, unknown>>,
   context: CapabilityInvocationContext,
   activeAgentId: string | null,
+  activeAgentKeyId: string | null,
 ): Promise<Record<string, unknown>> {
   const requesterAgentId = requireActiveAgent(activeAgentId);
+  const publicationCommandId = requireCommandId(context.commandId);
   const missionInput = recordField(input, "mission") ?? input;
   const mission = {
     protocol: "commitment/v1",
@@ -816,6 +845,7 @@ async function publishMission(
       "title",
       "goal",
       "publicInputs",
+      "executionTarget",
       "requiredCapabilities",
       "minimumPartySize",
       "preferredPartySize",
@@ -839,9 +869,35 @@ async function publishMission(
     },
     context.signal,
   );
+  const identity = await ensureBrowserSigningIdentity(
+    requireActiveKey(activeAgentKeyId),
+  );
+  const issuedAt = new Date().toISOString();
+  const proofMaterial = {
+    commandId: publicationCommandId,
+    action: "publish",
+    missionId: mission.missionId,
+    expectedSequence: 0,
+    actor: { agentId: requesterAgentId, keyId: identity.keyId },
+    issuedAt,
+    payload: mission,
+  };
+  const bodyHash = await commandBodyHash(proofMaterial);
   const result = await ownerJson(
     `/api/webmcp/drafts/${segment(requiredString(draft, "draftId"))}/publish`,
-    { requesterAgentId, commandId: context.commandId },
+    {
+      requesterAgentId,
+      keyId: identity.keyId,
+      commandId: publicationCommandId,
+      issuedAt,
+      proof: {
+        bodyHash,
+        signature: await signBrowserMessage(
+          identity.privateKey,
+          commandSigningBytes(bodyHash),
+        ),
+      },
+    },
     context.signal,
   );
   return normalizeMutationResult(mission.missionId, result, context.signal);
@@ -852,17 +908,42 @@ async function sendCommand(
   command: Readonly<Record<string, unknown>>,
   context: CapabilityInvocationContext,
   activeAgentId: string | null,
+  activeAgentKeyId: string | null,
 ): Promise<Record<string, unknown>> {
   const missionId = requiredString(input, "missionId");
+  const id = requireCommandId(context.commandId);
+  const agentId = requireActiveAgent(activeAgentId);
+  const identity = await ensureBrowserSigningIdentity(
+    requireActiveKey(activeAgentKeyId),
+  );
+  const issuedAt = new Date().toISOString();
+  const sequence = await expectedSequence(input, context.signal);
+  const proofMaterial = {
+    commandId: id,
+    action: requiredString(command, "type"),
+    missionId,
+    expectedSequence: sequence,
+    actor: { agentId, keyId: identity.keyId },
+    issuedAt,
+    payload: command,
+  };
+  const bodyHash = await commandBodyHash(proofMaterial);
   const result = await ownerJson(
     `/api/webmcp/missions/${segment(missionId)}/commands`,
     {
-      commandId: context.commandId,
-      expectedSequence: await expectedSequence(input, context.signal),
-      actor: { agentId: requireActiveAgent(activeAgentId) },
-      source: "webmcp",
-      issuedAt: new Date().toISOString(),
+      commandId: id,
+      expectedSequence: sequence,
+      actor: proofMaterial.actor,
+      source: "http",
+      issuedAt,
       command,
+      proof: {
+        bodyHash,
+        signature: await signBrowserMessage(
+          identity.privateKey,
+          commandSigningBytes(bodyHash),
+        ),
+      },
     },
     context.signal,
   );
@@ -1063,6 +1144,13 @@ function requiredStringArray(
     throw new TypeError(`${key} must be a string array`);
   }
   return value as string[];
+}
+
+function requireCommandId(value: string | undefined): string {
+  if (value === undefined) {
+    throw new TypeError("Mutating WebMCP capabilities require a command ID");
+  }
+  return value;
 }
 
 function allocationAssignments(value: unknown): AllocationAssignment[] {

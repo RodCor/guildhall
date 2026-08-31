@@ -1,5 +1,7 @@
 import { canonicalizeEx } from "json-canonicalize";
 
+import { TimestampSchema } from "./common.js";
+
 const textEncoder = new TextEncoder();
 
 const PACT_DOMAIN = "PACTBRIDGE-COMMITMENT-V1";
@@ -8,12 +10,13 @@ const ARTIFACT_DOMAIN = "PACTBRIDGE-ARTIFACT-V1";
 const RECEIPT_DOMAIN = "PACTBRIDGE-RECEIPT-V1";
 const COMMAND_DOMAIN = "PACTBRIDGE-COMMAND-V1";
 
-export type SigningKeyStatus = "active" | "revoked";
+export type SigningKeyStatus = "active" | "retired" | "revoked";
 
 export interface RegisteredEd25519Key {
   keyId: string;
   publicJwk: JsonWebKey;
   status: SigningKeyStatus;
+  retiredAt?: string;
   revokedAt?: string;
 }
 
@@ -28,8 +31,11 @@ export type ProofVerificationPolicy =
 export type ProofVerificationFailure =
   | "KEY_ID_MISMATCH"
   | "KEY_REVOKED"
+  | "KEY_RETIRED"
   | "KEY_REVOCATION_TIME_UNKNOWN"
+  | "KEY_RETIREMENT_TIME_UNKNOWN"
   | "PROOF_ACCEPTED_AFTER_REVOCATION"
+  | "PROOF_ACCEPTED_AFTER_RETIREMENT"
   | "INVALID_TIMESTAMP"
   | "INVALID_PUBLIC_KEY"
   | "INVALID_SIGNATURE";
@@ -92,6 +98,30 @@ export function artifactSigningBytes(
   artifactDigest: string,
 ): Uint8Array {
   return domainBytes(ARTIFACT_DOMAIN, pactDigest, artifactDigest);
+}
+
+export interface ArtifactProofInput {
+  readonly outputId: string;
+  readonly metadata: Readonly<{
+    readonly signature: string;
+    readonly [key: string]: unknown;
+  }>;
+  readonly dependencyArtifactIds: readonly string[];
+}
+
+/**
+ * Digest every public artifact field that the producer is attesting to.
+ * Artifact content is committed indirectly by metadata.contentDigest.
+ */
+export function artifactProofDigest(
+  submission: ArtifactProofInput,
+): Promise<string> {
+  const { signature: _signature, ...unsignedMetadata } = submission.metadata;
+  return canonicalJsonDigest({
+    dependencyArtifactIds: submission.dependencyArtifactIds,
+    metadata: unsignedMetadata,
+    outputId: submission.outputId,
+  });
 }
 
 export function receiptSigningBytes(receiptDigest: string): Uint8Array {
@@ -280,23 +310,31 @@ function keyStatusFailure(
   }
 
   if (policy.kind === "new-proof") {
-    return "KEY_REVOKED";
+    return key.status === "retired" ? "KEY_RETIRED" : "KEY_REVOKED";
   }
 
-  if (key.revokedAt === undefined) {
-    return "KEY_REVOCATION_TIME_UNKNOWN";
+  const endedAt = key.status === "retired" ? key.retiredAt : key.revokedAt;
+  if (endedAt === undefined) {
+    return key.status === "retired"
+      ? "KEY_RETIREMENT_TIME_UNKNOWN"
+      : "KEY_REVOCATION_TIME_UNKNOWN";
   }
 
   // acceptedAt is the server-persisted acceptance/event timestamp, never a
   // caller assertion supplied after revocation.
-  const proofCreatedAt = Date.parse(policy.acceptedAt);
-  const revokedAt = Date.parse(key.revokedAt);
-  if (!Number.isFinite(proofCreatedAt) || !Number.isFinite(revokedAt)) {
+  if (
+    !TimestampSchema.safeParse(policy.acceptedAt).success ||
+    !TimestampSchema.safeParse(endedAt).success
+  ) {
     return "INVALID_TIMESTAMP";
   }
+  const proofCreatedAt = Date.parse(policy.acceptedAt);
+  const keyEndedAt = Date.parse(endedAt);
 
-  if (proofCreatedAt > revokedAt) {
-    return "PROOF_ACCEPTED_AFTER_REVOCATION";
+  if (proofCreatedAt > keyEndedAt) {
+    return key.status === "retired"
+      ? "PROOF_ACCEPTED_AFTER_RETIREMENT"
+      : "PROOF_ACCEPTED_AFTER_REVOCATION";
   }
 
   return undefined;

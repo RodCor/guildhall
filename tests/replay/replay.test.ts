@@ -45,6 +45,21 @@ describe("deterministic mission replay", () => {
       eventType: "replacement_bound",
     });
   });
+
+  it("labels the bounded second GitHub delivery as a correction", () => {
+    expect(
+      storyBeat({
+        ...event(6, "artifact_submitted", "mcp"),
+        payload: {
+          command: { artifact: { metadata: { attempt: 2 } } },
+        },
+      }),
+    ).toMatchObject({
+      title: "Correction Delivered",
+      tone: "recovery",
+      eventType: "artifact_submitted",
+    });
+  });
 });
 
 function event(sequence: number, type: string, source: string) {

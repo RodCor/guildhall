@@ -31,10 +31,12 @@ describe("hosted-agent rally boundary", () => {
       const url = new URL(
         input instanceof Request ? input.url : input.toString(),
       );
-      expect(url.searchParams.get("displayState")).toMatch(
-        /Recruiting|Negotiating/u,
-      );
-      return Response.json({ missions: [] });
+      expect(url.pathname).toBe(`/api/missions/${MISSION_ID}`);
+      expect(url.search).toBe("");
+      return Response.json({
+        definition: { requiredCapabilities: ["unrelated-capability"] },
+        events: [{ displayState: "Recruiting" }],
+      });
     });
     const response = await createAgentWorker("scout", {
       fetch: recruitmentFetch,

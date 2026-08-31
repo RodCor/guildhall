@@ -142,5 +142,36 @@ describe("canonical capability validation", () => {
         formationDeadline: base.deliveryDeadline,
       }),
     ).toThrow("formationDeadline must precede deliveryDeadline");
+
+    const github = {
+      ...base,
+      executionTarget: {
+        kind: "github",
+        repository: "kimetsu-ai/guildhall",
+        baseRef: "main",
+        writeMode: "fork-pr",
+        checkPolicy: "all-success",
+      },
+      requiredOutputs: [
+        {
+          outputId: "code",
+          type: "code-change",
+          mediaType: "application/json",
+          publicLocation: "mission-artifact",
+          delivery: { kind: "github-pull-request" },
+        },
+      ],
+      verificationCriteria: base.verificationCriteria.map((criterion) => ({
+        ...criterion,
+        method: "public-github",
+      })),
+    };
+    expect(() => assertCapabilityInput(capability, github)).not.toThrow();
+    expect(() =>
+      assertCapabilityInput(capability, {
+        ...github,
+        requiredOutputs: base.requiredOutputs,
+      }),
+    ).toThrow("executionTarget must match");
   });
 });

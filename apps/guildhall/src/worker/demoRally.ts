@@ -76,21 +76,12 @@ export async function handleDemoRallyRoute(
       403,
     );
   }
-  if (
-    !REFERENCE_DEMO_TITLES.has(packet.definition.title.trim().toLowerCase())
-  ) {
-    return noStoreJson(
-      {
-        error: "RALLY_NOT_REFERENCE_MISSION",
-        message: "The reference party only accepts the guided demo mission.",
-      },
-      422,
-    );
-  }
-  const catalogMarked = await markReferenceMission(
-    env.GUILD_DB,
-    body.missionId,
+  const guidedReferenceMission = REFERENCE_DEMO_TITLES.has(
+    packet.definition.title.trim().toLowerCase(),
   );
+  const catalogMarked = guidedReferenceMission
+    ? await markReferenceMission(env.GUILD_DB, body.missionId)
+    : false;
   const secret = env.GUILD_DEMO_RALLY_SECRET;
   const agents = referenceAgentOrigins(env);
   if (secret === undefined || secret.length < 32 || agents === null) {
@@ -151,7 +142,11 @@ export async function handleDemoRallyRoute(
       rallies,
       boundedRounds: MAX_RALLY_ROUNDS,
       coordination: "independent-signed-a2a",
-      catalog: catalogMarked ? "reference" : "projection-pending",
+      catalog: guidedReferenceMission
+        ? catalogMarked
+          ? "reference"
+          : "projection-pending"
+        : "community",
     },
     replayed: false,
     catalogPending: false,

@@ -6,6 +6,7 @@ import {
 import {
   ArtifactMetadataSchema,
   ReplacementProofSchema,
+  artifactProofDigest,
   artifactSigningBytes,
   importEd25519PublicJwk,
   replacementSigningBytes,
@@ -94,7 +95,14 @@ describe("production hosted-agent signing key override", () => {
     expect(
       await verifyEd25519(
         verificationKey,
-        artifactSigningBytes(metadata.pactDigest, metadata.contentDigest),
+        artifactSigningBytes(
+          metadata.pactDigest,
+          await artifactProofDigest({
+            outputId: metadata.artifactId,
+            metadata,
+            dependencyArtifactIds: [],
+          }),
+        ),
         metadata.signature,
       ),
     ).toBe(true);

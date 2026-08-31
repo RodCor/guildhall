@@ -60,7 +60,7 @@ or gRPC module appears in the demo-agent source imports.
 
 - Keep protocol validation and mission decisions outside transport handlers.
 - Require `A2A-Version: 1.0` and the stable
-  `https://guildhall.example/extensions/commitment/v1` extension on applicable
+  `https://guildhall.kimetsu-dev.workers.dev/protocol/commitment/v1` extension on applicable
   calls.
 - Treat A2A Task completion as remote-interaction state, never as Guildhall
   mission verification.

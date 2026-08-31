@@ -632,14 +632,14 @@ Private-key storage is a prototype boundary: the file is created in the OS user 
 The stable extension URI is:
 
 ```text
-https://guildhall.example/extensions/commitment/v1
+https://guildhall.kimetsu-dev.workers.dev/protocol/commitment/v1
 ```
 
 Requests opt in using:
 
 ```http
 A2A-Version: 1.0
-A2A-Extensions: https://guildhall.example/extensions/commitment/v1
+A2A-Extensions: https://guildhall.kimetsu-dev.workers.dev/protocol/commitment/v1
 Content-Type: application/a2a+json
 ```
 

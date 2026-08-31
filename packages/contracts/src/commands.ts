@@ -1,7 +1,6 @@
 import { z } from "zod";
 
 import {
-  AgentIdentitySchema,
   Ed25519SignatureSchema,
   ProvenanceSourceSchema,
   Sha256DigestSchema,
@@ -35,19 +34,33 @@ export const CommandProofSchema = z
   })
   .strict();
 
-export const MissionCommandSchema = z
+export const AgentCommandSignerSchema = z
+  .object({
+    agentId: UuidSchema,
+    keyId: UuidSchema,
+  })
+  .strict();
+
+/** Signature material supplied by an agent before transport attribution. */
+export const AgentCommandEnvelopeSchema = z
   .object({
     commandId: UuidSchema,
-    action: MissionActionSchema,
+    action: z.string().regex(/^[a-z][a-z0-9_.-]{1,79}$/),
     missionId: UuidSchema,
     expectedSequence: z.number().int().nonnegative(),
-    actor: AgentIdentitySchema,
-    source: ProvenanceSourceSchema,
+    actor: AgentCommandSignerSchema,
     issuedAt: TimestampSchema,
-    payload: z.record(z.string(), z.unknown()),
+    payload: z.unknown(),
     proof: CommandProofSchema,
   })
   .strict();
 
+/** Accepted agent command plus the server-observed transport provenance. */
+export const MissionCommandSchema = AgentCommandEnvelopeSchema.extend({
+  source: ProvenanceSourceSchema,
+}).strict();
+
 export type MissionAction = z.infer<typeof MissionActionSchema>;
 export type MissionCommand = z.infer<typeof MissionCommandSchema>;
+export type AgentCommandEnvelope = z.infer<typeof AgentCommandEnvelopeSchema>;
+export type CommandProof = z.infer<typeof CommandProofSchema>;

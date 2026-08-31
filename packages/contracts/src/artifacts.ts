@@ -6,6 +6,69 @@ import {
   TimestampSchema,
   UuidSchema,
 } from "./common.js";
+import {
+  GitHubRepositorySchema,
+  GitRefSchema,
+  MissionOutputTypeSchema,
+} from "./mission.js";
+
+export const GitHubCheckEvidenceSchema = z
+  .object({
+    name: z.string().min(1).max(200),
+    status: z.literal("completed"),
+    conclusion: z.enum(["success", "neutral", "skipped"]),
+    detailsUrl: z.url({ protocol: /^https$/ }).optional(),
+  })
+  .strict();
+
+export const GitHubPullRequestEvidenceSchema = z
+  .object({
+    kind: z.literal("github-pull-request"),
+    repository: GitHubRepositorySchema,
+    pullRequestUrl: z.url({ protocol: /^https$/ }),
+    baseRef: GitRefSchema,
+    headSha: z.string().regex(/^[0-9a-f]{40}$/u),
+    checks: z.array(GitHubCheckEvidenceSchema).max(64),
+  })
+  .strict()
+  .superRefine((evidence, context) => {
+    let url: URL;
+    try {
+      url = new URL(evidence.pullRequestUrl);
+    } catch {
+      return;
+    }
+    const [owner, repository] = evidence.repository.split("/");
+    const segments = url.pathname.split("/").filter(Boolean);
+    if (
+      url.hostname.toLowerCase() !== "github.com" ||
+      url.username !== "" ||
+      url.password !== "" ||
+      url.port !== "" ||
+      url.search !== "" ||
+      url.hash !== "" ||
+      segments.length !== 4 ||
+      segments[0]?.toLowerCase() !== owner?.toLowerCase() ||
+      segments[1]?.toLowerCase() !== repository?.toLowerCase() ||
+      segments[2] !== "pull" ||
+      !/^[1-9][0-9]*$/u.test(segments[3] ?? "")
+    ) {
+      context.addIssue({
+        code: "custom",
+        message:
+          "pullRequestUrl must be the declared repository's canonical GitHub PR URL",
+        path: ["pullRequestUrl"],
+      });
+    }
+    const checkNames = evidence.checks.map((check) => check.name);
+    if (new Set(checkNames).size !== checkNames.length) {
+      context.addIssue({
+        code: "custom",
+        message: "GitHub check names must be unique",
+        path: ["checks"],
+      });
+    }
+  });
 
 export const ArtifactMetadataSchema = z
   .object({
@@ -18,13 +81,10 @@ export const ArtifactMetadataSchema = z
     producingAgentId: UuidSchema,
     keyId: UuidSchema,
     attempt: z.number().int().min(1).max(2),
-    artifactType: z.enum([
-      "accessibility-findings",
-      "remediation-plan",
-      "verification-evidence",
-    ]),
+    artifactType: MissionOutputTypeSchema,
     mediaType: z.literal("application/json"),
     publicLocation: z.url({ protocol: /^https$/ }),
+    deliveryEvidence: GitHubPullRequestEvidenceSchema.optional(),
     contentDigest: Sha256DigestSchema,
     signature: Ed25519SignatureSchema,
     safetyStatus: z.literal("approved"),
@@ -79,7 +139,10 @@ export const VerificationResultSchema = z
     ]),
     verifier: z
       .object({
-        verifierId: z.literal("accessibility-dungeon-v1"),
+        verifierId: z.enum([
+          "accessibility-dungeon-v1",
+          "github-pull-request-v1",
+        ]),
         version: z.string().regex(/^1\.[0-9]+\.[0-9]+$/),
       })
       .strict(),

@@ -22,7 +22,8 @@ import {
 import { runReferenceDemo } from "../webmcp/GuildhallWebMcp";
 import {
   isReferenceDemoMissionTitle,
-  REFERENCE_DEMO_MISSION_TITLE,
+  VERIFIED_DELIVERY_DEMO_MISSION_ID,
+  VERIFIED_DELIVERY_DEMO_MISSION_TITLE,
 } from "./referenceDemo";
 import "../demo-polish.css";
 
@@ -46,8 +47,8 @@ type DemoChapterId =
   | "recruit"
   | "pact"
   | "work"
-  | "failure"
-  | "replacement"
+  | "mismatch"
+  | "correction"
   | "verify"
   | "reward";
 
@@ -72,14 +73,14 @@ const DEMO_CHAPTERS: readonly DemoChapter[] = [
   { id: "recruit", label: "Recruit", protocol: "A2A", sigil: "A" },
   { id: "pact", label: "Pact", protocol: "PactBridge", sigil: "P" },
   { id: "work", label: "Work", protocol: "A2A", sigil: "✦" },
-  { id: "failure", label: "Failure", protocol: "A2A", sigil: "!" },
-  {
-    id: "replacement",
-    label: "Replace",
-    protocol: "A2A",
-    sigil: "R",
-  },
   { id: "verify", label: "Verify", protocol: "Verifier", sigil: "✓" },
+  { id: "mismatch", label: "Mismatch", protocol: "Verifier", sigil: "!" },
+  {
+    id: "correction",
+    label: "Correct",
+    protocol: "A2A",
+    sigil: "↺",
+  },
   { id: "reward", label: "Reward", protocol: "Receipt", sigil: "+" },
 ] as const;
 
@@ -93,10 +94,10 @@ const HUD_STEPS: readonly {
 ];
 
 const MAIN_HUD_STEPS = HUD_STEPS.filter(
-  (step) => step.id !== "failure" && step.id !== "replacement",
+  (step) => step.id !== "mismatch" && step.id !== "correction",
 );
 const BRANCH_HUD_STEPS = HUD_STEPS.filter(
-  (step) => step.id === "failure" || step.id === "replacement",
+  (step) => step.id === "mismatch" || step.id === "correction",
 );
 
 const DEMO_PHASES: readonly DemoPhase[] = [
@@ -122,13 +123,13 @@ const DEMO_PHASES: readonly DemoPhase[] = [
     id: "execute",
     label: "Execute",
     protocol: "A2A",
-    chapters: ["work", "failure", "replacement"],
+    chapters: ["work", "correction"],
   },
   {
     id: "proof",
     label: "Proof",
     protocol: "Verifier",
-    chapters: ["verify", "reward"],
+    chapters: ["verify", "mismatch", "reward"],
   },
 ] as const;
 
@@ -147,7 +148,9 @@ export function TechnicalMission({
     agents,
     refresh: refreshCatalog,
   } = useGuildCatalog();
-  const [missionId, setMissionId] = useState(() => query.get("mission") ?? "");
+  const [missionId, setMissionId] = useState(
+    () => query.get("mission") || VERIFIED_DELIVERY_DEMO_MISSION_ID,
+  );
   const [packet, setPacket] = useState<MissionPacket | null>(null);
   const [lens, setLens] = useState<Lens>(() =>
     query.get("lens") === "technical" ? "technical" : "story",
@@ -423,13 +426,13 @@ export function TechnicalMission({
     >
       <div className="guildglass-casebar">
         <div>
-          <p className="eyebrow">Demo Case 001 / Reference Party</p>
-          <h3 id="mission-console-title">Website Accessibility Repair</h3>
+          <p className="eyebrow">Demo Case 001 / Verified Live Run</p>
+          <h3 id="mission-console-title">GitHub Delivery With Correction</h3>
         </div>
         <div className="guildglass-case-meta">
           <p className="demo-provenance">
-            <strong>1 public ledger</strong>
-            <span>Real Guild actions, replayed step by step</span>
+            <strong>2 agents · 1 signed receipt</strong>
+            <span>The actual 300-point mission, replayed from event 0</span>
           </p>
           <span className={`stream-chip stream-${streamState}`}>
             <span aria-hidden="true" />
@@ -693,7 +696,6 @@ function MissionChamber({
     () => new Map(agents.map((agent) => [agent.agentId, agent])),
     [agents],
   );
-  const workSlots = deriveWorkSlots(packet, visibleEvents, pact, agentById);
   const visibleTypes = new Set(visibleEvents.map((event) => text(event.type)));
   const applicationCount = visibleEvents.filter(
     (event) => event.type === "application_submitted",
@@ -709,77 +711,67 @@ function MissionChamber({
     "requester",
   );
   const requester = agentById.get(requesterId);
-  const scout =
-    agentById.get(referenceAgents[0]!.agentId) ?? referenceAgents[0]!;
-  const scribe =
-    agentById.get(referenceAgents[1]!.agentId) ?? referenceAgents[1]!;
-  const warden =
-    agentById.get(referenceAgents[2]!.agentId) ?? referenceAgents[2]!;
+  const selectedHelperId = list(packet.snapshot.selectedHelperIds)[0] ?? "";
+  const helper =
+    agentById.get(selectedHelperId) ??
+    ({
+      ...referenceAgents[0]!,
+      characterName: "Independent Helper",
+      technicalName: "Paired Guild Node",
+    } satisfies PublicAgent);
   const partyReserved = visibleTypes.has("party_reserved");
   const pactBound = visibleTypes.has("pact_bound");
-  const executionStarted = visibleTypes.has("execution_started");
-  const scribeDefaulted = visibleTypes.has("role_defaulted");
-  const replacementBound = visibleTypes.has("replacement_bound");
-  const receiptIssued = visibleTypes.has("receipt_issued");
-  const scoutPresent = applicationCount >= 1 || partyReserved;
-  const secondHelperPresent = applicationCount >= 2 || partyReserved;
-  const scoutSlot = workSlots[0];
-  const secondSlot = workSlots[1];
+  const evidenceMismatch = visibleTypes.has("verification_failed");
+  const correctionSubmitted = artifactCount >= 2;
+  const helperPresent = applicationCount >= 1 || partyReserved;
   const isTerminal = packet.receipt !== null && packet.receipt !== undefined;
-  const visibleArtifacts = (packet.artifacts ?? []).slice(0, artifactCount);
-  const findingsArtifact = visibleArtifacts.find(
-    (artifact) =>
-      text(record(artifact.metadata)?.artifactType) ===
-      "accessibility-findings",
-  );
-  const remediationArtifact = visibleArtifacts.find(
-    (artifact) =>
-      text(record(artifact.metadata)?.artifactType) === "remediation-plan",
-  );
-  const findingCount = arrayOfRecords(
-    record(findingsArtifact?.content)?.findings,
-  ).length;
-  const remediationCount = arrayOfRecords(
-    record(remediationArtifact?.content)?.steps,
-  ).length;
+  const verifiedPullRequestUrl =
+    (packet.artifacts ?? [])
+      .map((artifact) =>
+        safePublicHref(
+          text(
+            record(record(artifact.metadata)?.deliveryEvidence)?.pullRequestUrl,
+            "",
+          ),
+        ),
+      )
+      .filter((value): value is string => value !== null)
+      .at(-1) ?? null;
   const chapterFacts = chapterEvidenceFacts(chapterId, {
     acceptanceCount,
-    applicationCount,
+    applicationCount: helperPresent ? 1 : 0,
     artifactCount,
     eventCount: visibleEvents.length,
-    findingCount,
-    remediationCount,
+    findingCount: 0,
+    remediationCount: 0,
   });
   const content = hudChapterContent(chapterId, {
     acceptanceCount,
-    applicationCount,
+    applicationCount: helperPresent ? 1 : 0,
     artifactCount,
-    findingCount,
-    remediationCount,
+    findingCount: 0,
+    remediationCount: 0,
     eventCount: visibleEvents.length,
   });
   const stepIndex = HUD_STEPS.findIndex((step) => step.id === chapterId);
 
   return (
     <div className={`hud-demo chapter-${chapterId}`}>
-      <HudStepTrack chapterId={chapterId} />
+      <HudStepTrack chapterId={chapterId} visibleEvents={visibleEvents} />
 
       <div className="hud-stage-layout">
         <GuildglassScene
           chapterId={chapterId}
           requesterName={requester?.characterName ?? "Browser Agent"}
-          scoutName={scout.characterName}
-          secondName={
-            replacementBound ? warden.characterName : scribe.characterName
-          }
-          scoutPresent={scoutPresent}
-          secondPresent={secondHelperPresent}
+          helperName={helper.characterName}
+          verifierName="GitHub"
+          helperPresent={helperPresent}
+          verifierPresent={visibleTypes.has("mission_published")}
           pactBound={pactBound}
-          pactUnchanged={scribeDefaulted}
-          replacementBound={replacementBound}
+          pactStillBound={evidenceMismatch}
+          correctionSubmitted={correctionSubmitted}
+          acceptanceCount={acceptanceCount}
           artifactCount={artifactCount}
-          findingCount={findingCount}
-          remediationCount={remediationCount}
         />
 
         <article className="hud-narration" key={chapterId}>
@@ -798,10 +790,10 @@ function MissionChamber({
             ))}
           </dl>
 
-          {chapterId === "replacement" ? (
+          {chapterId === "correction" ? (
             <p className="recovery-handoff">
-              <strong>Work Resumed</strong>
-              <span>Terms Unchanged</span>
+              <strong>Attempt 2 Submitted</strong>
+              <span>Pact Unchanged</span>
             </p>
           ) : null}
 
@@ -829,6 +821,24 @@ function MissionChamber({
 
           {chapterId === "reward" ? (
             <div className="completion-actions">
+              {verifiedPullRequestUrl === null ? null : (
+                <a
+                  className="quiet-action"
+                  href={verifiedPullRequestUrl}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  Open Verified PR ↗
+                </a>
+              )}
+              <a
+                className="quiet-action"
+                href={`/api/missions/${encodeURIComponent(packet.missionId)}/receipt`}
+                rel="noreferrer"
+                target="_blank"
+              >
+                Open Signed Receipt ↗
+              </a>
               <button
                 type="button"
                 className="primary-action"
@@ -849,8 +859,10 @@ function MissionChamber({
       >
         Demo state {stepIndex + 1} of {HUD_STEPS.length},{" "}
         {String(stepIndex).padStart(2, "0")}{" "}
-        {HUD_STEPS[stepIndex]?.label ?? "Ready"}: {content.title}.{" "}
-        {chapterId === "replacement" ? "Work resumed. Terms unchanged. " : ""}
+        {HUD_STEPS[stepIndex]?.label ?? "Ready"}: {content.title}{" "}
+        {chapterId === "correction"
+          ? "Attempt 2 submitted. Pact unchanged. "
+          : ""}
         {chapterFacts[0]?.value ?? ""}
       </p>
 
@@ -880,118 +892,130 @@ function hudChapterContent(
   switch (chapterId) {
     case "publish":
       return {
-        title: "The browser publishes the task.",
+        title: "Kirito publishes a bounded code mission.",
         detail:
-          "WebMCP sends the public page URL, required outputs, party limit, and verification rules. No model credentials are shared.",
+          "WebMCP records the public repository, main branch, pull-request delivery rule, required capabilities, and 300-point reward. No model credentials are shared.",
         facts: [
-          { label: "Input", value: "1 public test page" },
-          { label: "Party limit", value: "Maximum 2 helpers" },
+          { label: "Target", value: "RodCor/guildhall → main" },
+          { label: "Delivery", value: "Exact public PR head" },
         ],
       };
     case "recruit":
       return {
-        title: "Scout and Scribe apply for the 2 roles.",
+        title: "The guild matches one qualified helper.",
         detail:
-          "Each helper connects through its own A2A endpoint and provides capability evidence for one open role.",
+          "A separately owned Guild Node applies with TypeScript and protocol-security capabilities. The direct MCP path forms the party immediately.",
         facts: [
           {
             label: "Party",
-            value: `${Math.min(context.applicationCount, 2)}/2 helpers`,
+            value: `${Math.min(context.applicationCount, 1)}/1 helper`,
           },
-          { label: "Ownership", value: "Independently hosted" },
+          { label: "Match", value: "2/2 required capabilities" },
         ],
       };
     case "pact":
       return {
-        title: "The requester and 2 helpers sign one plan.",
+        title: "Both agents sign one exact work order.",
         detail:
-          "All 3 agents sign the output list, dependency order, replacement rule, and reputation split before work starts.",
+          "After two proposal rounds, requester and helper sign the same scope, GitHub target, verification criterion, deadline, and 300-point allocation.",
         facts: [
           {
             label: "Signatures",
-            value: `${context.acceptanceCount}/3 matching`,
+            value: `${context.acceptanceCount}/2 matching`,
           },
           { label: "Negotiation", value: "2 rounds, 1 pact" },
         ],
       };
     case "work":
       return {
-        title: "Scout reports 4 accessibility issues.",
+        title: "The helper submits signed PR evidence.",
         detail:
-          "The signed findings are accepted first. The repair role must use this exact artifact as its input.",
+          "The artifact binds the repository, canonical pull-request URL, base branch, and exact 40-character head commit to the accepted pact.",
         facts: [
           {
-            label: "Findings",
-            value: `${context.findingCount || 4} verified issues`,
+            label: "Attempt",
+            value: context.artifactCount >= 2 ? "2 of 2" : "1 of 2",
           },
           {
-            label: "Artifacts",
-            value: `${Math.min(context.artifactCount, 2)}/2 accepted`,
+            label: "Evidence",
+            value: "PR #1 + base + exact SHA",
           },
         ],
       };
-    case "failure":
+    case "mismatch":
       return {
-        title: "Scribe submits nothing.",
+        title: "The verifier rejects the stale head commit.",
         detail:
-          "Scribe loses the role. Scout’s accepted findings and every signed term remain unchanged.",
+          "A runtime fix advanced the pull request after attempt 1. GitHub reports a different head SHA, so Guildhall awards nothing and opens one correction.",
         facts: [
-          { label: "Preserved", value: "Scout artifact accepted" },
-          { label: "Contract", value: "Pact digest unchanged" },
+          { label: "Failure", value: "PR_HEAD_SHA_MISMATCH" },
+          { label: "Reward", value: "300 points still locked" },
         ],
       };
-    case "replacement":
+    case "correction":
       return {
-        title: "Warden takes Scribe’s existing role.",
+        title: "The helper uses the one correction.",
         detail:
-          "Warden accepts the same output, dependency, deadline, and reward. The task returns to Work without a new pact.",
+          "Attempt 2 signs the new exact PR head. The mission, role, criterion, and pact digest remain unchanged before verification runs again.",
         facts: [
-          { label: "Transition", value: "Scribe → Warden" },
-          {
-            label: "Recovery",
-            value: `${context.remediationCount || 4} linked fixes`,
-          },
+          { label: "Attempt", value: "2 of 2" },
+          { label: "Contract", value: "Pact v2 unchanged" },
         ],
       };
     case "verify":
       return {
-        title: "Guildhall checks both files.",
+        title: "Guildhall reads the public PR itself.",
         detail:
-          "The verifier checks signature ownership, dependency order, and the one-to-one link between each issue and repair.",
+          "The tokenless verifier rejects redirects, reads GitHub’s public API, and confirms repository, open PR, main base, and the exact signed head SHA.",
         facts: [
-          { label: "Criteria", value: "2/2 passed" },
-          { label: "Attempt", value: "1, no correction" },
+          { label: "Criterion", value: "1/1 public GitHub check" },
+          {
+            label: "Attempt",
+            value: context.artifactCount >= 2 ? "2, passed" : "1, checking",
+          },
         ],
       };
     case "reward":
       return {
-        title: "Verified agents receive reputation.",
+        title: "The signed receipt awards reputation.",
         detail:
-          "The signed receipt gives Scout 50 points, Warden 60 points, and Scribe 0. No vote is involved.",
+          "Only after public verification passes does Guildhall award the helper 300 non-monetary points: 150 for TypeScript and 150 for protocol security.",
         facts: [
-          { label: "Receipt", value: "+110 XP issued" },
-          { label: "Split", value: "Scout 50, Warden 60, Scribe 0" },
+          { label: "Receipt", value: "+300 points issued" },
+          { label: "Proof", value: "Signature + event chain valid" },
         ],
       };
     case "ready":
     default:
       return {
-        title: "This task needs an audit and a repair plan.",
+        title: "One agent needs help shipping verified code.",
         detail:
-          "2 independent agents will inspect 1 public test page and produce 2 linked JSON files.",
+          "Replay the real public mission where two independently signed agents negotiate, deliver a GitHub pull request, correct stale evidence, and earn a receipt.",
         facts: [
-          { label: "Safety", value: "Public input only" },
-          { label: "Credentials", value: "Owner keys never shared" },
+          { label: "Mission", value: "1 requester + 1 helper" },
+          { label: "Reward", value: "300 non-monetary points" },
         ],
       };
   }
 }
 
-function HudStepTrack({ chapterId }: { readonly chapterId: DemoChapterId }) {
+function HudStepTrack({
+  chapterId,
+  visibleEvents = [],
+}: {
+  readonly chapterId: DemoChapterId;
+  readonly visibleEvents?: readonly Record<string, unknown>[];
+}) {
   const chapterIndex = HUD_STEPS.findIndex((step) => step.id === chapterId);
   const activeStep = HUD_STEPS[chapterIndex] ?? HUD_STEPS[0]!;
   const mainIndex = mainTimelineIndex(chapterId);
   const lastMainIndex = MAIN_HUD_STEPS.length - 1;
+  const discoveredChapters = new Set<DemoChapterId>(["ready"]);
+  for (let index = 1; index <= visibleEvents.length; index += 1) {
+    discoveredChapters.add(missionChapterId(visibleEvents.slice(0, index)));
+  }
+  const branchDiscovered =
+    discoveredChapters.has("mismatch") || discoveredChapters.has("correction");
   const progressStyle = {
     "--hud-main-index": mainIndex,
     "--hud-main-progress": mainIndex / lastMainIndex,
@@ -999,14 +1023,13 @@ function HudStepTrack({ chapterId }: { readonly chapterId: DemoChapterId }) {
   } as CSSProperties;
 
   function stepState(stepId: DemoChapterId): "complete" | "active" | "pending" {
-    const stepIndex = HUD_STEPS.findIndex((step) => step.id === stepId);
     if (stepId === chapterId) return "active";
-    return stepIndex < chapterIndex ? "complete" : "pending";
+    return discoveredChapters.has(stepId) ? "complete" : "pending";
   }
 
   return (
     <nav
-      className={`hud-step-track track-${chapterId}`}
+      className={`hud-step-track track-${chapterId}${branchDiscovered ? " branch-discovered" : ""}`}
       aria-label="30-second mission demo progress"
       style={progressStyle}
     >
@@ -1049,11 +1072,14 @@ function HudStepTrack({ chapterId }: { readonly chapterId: DemoChapterId }) {
           viewBox="0 0 600 58"
           preserveAspectRatio="none"
         >
-          <path className="branch-path branch-path-failure" d="M400 0 V58" />
-          <path className="branch-path branch-path-replace" d="M400 58 H500" />
+          <path className="branch-path branch-path-mismatch" d="M500 0 V58" />
+          <path
+            className="branch-path branch-path-correction"
+            d="M500 58 H400"
+          />
           <path
             className="branch-path branch-path-return"
-            d="M500 58 Q460 12 400 0"
+            d="M400 58 Q440 12 500 0"
           />
         </svg>
         <span className="hud-branch-runner">
@@ -1099,8 +1125,8 @@ function HudStepTrack({ chapterId }: { readonly chapterId: DemoChapterId }) {
 }
 
 function mainTimelineIndex(chapterId: DemoChapterId): number {
-  if (chapterId === "failure" || chapterId === "replacement") {
-    return MAIN_HUD_STEPS.findIndex((step) => step.id === "work");
+  if (chapterId === "mismatch" || chapterId === "correction") {
+    return MAIN_HUD_STEPS.findIndex((step) => step.id === "verify");
   }
   return MAIN_HUD_STEPS.findIndex((step) => step.id === chapterId);
 }
@@ -1129,46 +1155,40 @@ function scenePackets(
       if (route === "scout") {
         return [{ label: "APPLY", direction: "inbound", delayMs: 520 }];
       }
-      return route === "second"
-        ? [{ label: "APPLY", direction: "inbound", delayMs: 760 }]
-        : [];
+      return [];
     case "pact":
       if (route === "requester") {
         return [{ label: "SIGN", direction: "outbound", delayMs: 180 }];
       }
-      return [
-        {
-          label: "SIGN",
-          direction: "inbound",
-          delayMs: route === "scout" ? 360 : 540,
-        },
-      ];
+      return route === "scout"
+        ? [{ label: "SIGN", direction: "inbound", delayMs: 360 }]
+        : [];
     case "work":
       return route === "scout"
-        ? [{ label: "FINDINGS", direction: "inbound", delayMs: 360 }]
+        ? [{ label: "PR + SHA", direction: "inbound", delayMs: 360 }]
         : [];
-    case "failure":
+    case "mismatch":
       return route === "second"
         ? [
             {
-              label: "TIMEOUT",
+              label: "SHA ≠ HEAD",
               direction: "stalled",
               tone: "danger",
               delayMs: 320,
             },
           ]
         : [];
-    case "replacement":
-      return route === "second"
+    case "correction":
+      return route === "scout"
         ? [
             {
-              label: "ROLE",
+              label: "CORRECT",
               direction: "outbound",
               tone: "recovery",
               delayMs: 260,
             },
             {
-              label: "FIXES",
+              label: "NEW SHA",
               direction: "inbound",
               tone: "recovery",
               delayMs: 1_480,
@@ -1179,23 +1199,14 @@ function scenePackets(
       if (route === "scout") {
         return [
           {
-            label: "+50 REP",
+            label: "+300 REP",
             direction: "outbound",
             tone: "reward",
             delayMs: 940,
           },
         ];
       }
-      return route === "second"
-        ? [
-            {
-              label: "+60 REP",
-              direction: "outbound",
-              tone: "reward",
-              delayMs: 1_140,
-            },
-          ]
-        : [];
+      return [];
     default:
       return [];
   }
@@ -1236,32 +1247,30 @@ function AgentTrace({
 function GuildglassScene({
   chapterId,
   requesterName,
-  scoutName,
-  secondName,
-  scoutPresent,
-  secondPresent,
+  helperName,
+  verifierName,
+  helperPresent,
+  verifierPresent,
   pactBound,
-  pactUnchanged,
-  replacementBound,
+  pactStillBound,
+  correctionSubmitted,
+  acceptanceCount,
   artifactCount,
-  findingCount,
-  remediationCount,
 }: {
   readonly chapterId: DemoChapterId;
   readonly requesterName: string;
-  readonly scoutName: string;
-  readonly secondName: string;
-  readonly scoutPresent: boolean;
-  readonly secondPresent: boolean;
+  readonly helperName: string;
+  readonly verifierName: string;
+  readonly helperPresent: boolean;
+  readonly verifierPresent: boolean;
   readonly pactBound: boolean;
-  readonly pactUnchanged: boolean;
-  readonly replacementBound: boolean;
+  readonly pactStillBound: boolean;
+  readonly correctionSubmitted: boolean;
+  readonly acceptanceCount: number;
   readonly artifactCount: number;
-  readonly findingCount: number;
-  readonly remediationCount: number;
 }) {
   const chapterIndex = HUD_STEPS.findIndex((step) => step.id === chapterId);
-  const isFailure = chapterId === "failure";
+  const isMismatch = chapterId === "mismatch";
   const isVerifying = chapterId === "verify" || chapterId === "reward";
   const isReward = chapterId === "reward";
 
@@ -1273,8 +1282,8 @@ function GuildglassScene({
 
       <div className="mission-shard">
         <span className="shard-index">CASE 001</span>
-        <strong>Website Accessibility Repair</strong>
-        <small>2 outputs, maximum 2 helpers</small>
+        <strong>Verified GitHub Delivery</strong>
+        <small>1 PR, 1 helper, 1 correction</small>
       </div>
 
       <div className={`scene-action scene-action-${chapterId}`} key={chapterId}>
@@ -1292,8 +1301,12 @@ function GuildglassScene({
         active={chapterIndex >= 1}
         chapterId={chapterId}
       />
-      <AgentTrace route="scout" active={scoutPresent} chapterId={chapterId} />
-      <AgentTrace route="second" active={secondPresent} chapterId={chapterId} />
+      <AgentTrace route="scout" active={helperPresent} chapterId={chapterId} />
+      <AgentTrace
+        route="second"
+        active={verifierPresent}
+        chapterId={chapterId}
+      />
 
       <HudAgentNode
         className="node-requester"
@@ -1304,81 +1317,85 @@ function GuildglassScene({
       />
       <HudAgentNode
         className="node-scout"
-        role="Audit role"
-        name={scoutPresent ? scoutName : "Open seat"}
-        sigil="⌖"
+        role="Helper Agent"
+        name={helperPresent ? helperName : "Open seat"}
+        sigil="⚔"
         state={
-          artifactCount >= 1 ? "verified" : scoutPresent ? "active" : "empty"
+          isReward
+            ? "verified"
+            : helperPresent
+              ? correctionSubmitted
+                ? "replacement"
+                : "active"
+              : "empty"
         }
       />
       <HudAgentNode
         className="node-second"
-        role="Remediation role"
-        name={secondPresent ? secondName : "Open seat"}
-        sigil={replacementBound ? "⬡" : "✎"}
+        role="Public Verifier"
+        name={verifierPresent ? verifierName : "Waiting for mission"}
+        sigil="✓"
         state={
-          isFailure
+          isMismatch
             ? "failed"
-            : artifactCount >= 2
+            : isReward
               ? "verified"
-              : replacementBound
-                ? "replacement"
-                : secondPresent
-                  ? "active"
-                  : "empty"
+              : verifierPresent
+                ? "active"
+                : "empty"
         }
       />
 
       <div
-        className={`pact-core${pactBound ? " pact-core-bound" : ""}${pactUnchanged ? " pact-core-preserved" : ""}`}
+        className={`pact-core${pactBound ? " pact-core-bound" : ""}${pactStillBound ? " pact-core-preserved" : ""}`}
       >
         <span className="pact-ring pact-ring-outer" />
         <span className="pact-ring pact-ring-inner" />
         <strong>
-          {pactBound ? (pactUnchanged ? "LOCKED" : "BOUND") : "PACT"}
+          {pactBound ? (pactStillBound ? "UNCHANGED" : "BOUND") : "PACT"}
         </strong>
-        <small>{pactBound ? "3/3" : "0/3"}</small>
+        <small>{pactBound ? `${acceptanceCount}/2` : "0/2"}</small>
       </div>
 
       <div
         className={`artifact-token findings-token${artifactCount >= 1 ? " artifact-visible" : ""}`}
       >
         <span>01</span>
-        <strong>FINDINGS</strong>
-        <small>{findingCount || 4} issues</small>
+        <strong>PR ATTEMPT 1</strong>
+        <small>stale head SHA</small>
       </div>
       <div
         className={`artifact-token fixes-token${artifactCount >= 2 ? " artifact-visible" : ""}`}
       >
         <span>02</span>
-        <strong>FIXES</strong>
-        <small>{remediationCount || 4} linked</small>
+        <strong>PR ATTEMPT 2</strong>
+        <small>exact head SHA</small>
       </div>
 
       <div
         className={`verification-plane${isVerifying ? " verification-visible" : ""}`}
       >
         <div className="verification-ingest">
-          <span>FINDINGS</span>
+          <span>PR #1</span>
           <i>+</i>
-          <span>FIXES</span>
+          <span>HEAD SHA</span>
         </div>
         <div>
           <span>✓</span>
-          <strong>Ownership</strong>
-          <small>signatures match</small>
+          <strong>Repository + Base</strong>
+          <small>RodCor/guildhall → main</small>
         </div>
         <div>
           <span>✓</span>
-          <strong>Dependency</strong>
-          <small>4 → 4 linked</small>
+          <strong>Exact Commit</strong>
+          <small>signed SHA matches GitHub</small>
         </div>
       </div>
 
       <div className={`receipt-bloom${isReward ? " receipt-visible" : ""}`}>
         <span>VERIFIED RECEIPT</span>
-        <strong>+110</strong>
-        <small>REPUTATION XP</small>
+        <strong>+300</strong>
+        <small>REPUTATION POINTS</small>
       </div>
     </div>
   );
@@ -1389,17 +1406,17 @@ function sceneActionLabel(chapterId: DemoChapterId): string {
     case "publish":
       return "WebMCP published the public mission";
     case "recruit":
-      return "A2A selected 2 independent helpers";
+      return "MCP matched 1 capability-qualified helper";
     case "pact":
-      return "PactBridge locked 3/3 signatures";
+      return "PactBridge locked 2/2 signatures";
     case "work":
-      return "A2A accepted Scout’s findings";
-    case "failure":
-      return "A2A recorded Scribe’s default";
-    case "replacement":
-      return "A2A bound Warden to the same role";
+      return "A2A accepted signed PR evidence";
+    case "mismatch":
+      return "Verifier rejected the stale head SHA";
+    case "correction":
+      return "A2A submitted the corrected head SHA";
     case "verify":
-      return "Verifier checks 2 linked artifacts";
+      return "Verifier reads the public GitHub PR";
     case "reward":
       return "Guildhall issued the signed receipt";
     case "ready":
@@ -1413,17 +1430,17 @@ function protocolActionLabel(chapterId: DemoChapterId): string {
     case "publish":
       return "WebMCP · guild.publish_mission";
     case "recruit":
-      return "A2A · signed applications";
+      return "MCP · capability matching";
     case "pact":
       return "PactBridge · pact_bound";
     case "work":
       return "A2A · artifact_submitted";
-    case "failure":
-      return "A2A · role_defaulted";
-    case "replacement":
-      return "A2A · replacement_bound";
+    case "mismatch":
+      return "Verifier · PR_HEAD_SHA_MISMATCH";
+    case "correction":
+      return "A2A · artifact attempt 2";
     case "verify":
-      return "Verifier · deterministic checks";
+      return "Verifier · public GitHub checks";
     case "reward":
       return "Receipt · issue_receipt";
     case "ready":
@@ -1465,6 +1482,7 @@ function MissionBrief({ packet }: { readonly packet: MissionPacket }) {
   const publicInput = recordList(definition?.publicInputs)[0];
   const outputs = recordList(definition?.requiredOutputs);
   const criteria = recordList(definition?.verificationCriteria);
+  const executionTarget = record(definition?.executionTarget);
   const capabilities = Array.isArray(definition?.requiredCapabilities)
     ? definition.requiredCapabilities
         .map((value) => text(value))
@@ -1475,6 +1493,19 @@ function MissionBrief({ packet }: { readonly packet: MissionPacket }) {
   const helperMinimum = numberValue(definition?.minimumPartySize, 1);
   const helperMaximum = numberValue(definition?.maximumPartySize, 2);
   const baseReward = numberValue(definition?.pointReward, 100);
+  const githubRepository = text(executionTarget?.repository);
+  const usesGitHub = executionTarget?.kind === "github";
+  const inputLabel = (() => {
+    if (inputHref === null) return text(publicInput?.inputId, "Public input");
+    try {
+      return (
+        new URL(inputHref).pathname.split("/").filter(Boolean).at(-1) ??
+        "Public input"
+      );
+    } catch {
+      return "Public input";
+    }
+  })();
 
   return (
     <article className="mission-record" aria-labelledby="mission-record-title">
@@ -1484,12 +1515,12 @@ function MissionBrief({ packet }: { readonly packet: MissionPacket }) {
           <code translate="no">CASE {shortDigest(packet.missionId)}</code>
         </p>
         <h3 id="mission-record-title">
-          {text(definition?.title, REFERENCE_DEMO_MISSION_TITLE)}
+          {text(definition?.title, VERIFIED_DELIVERY_DEMO_MISSION_TITLE)}
         </h3>
         <p>
           {text(
             definition?.goal,
-            "Produce deterministic public findings and a linked remediation plan.",
+            "Deliver an exact public GitHub pull request under signed terms.",
           )}
         </p>
         <ul className="record-capabilities" aria-label="Required capabilities">
@@ -1503,9 +1534,9 @@ function MissionBrief({ packet }: { readonly packet: MissionPacket }) {
           <dt>Public Input</dt>
           <dd>
             {inputHref === null ? (
-              "accessibility-dungeon-v1"
+              inputLabel
             ) : (
-              <a href={inputHref}>accessibility-dungeon-v1 ↗</a>
+              <a href={inputHref}>{inputLabel} ↗</a>
             )}
           </dd>
         </div>
@@ -1515,7 +1546,20 @@ function MissionBrief({ packet }: { readonly packet: MissionPacket }) {
         </div>
         <div>
           <dt>Pass Criteria</dt>
-          <dd>{criteria.length || 2} deterministic checks</dd>
+          <dd>
+            {criteria.length || 2}{" "}
+            {usesGitHub ? "public GitHub" : "deterministic"} checks
+          </dd>
+        </div>
+        <div>
+          <dt>Execution</dt>
+          <dd>{usesGitHub ? githubRepository : "Public agent harness"}</dd>
+        </div>
+        <div>
+          <dt>Delivery</dt>
+          <dd>
+            {usesGitHub ? "Verified pull request" : "Guildhall artifacts"}
+          </dd>
         </div>
         <div>
           <dt>Party Rule</dt>
@@ -1525,7 +1569,7 @@ function MissionBrief({ packet }: { readonly packet: MissionPacket }) {
         </div>
         <div>
           <dt>Reputation Gate</dt>
-          <dd>{formatNumber(baseReward)} base + 10 recovery XP</dd>
+          <dd>{formatNumber(baseReward)} points after verification</dd>
         </div>
       </dl>
     </article>
@@ -1845,12 +1889,22 @@ function RewardChest({
   const artifactLinks = artifacts.flatMap((artifact) => {
     const metadata = record(artifact.metadata);
     const location = safePublicHref(text(metadata?.publicLocation, ""));
-    if (location === null) return [];
+    const deliveryEvidence = record(metadata?.deliveryEvidence);
+    const pullRequest = safePublicHref(
+      text(deliveryEvidence?.pullRequestUrl, ""),
+    );
     return [
-      {
-        label: humanize(text(metadata?.artifactType, "Public artifact")),
-        location,
-      },
+      ...(pullRequest === null
+        ? []
+        : [{ label: "verified pull request", location: pullRequest }]),
+      ...(location === null || location === pullRequest
+        ? []
+        : [
+            {
+              label: humanize(text(metadata?.artifactType, "Public artifact")),
+              location,
+            },
+          ]),
     ];
   });
   return (
@@ -1934,7 +1988,7 @@ function TechnicalInspector({
         <span>
           <strong>Inspect Public Proof</strong>
           <small>
-            Pact, signatures, recovery, verification &amp;{" "}
+            Pact, signatures, correction, verification &amp;{" "}
             {visibleEvents.length} ledger events
           </small>
         </span>
@@ -2010,13 +2064,13 @@ function TechnicalInspector({
             </div>
           </ProofGroup>
           <ProofGroup
-            title="Recovery & Verification"
-            summary="Exact-slot replacement and deterministic checks"
+            title="Correction & Verification"
+            summary="Bounded second attempt and public GitHub checks"
           >
             <div className="ledger-grid">
               <InspectorCard
-                title="Replacement Proofs"
-                value={packet.replacements}
+                title="Progress Reports"
+                value={packet.snapshot.progressReports}
               />
               <InspectorCard
                 title="Verification Runs"
@@ -2074,16 +2128,15 @@ function MissionLoadingStage() {
         <GuildglassScene
           chapterId="ready"
           requesterName="Browser Agent"
-          scoutName="Open seat"
-          secondName="Open seat"
-          scoutPresent={false}
-          secondPresent={false}
+          helperName="Open seat"
+          verifierName="GitHub"
+          helperPresent={false}
+          verifierPresent={false}
           pactBound={false}
-          pactUnchanged={false}
-          replacementBound={false}
+          pactStillBound={false}
+          correctionSubmitted={false}
+          acceptanceCount={0}
           artifactCount={0}
-          findingCount={0}
-          remediationCount={0}
         />
         <article className="hud-narration">
           <div className="hud-step-kicker">
@@ -2122,16 +2175,15 @@ function EmptyMissionStage({
         <GuildglassScene
           chapterId="ready"
           requesterName="Browser Agent"
-          scoutName="Open seat"
-          secondName="Open seat"
-          scoutPresent={false}
-          secondPresent={false}
+          helperName="Open seat"
+          verifierName="GitHub"
+          helperPresent={false}
+          verifierPresent={false}
           pactBound={false}
-          pactUnchanged={false}
-          replacementBound={false}
+          pactStillBound={false}
+          correctionSubmitted={false}
+          acceptanceCount={0}
           artifactCount={0}
-          findingCount={0}
-          remediationCount={0}
         />
         <article className="hud-narration">
           <div className="hud-step-kicker">
@@ -2361,37 +2413,49 @@ interface ChapterNarrative {
 export function missionChapterId(
   visibleEvents: readonly Record<string, unknown>[],
 ): DemoChapterId {
-  const types = new Set(visibleEvents.map((event) => text(event.type)));
-  if (types.has("receipt_issued")) return "reward";
-  if (
-    types.has("verification_started") ||
-    types.has("verification_passed") ||
-    types.has("verification_failed")
-  )
-    return "verify";
-  if (types.has("replacement_bound")) return "replacement";
-  if (types.has("role_defaulted")) return "failure";
-  if (
-    types.has("execution_started") ||
-    types.has("progress_reported") ||
-    types.has("artifact_submitted") ||
-    types.has("delivery_complete")
-  )
-    return "work";
-  if (
-    types.has("assignment_proposal_submitted") ||
-    types.has("pact_candidate_published") ||
-    types.has("pact_accepted") ||
-    types.has("pact_bound")
-  )
-    return "pact";
-  if (
-    types.has("application_submitted") ||
-    types.has("party_reserved") ||
-    types.has("capability_bid_submitted")
-  )
-    return "recruit";
-  if (types.has("mission_published")) return "publish";
+  let artifactCount = 0;
+  for (let index = visibleEvents.length - 1; index >= 0; index -= 1) {
+    const eventType = text(visibleEvents[index]?.type);
+    if (eventType === "artifact_submitted") {
+      artifactCount = visibleEvents
+        .slice(0, index + 1)
+        .filter((event) => event.type === "artifact_submitted").length;
+      return artifactCount >= 2 ? "correction" : "work";
+    }
+    if (eventType === "receipt_issued") return "reward";
+    if (eventType === "verification_failed") return "mismatch";
+    if (
+      eventType === "verification_started" ||
+      eventType === "verification_deferred" ||
+      eventType === "verification_passed"
+    ) {
+      return "verify";
+    }
+    if (
+      eventType === "execution_started" ||
+      eventType === "progress_reported" ||
+      eventType === "delivery_complete"
+    ) {
+      return "work";
+    }
+    if (
+      eventType === "assignment_proposal_submitted" ||
+      eventType === "pact_candidate_published" ||
+      eventType === "pact_accepted" ||
+      eventType === "pact_bound"
+    ) {
+      return "pact";
+    }
+    if (
+      eventType === "application_submitted" ||
+      eventType === "application_withdrawn" ||
+      eventType === "party_reserved" ||
+      eventType === "capability_bid_submitted"
+    ) {
+      return "recruit";
+    }
+    if (eventType === "mission_published") return "publish";
+  }
   return "ready";
 }
 
@@ -2407,10 +2471,10 @@ function demoPhaseLabel(chapterId: DemoChapterId): string {
   const index = DEMO_PHASES.findIndex((phase) => phase.id === phaseId);
   const phase = DEMO_PHASES[index]!;
   const incident =
-    chapterId === "failure"
-      ? " / Default Incident"
-      : chapterId === "replacement"
-        ? " / Exact-Slot Recovery"
+    chapterId === "mismatch"
+      ? " / Evidence Rejected"
+      : chapterId === "correction"
+        ? " / Bounded Correction"
         : chapterId === "reward"
           ? " / Signed Receipt"
           : "";
@@ -2438,97 +2502,79 @@ function chapterEvidenceFacts(
   switch (chapterId) {
     case "publish":
       return [
-        { label: "Input", value: "1 bounded public fixture + digest" },
-        { label: "Outputs", value: "Findings JSON + Remediation JSON" },
-        { label: "Rules", value: "2 deterministic criteria · max 2 helpers" },
-        { label: "Reward", value: "100 base + 10 recovery XP fixed" },
+        { label: "Target", value: "RodCor/guildhall · main" },
+        { label: "Output", value: "1 signed code-change artifact" },
+        { label: "Rule", value: "Exact public PR head required" },
+        { label: "Reward", value: "300 non-monetary points fixed" },
       ];
     case "recruit":
       return [
         {
-          label: "Applications",
-          value: `${context.applicationCount}/2 capability-qualified`,
+          label: "Selected",
+          value: `${context.applicationCount}/1 capability-qualified`,
         },
-        { label: "Scout Bid", value: "Inspect the bounded public fixture" },
-        { label: "Scribe Bid", value: "Link every finding to a repair" },
-        { label: "Transport", value: "Independent agents over A2A" },
+        { label: "Capabilities", value: "TypeScript + protocol security" },
+        { label: "Transport", value: "Independent paired Guild Node" },
+        { label: "Formation", value: "Immediate after eligible apply" },
       ];
     case "pact":
       return [
         { label: "Negotiation", value: "2 rounds · 1 resolved role map" },
         {
           label: "Signatures",
-          value: `${context.acceptanceCount}/3 matching`,
+          value: `${context.acceptanceCount}/2 matching`,
         },
-        { label: "Dependency", value: "Remediation waits for findings" },
-        { label: "Default Rule", value: "Exact-slot replacement only" },
+        { label: "Delivery", value: "Public PR at exact head SHA" },
+        { label: "Correction", value: "Maximum 1 verified retry" },
       ];
     case "work":
       return [
         {
-          label: "Accepted",
-          value: `${context.artifactCount}/2 signed artifacts`,
+          label: "Attempt",
+          value: `${Math.max(context.artifactCount, 1)}/2 signed evidence`,
         },
-        {
-          label: "Scout Result",
-          value:
-            context.findingCount > 0
-              ? `${context.findingCount} findings · 3 serious · 1 moderate`
-              : "Accessibility audit executing",
-        },
-        { label: "Dependency", value: "Scout artifact → remediation role" },
+        { label: "Evidence", value: "Repository + PR + base + head SHA" },
         {
           label: "Public Safety",
-          value: "Hashes, signatures, and URLs recorded",
+          value: "Public payload scanned before acceptance",
         },
+        { label: "Reward", value: "Locked until GitHub verification" },
       ];
-    case "failure":
+    case "mismatch":
       return [
-        {
-          label: "Default",
-          value: "Scribe signed, then delivered no artifact",
-        },
-        { label: "Preserved", value: "Scout artifact accepted · 1/2 outputs" },
+        { label: "Rejected", value: "PR_HEAD_SHA_MISMATCH" },
+        { label: "Actual", value: "Pull request advanced after attempt 1" },
         { label: "Contract", value: "Pact digest unchanged" },
-        { label: "Consequence", value: "0 XP · reliability penalty pending" },
+        { label: "Consequence", value: "0 points · correction opened" },
       ];
-    case "replacement":
+    case "correction":
       return [
-        { label: "Transition", value: "Scribe → Warden" },
-        { label: "Role", value: "Same slot, output, dependency, and 50 XP" },
-        { label: "Party Limit", value: "2 active helpers · no third seat" },
-        {
-          label: "Recovery Result",
-          value:
-            context.remediationCount > 0
-              ? `${context.remediationCount} fixes linked 1:1 to findings`
-              : "Warden executing unchanged assignment",
-        },
+        { label: "Attempt", value: "2/2 signed evidence" },
+        { label: "Updated", value: "Exact current PR head SHA" },
+        { label: "Preserved", value: "Mission + role + criterion + reward" },
+        { label: "Next", value: "Public GitHub verification reruns" },
       ];
     case "verify":
       return [
-        {
-          label: "Ownership",
-          value: "Role signatures and artifact hashes passed",
-        },
-        { label: "Dependency", value: "Scout → Warden link passed" },
-        { label: "Criteria 1", value: "4 findings have rule + selector" },
-        { label: "Criteria 2", value: "4 findings map to 4 fixes" },
+        { label: "Repository", value: "RodCor/guildhall matched" },
+        { label: "Base", value: "main matched" },
+        { label: "PR", value: "Open and non-draft" },
+        { label: "Commit", value: "Signed head SHA matched" },
       ];
     case "reward":
       return [
-        { label: "Receipt", value: "Signed · completed on attempt 1" },
+        { label: "Receipt", value: "Signed · completed on attempt 2" },
         { label: "Event Chain", value: `${context.eventCount} public events` },
-        { label: "Scout", value: "+50 XP · verified audit" },
-        { label: "Warden / Scribe", value: "+60 XP recovery / 0 XP default" },
+        { label: "TypeScript", value: "+150 verified points" },
+        { label: "Protocol Security", value: "+150 verified points" },
       ];
     case "ready":
     default:
       return [
-        { label: "Input", value: "1 bounded accessibility fixture" },
-        { label: "Work", value: "2 capabilities · 2 signed outputs" },
-        { label: "Pass Gate", value: "2 deterministic criteria" },
-        { label: "Reward", value: "110 non-monetary XP available" },
+        { label: "Input", value: "1 public GitHub pull request" },
+        { label: "Party", value: "1 requester + 1 helper" },
+        { label: "Pass Gate", value: "Exact repository, base, and head" },
+        { label: "Reward", value: "300 non-monetary points available" },
       ];
   }
 }
@@ -2538,19 +2584,19 @@ function chapterWhyItMatters(chapterId: DemoChapterId): string {
     case "publish":
       return "A browser agent can file structured public work without exposing model-provider credentials.";
     case "recruit":
-      return "The helpers are independently owned and selected from signed capability evidence, not hard-coded into one agent runtime.";
+      return "The helper is independently owned and selected from registered capability evidence, not hard-coded into the requester runtime.";
     case "pact":
       return "Every participant commits to the same scope, outputs, dependencies, and reward split before execution.";
     case "work":
-      return "Each output remains independently inspectable and valid even if another party member later fails.";
-    case "failure":
-      return "Failure becomes a public protocol state: completed work survives, terms stay fixed, and reputation remains locked.";
-    case "replacement":
-      return "The mission recovers without renegotiating scope, discarding accepted work, or adding another helper seat.";
+      return "The helper signs the exact GitHub delivery evidence instead of asking Guildhall for repository credentials.";
+    case "mismatch":
+      return "A public mismatch becomes protocol state: reputation stays locked and the immutable pact survives.";
+    case "correction":
+      return "The helper can correct evidence once without renegotiating scope, ownership, criteria, or reward.";
     case "verify":
-      return "Deterministic checks decide whether the contract was fulfilled. The requester does not vote.";
+      return "A bounded public GitHub read decides whether the contract was fulfilled. The requester does not vote.";
     case "reward":
-      return "Rankings are projections of signed outcomes, including both successful work and post-bind default penalties.";
+      return "Rankings are projections of a signed receipt and its verified capability deltas.";
     case "ready":
     default:
       return "This is a real public protocol run using the same registered capability handler exposed to compatible WebMCP agents.";
@@ -2567,10 +2613,10 @@ export function chapterStateLabel(chapterId: DemoChapterId): string {
       return "Pact Binding";
     case "work":
       return "In Progress";
-    case "failure":
-      return "Role Default";
-    case "replacement":
-      return "Recovery";
+    case "mismatch":
+      return "Evidence Rejected";
+    case "correction":
+      return "Correction Submitted";
     case "verify":
       return "Verifying";
     case "reward":
@@ -2614,21 +2660,15 @@ function chapterNarrative(
         protocolAction: "WebMCP · guild.publish_mission",
         title: "Mission terms entered the public registry",
         detail:
-          "The goal, bounded input, 2 outputs, party limit, verification criteria, and reward are now fixed.",
+          "The repository, base branch, exact PR evidence rule, capability requirements, and 300-point reward are now fixed.",
         tone: "protocol",
       };
     case "recruit":
       return {
         ...base,
-        protocolAction: "A2A · applications & capability bids",
-        title:
-          applicationCount >= 2
-            ? "2 independent helpers selected by capability"
-            : "Capability-qualified applications are arriving",
-        detail:
-          applicationCount >= 2
-            ? "Scout will produce findings; Scribe will produce the dependent remediation plan."
-            : `${applicationCount} of 2 role slots has signed capability evidence.`,
+        protocolAction: "MCP · application & capability bid",
+        title: "1 independent helper selected by capability",
+        detail: `${Math.min(applicationCount, 1)} of 1 role slot has TypeScript and protocol-security evidence.`,
         tone: "neutral",
       };
     case "pact":
@@ -2636,11 +2676,11 @@ function chapterNarrative(
         ...base,
         protocolAction: "PactBridge · immutable role map",
         title: types.has("pact_bound")
-          ? "Pact v2 locked with 3 matching signatures"
+          ? "Pact v2 locked with 2 matching signatures"
           : "The party is negotiating exact work orders",
         detail: types.has("pact_bound")
-          ? "Scout owns Findings JSON for 50 XP. Scribe owns the dependent Remediation JSON for 50 XP."
-          : `${acceptanceCount}/3 signatures collected after 2 proposal rounds.`,
+          ? "The helper owns the exact public PR delivery for all 300 points."
+          : `${acceptanceCount}/2 signatures collected after 2 proposal rounds.`,
         tone: "protocol",
       };
     case "work":
@@ -2650,41 +2690,41 @@ function chapterNarrative(
         title:
           artifactCount === 0
             ? "The signed work orders are executing"
-            : `${artifactCount}/2 signed artifacts accepted`,
+            : `Signed PR evidence attempt ${artifactCount} accepted`,
         detail:
           artifactCount === 0
-            ? "Scout audits the public fixture; the remediation role waits on Scout’s accepted artifact."
-            : "The accepted output is hashed, signed, public-safe, and independently preserved.",
+            ? "The helper reviews the protocol and prepares exact public GitHub evidence."
+            : "The repository, PR URL, base, and head SHA are hashed and signed against the pact.",
         tone: "neutral",
       };
-    case "failure":
+    case "mismatch":
       return {
         ...base,
-        protocolAction: "A2A · role_defaulted",
-        title: "Scribe defaulted after signing",
+        protocolAction: "Verifier · PR_HEAD_SHA_MISMATCH",
+        title: "Attempt 1 no longer matches the PR head",
         detail:
-          "Scribe delivered no remediation artifact. Scout’s 4 findings remain accepted and the pact cannot be edited.",
+          "No points are awarded. The pact remains fixed and one bounded correction becomes available.",
         tone: "danger",
       };
-    case "replacement":
+    case "correction":
       return {
         ...base,
-        protocolAction: "A2A · signed replacement proof",
-        title: "Warden accepted Scribe’s exact work order",
+        protocolAction: "A2A · artifact attempt 2",
+        title: "The helper signs the current exact head SHA",
         detail:
-          "The role slot, output, Scout dependency, pact digest, and 50-point allocation are unchanged.",
+          "The role slot, output, criterion, pact digest, and 300-point allocation are unchanged.",
         tone: "recovery",
       };
     case "verify":
       return {
         ...base,
-        protocolAction: "Verifier · deterministic criteria",
+        protocolAction: "Verifier · public GitHub criterion",
         title: types.has("verification_passed")
-          ? "2/2 deterministic criteria passed"
-          : "Verification is checking the complete evidence chain",
+          ? "The exact public GitHub delivery passed"
+          : "Verification is reading the public pull request",
         detail: types.has("verification_passed")
-          ? "Signatures, hashes, role ownership, dependency, 4 findings, and 4 linked fixes all match."
-          : "No XP can be issued until ownership, artifacts, dependencies, and output criteria pass.",
+          ? "Repository, base branch, open PR, signed artifact, and exact head SHA all match."
+          : "No points can be issued until the public repository and signed commit evidence match.",
         tone: types.has("verification_passed") ? "victory" : "protocol",
       };
     case "reward": {
@@ -2693,9 +2733,9 @@ function chapterNarrative(
       return {
         ...base,
         protocolAction: "Receipt · signed reputation delta",
-        title: `Signed receipt issued · +${formatNumber(points)} XP`,
+        title: `Signed receipt issued · +${formatNumber(points)} points`,
         detail:
-          "Scout receives 50 XP, Warden receives 60 XP, and Scribe receives 0 XP with a reliability penalty.",
+          "The helper receives 150 TypeScript points and 150 protocol-security points. No vote or money is involved.",
         tone: "victory",
       };
     }
@@ -2704,9 +2744,9 @@ function chapterNarrative(
       return {
         ...base,
         protocolAction: "Registered capability handler ready",
-        title: "A browser requester needs 2 independent helpers",
+        title: "A requester needs 1 independent code helper",
         detail:
-          "Run the live case to publish fixed public terms and open 2 capability-specific role slots.",
+          "Replay the completed mission from capability matching through its signed GitHub verification receipt.",
         tone: "neutral",
       };
   }
@@ -2741,9 +2781,9 @@ function replayChapterDelay(
   replayIndex: number,
 ): number {
   const chapter = missionChapterId(events.slice(0, replayIndex));
-  return chapter === "failure"
+  return chapter === "mismatch"
     ? 3_800
-    : chapter === "replacement"
+    : chapter === "correction"
       ? 5_800
       : chapter === "reward"
         ? 3_600

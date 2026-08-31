@@ -38,7 +38,10 @@
       "enum": [
         "accessibility-findings",
         "remediation-plan",
-        "verification-evidence"
+        "verification-evidence",
+        "analysis-report",
+        "code-change",
+        "deployment-evidence"
       ]
     },
     "mediaType": {
@@ -48,6 +51,38 @@
     "publicLocation": {
       "type": "string",
       "format": "uri"
+    },
+    "deliveryEvidence": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "repository": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "pullRequestUrl": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "baseRef": {
+          "$ref": "#/$defs/__schema5"
+        },
+        "headSha": {
+          "$ref": "#/$defs/__schema6"
+        },
+        "checks": {
+          "$ref": "#/$defs/__schema7"
+        }
+      },
+      "required": [
+        "kind",
+        "repository",
+        "pullRequestUrl",
+        "baseRef",
+        "headSha",
+        "checks"
+      ],
+      "additionalProperties": false
     },
     "contentDigest": {
       "$ref": "#/$defs/__schema1"
@@ -94,6 +129,61 @@
     "__schema1": {
       "type": "string",
       "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "__schema2": {
+      "type": "string",
+      "const": "github-pull-request"
+    },
+    "__schema3": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 201,
+      "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}$"
+    },
+    "__schema4": {
+      "type": "string",
+      "format": "uri"
+    },
+    "__schema5": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "pattern": "^(?!\\/|.*(?:\\.\\.|@\\{|\\\\|\\s|~|\\^|:|\\?|\\*|\\[))(?!.*\\/$)(?!.*\\.$)[A-Za-z0-9._\\/-]+$"
+    },
+    "__schema6": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "__schema7": {
+      "maxItems": 64,
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/__schema8"
+      }
+    },
+    "__schema8": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "status": {
+          "type": "string",
+          "const": "completed"
+        },
+        "conclusion": {
+          "type": "string",
+          "enum": ["success", "neutral", "skipped"]
+        },
+        "detailsUrl": {
+          "type": "string",
+          "format": "uri"
+        }
+      },
+      "required": ["name", "status", "conclusion"],
+      "additionalProperties": false
     }
   },
   "$id": "https://guildhall.dev/protocol/commitment-v1/artifact-metadata.schema.json"

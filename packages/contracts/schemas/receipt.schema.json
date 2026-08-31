@@ -27,31 +27,31 @@
       "$ref": "#/$defs/__schema6"
     },
     "verification": {
-      "$ref": "#/$defs/__schema8"
+      "$ref": "#/$defs/__schema15"
     },
     "timeliness": {
-      "$ref": "#/$defs/__schema10"
+      "$ref": "#/$defs/__schema17"
     },
     "defaults": {
-      "$ref": "#/$defs/__schema12"
+      "$ref": "#/$defs/__schema19"
     },
     "replacements": {
-      "$ref": "#/$defs/__schema14"
+      "$ref": "#/$defs/__schema21"
     },
     "reward": {
-      "$ref": "#/$defs/__schema16"
+      "$ref": "#/$defs/__schema23"
     },
     "reputationDeltas": {
-      "$ref": "#/$defs/__schema17"
+      "$ref": "#/$defs/__schema24"
     },
     "issuerKeyId": {
       "$ref": "#/$defs/__schema2"
     },
     "issuerSignature": {
-      "$ref": "#/$defs/__schema19"
+      "$ref": "#/$defs/__schema26"
     },
     "issuedAt": {
-      "$ref": "#/$defs/__schema11"
+      "$ref": "#/$defs/__schema18"
     }
   },
   "required": [
@@ -127,6 +127,38 @@
         },
         "contentDigest": {
           "$ref": "#/$defs/__schema5"
+        },
+        "deliveryEvidence": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "$ref": "#/$defs/__schema8"
+            },
+            "repository": {
+              "$ref": "#/$defs/__schema9"
+            },
+            "pullRequestUrl": {
+              "$ref": "#/$defs/__schema10"
+            },
+            "baseRef": {
+              "$ref": "#/$defs/__schema11"
+            },
+            "headSha": {
+              "$ref": "#/$defs/__schema12"
+            },
+            "checks": {
+              "$ref": "#/$defs/__schema13"
+            }
+          },
+          "required": [
+            "kind",
+            "repository",
+            "pullRequestUrl",
+            "baseRef",
+            "headSha",
+            "checks"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
@@ -138,6 +170,61 @@
       "additionalProperties": false
     },
     "__schema8": {
+      "type": "string",
+      "const": "github-pull-request"
+    },
+    "__schema9": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 201,
+      "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}$"
+    },
+    "__schema10": {
+      "type": "string",
+      "format": "uri"
+    },
+    "__schema11": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "pattern": "^(?!\\/|.*(?:\\.\\.|@\\{|\\\\|\\s|~|\\^|:|\\?|\\*|\\[))(?!.*\\/$)(?!.*\\.$)[A-Za-z0-9._\\/-]+$"
+    },
+    "__schema12": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "__schema13": {
+      "maxItems": 64,
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/__schema14"
+      }
+    },
+    "__schema14": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "status": {
+          "type": "string",
+          "const": "completed"
+        },
+        "conclusion": {
+          "type": "string",
+          "enum": ["success", "neutral", "skipped"]
+        },
+        "detailsUrl": {
+          "type": "string",
+          "format": "uri"
+        }
+      },
+      "required": ["name", "status", "conclusion"],
+      "additionalProperties": false
+    },
+    "__schema15": {
       "anyOf": [
         {
           "type": "object",
@@ -154,7 +241,7 @@
               "maxItems": 16,
               "type": "array",
               "items": {
-                "$ref": "#/$defs/__schema9"
+                "$ref": "#/$defs/__schema16"
               }
             }
           },
@@ -166,7 +253,7 @@
         }
       ]
     },
-    "__schema9": {
+    "__schema16": {
       "type": "object",
       "properties": {
         "criterionId": {
@@ -180,35 +267,35 @@
       "required": ["criterionId", "status"],
       "additionalProperties": false
     },
-    "__schema10": {
+    "__schema17": {
       "type": "object",
       "properties": {
         "overdue": {
           "type": "boolean"
         },
         "deliveryDeadline": {
-          "$ref": "#/$defs/__schema11"
+          "$ref": "#/$defs/__schema18"
         },
         "completedAt": {
-          "$ref": "#/$defs/__schema11"
+          "$ref": "#/$defs/__schema18"
         }
       },
       "required": ["overdue", "deliveryDeadline", "completedAt"],
       "additionalProperties": false
     },
-    "__schema11": {
+    "__schema18": {
       "type": "string",
       "format": "date-time",
       "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d\\.\\d{3}(?:Z))$"
     },
-    "__schema12": {
+    "__schema19": {
       "maxItems": 2,
       "type": "array",
       "items": {
-        "$ref": "#/$defs/__schema13"
+        "$ref": "#/$defs/__schema20"
       }
     },
-    "__schema13": {
+    "__schema20": {
       "type": "object",
       "properties": {
         "agentId": {
@@ -225,14 +312,14 @@
       "required": ["agentId", "roleSlotId", "reason"],
       "additionalProperties": false
     },
-    "__schema14": {
+    "__schema21": {
       "maxItems": 2,
       "type": "array",
       "items": {
-        "$ref": "#/$defs/__schema15"
+        "$ref": "#/$defs/__schema22"
       }
     },
-    "__schema15": {
+    "__schema22": {
       "type": "object",
       "properties": {
         "replacementId": {
@@ -256,7 +343,7 @@
       ],
       "additionalProperties": false
     },
-    "__schema16": {
+    "__schema23": {
       "type": "object",
       "properties": {
         "basePointsAwarded": {
@@ -297,14 +384,14 @@
       ],
       "additionalProperties": false
     },
-    "__schema17": {
+    "__schema24": {
       "maxItems": 16,
       "type": "array",
       "items": {
-        "$ref": "#/$defs/__schema18"
+        "$ref": "#/$defs/__schema25"
       }
     },
-    "__schema18": {
+    "__schema25": {
       "type": "object",
       "properties": {
         "agentId": {
@@ -355,7 +442,7 @@
       ],
       "additionalProperties": false
     },
-    "__schema19": {
+    "__schema26": {
       "type": "string",
       "pattern": "^[A-Za-z0-9_-]{86}$"
     }

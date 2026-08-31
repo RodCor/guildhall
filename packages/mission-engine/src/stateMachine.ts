@@ -1,4 +1,9 @@
-import { PactSchema, type DisplayState, type Pact } from "@guildhall/contracts";
+import {
+  PactSchema,
+  type ArtifactMetadata,
+  type DisplayState,
+  type Pact,
+} from "@guildhall/contracts";
 
 import type {
   LifecycleCommand,
@@ -571,6 +576,11 @@ export function transition(
         requiredOutput === undefined ||
         artifact.metadata.artifactType !== requiredOutput.type ||
         artifact.metadata.mediaType !== requiredOutput.mediaType ||
+        !artifactDeliveryMatchesPact(
+          pact.pact,
+          requiredOutput,
+          artifact.metadata.deliveryEvidence,
+        ) ||
         artifact.metadata.attempt !== state.correctionCount + 1
       ) {
         return failure(state, "INVALID_COMMAND");
@@ -1052,6 +1062,25 @@ function validDeadlineOrder(formation: string, delivery: string): boolean {
     Number.isFinite(formationTime) &&
     Number.isFinite(deliveryTime) &&
     formationTime < deliveryTime
+  );
+}
+
+function artifactDeliveryMatchesPact(
+  pact: Pact,
+  output: Pact["requiredOutputs"][number],
+  evidence: ArtifactMetadata["deliveryEvidence"] | null | undefined,
+): boolean {
+  const deliveryKind = output.delivery?.kind ?? "guildhall-artifact";
+  if (deliveryKind === "guildhall-artifact") {
+    return evidence === undefined || evidence === null;
+  }
+  const target = pact.executionTarget;
+  return (
+    target?.kind === "github" &&
+    evidence?.kind === "github-pull-request" &&
+    evidence.repository.toLowerCase() === target.repository.toLowerCase() &&
+    evidence.baseRef === target.baseRef &&
+    (target.checkPolicy === "not-required" || evidence.checks.length > 0)
   );
 }
 

@@ -185,6 +185,7 @@ async function capabilityEvidence(
       `SELECT agent_id, capability, verified_points, reliability
        FROM agent_capabilities
        WHERE agent_id IN (${agentIds.map(() => "?").join(", ")})
+         AND declared_level > 0
        ORDER BY agent_id, capability`,
     )
     .bind(...agentIds)

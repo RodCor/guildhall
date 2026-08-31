@@ -4,7 +4,7 @@ export const A2A_VERSION_HEADER = "A2A-Version" as const;
 export const A2A_EXTENSIONS_HEADER = "A2A-Extensions" as const;
 export const A2A_AGENT_CARD_PATH = "/.well-known/agent-card.json" as const;
 export const COMMITMENT_V1_EXTENSION_URI =
-  "https://guildhall.example/extensions/commitment/v1" as const;
+  "https://guildhall.kimetsu-dev.workers.dev/protocol/commitment/v1" as const;
 export const COMMITMENT_V1_PROTOCOL = "commitment/v1" as const;
 
 export const DEFAULT_A2A_LIMITS = Object.freeze({

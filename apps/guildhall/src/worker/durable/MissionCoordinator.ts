@@ -5,6 +5,7 @@ import {
   PactAcceptanceSchema,
   ReplacementProofSchema,
   ReceiptSchema,
+  artifactProofDigest,
   artifactSigningBytes,
   canonicalJsonDigest,
   importEd25519PrivateJwk,
@@ -36,6 +37,7 @@ import {
   createRedactedPublicPayload,
   scanPublicPayload,
   verifyAccessibilityDungeon,
+  verifyGitHubPullRequestDelivery,
   ACCESSIBILITY_DUNGEON_FIXTURE_DIGEST,
   ACCESSIBILITY_DUNGEON_FIXTURE_ID,
   ON_TIME_TIMELINESS_DELTA,
@@ -51,6 +53,8 @@ import { executeBoundDemoMission } from "../executionOrchestrator.js";
 import {
   projectMissionCatalog,
   projectReceipt,
+  ensureCurrentIssuerKey,
+  issuerPublicJwk,
   listAgentKeys,
   type MissionCatalogProjection,
 } from "../repositories/index.js";
@@ -177,6 +181,7 @@ export type DeadlineType =
   | "negotiation"
   | "delivery"
   | "correction"
+  | "verification_retry"
   | "a2a_retry"
   | "d1_retry";
 
@@ -185,12 +190,14 @@ const DEADLINE_TYPES = new Set<DeadlineType>([
   "negotiation",
   "delivery",
   "correction",
+  "verification_retry",
   "a2a_retry",
   "d1_retry",
 ]);
 
 const PROJECTION_RETRY_BASE_MS = 1_000;
 const A2A_RETRY_MS = 30_000;
+const VERIFICATION_RETRY_MS = 30_000;
 
 class RedactionPauseError extends Error {
   constructor(readonly code: string) {
@@ -460,7 +467,7 @@ export class MissionCoordinator extends DurableObject<GuildhallEnv> {
             },
             message: artifactSigningBytes(
               artifact.metadata.pactDigest,
-              artifact.metadata.contentDigest,
+              await artifactProofDigest(artifact),
             ),
             policy: { kind: "new-proof" },
           });
@@ -676,19 +683,11 @@ export class MissionCoordinator extends DurableObject<GuildhallEnv> {
       state.deliveredOutputIds,
     );
     const startedAt = new Date().toISOString();
-    const verification = verifyAccessibilityDungeon({
+    const commonVerificationInput = {
       verificationRunId: crypto.randomUUID(),
       pact,
       pactDigest: candidatePact.pactDigest,
       attempt: (state.correctionCount + 1) as 1 | 2,
-      fixture: {
-        fixtureId: ACCESSIBILITY_DUNGEON_FIXTURE_ID,
-        contentDigest: ACCESSIBILITY_DUNGEON_FIXTURE_DIGEST,
-        publicLocation: new URL(
-          "/fixtures/accessibility-dungeon-v1",
-          this.env.PUBLIC_ORIGIN,
-        ).toString(),
-      },
       artifacts,
       replacements: this.readReplacements(),
       infrastructureStatus: input.infrastructureStatus,
@@ -696,7 +695,21 @@ export class MissionCoordinator extends DurableObject<GuildhallEnv> {
       ...(input.infrastructureStatus === "available"
         ? { completedAt: new Date().toISOString() }
         : {}),
-    });
+    } as const;
+    const verification =
+      pact.executionTarget?.kind === "github"
+        ? await verifyGitHubPullRequestDelivery(commonVerificationInput)
+        : verifyAccessibilityDungeon({
+            ...commonVerificationInput,
+            fixture: {
+              fixtureId: ACCESSIBILITY_DUNGEON_FIXTURE_ID,
+              contentDigest: ACCESSIBILITY_DUNGEON_FIXTURE_DIGEST,
+              publicLocation: new URL(
+                "/fixtures/accessibility-dungeon-v1",
+                this.env.PUBLIC_ORIGIN,
+              ).toString(),
+            },
+          });
     const failedRoleSlotIds = [
       ...new Set(
         verification.criteria
@@ -749,6 +762,22 @@ export class MissionCoordinator extends DurableObject<GuildhallEnv> {
           JSON.stringify(verification),
           now,
         );
+        if (verification.status === "infrastructure-pending") {
+          this.ctx.storage.sql.exec(
+            `INSERT INTO deadlines(deadline_type, due_at, handled_at)
+             VALUES ('verification_retry', ?, NULL)
+             ON CONFLICT(deadline_type) DO UPDATE SET
+               due_at = excluded.due_at,
+               handled_at = NULL`,
+            Date.now() + VERIFICATION_RETRY_MS,
+          );
+        } else {
+          this.ctx.storage.sql.exec(
+            `UPDATE deadlines SET handled_at = ?
+             WHERE deadline_type = 'verification_retry' AND handled_at IS NULL`,
+            now,
+          );
+        }
       }
       return response;
     });
@@ -998,6 +1027,37 @@ export class MissionCoordinator extends DurableObject<GuildhallEnv> {
       .toArray();
 
     for (const deadline of deadlines) {
+      if (deadline.deadline_type === "verification_retry") {
+        let handled = false;
+        try {
+          const result = await this.runVerification({
+            infrastructureStatus: "available",
+          });
+          handled = result.verification.status !== "infrastructure-pending";
+        } catch (error: unknown) {
+          console.error(
+            JSON.stringify({
+              deadlineType: "verification_retry",
+              errorName: error instanceof Error ? error.name : "UnknownError",
+              message: "public delivery verification retry failed",
+            }),
+          );
+        }
+        if (handled) {
+          this.ctx.storage.sql.exec(
+            `UPDATE deadlines SET handled_at = ?
+             WHERE deadline_type = 'verification_retry' AND handled_at IS NULL`,
+            new Date().toISOString(),
+          );
+        } else {
+          this.ctx.storage.sql.exec(
+            `UPDATE deadlines SET due_at = ?
+             WHERE deadline_type = 'verification_retry' AND handled_at IS NULL`,
+            now + VERIFICATION_RETRY_MS,
+          );
+        }
+        continue;
+      }
       if (deadline.deadline_type === "a2a_retry") {
         let handled = false;
         try {
@@ -1241,7 +1301,12 @@ export class MissionCoordinator extends DurableObject<GuildhallEnv> {
       emittedAt: issuedAt,
       source: "system",
       actor: null,
-      payload: { commandId: receiptId, command: receiptCommand },
+      payload: {
+        commandId: receiptId,
+        expectedSequence: state.sequence,
+        issuedAt,
+        command: receiptCommand,
+      },
       previousEventHash: priorChainHead,
     });
     const acceptedRecords = currentAcceptedArtifactRecords(
@@ -1427,6 +1492,14 @@ export class MissionCoordinator extends DurableObject<GuildhallEnv> {
           0,
         )
       : 0;
+    const issuerKeyId = this.requireIssuerKeyId();
+    const issuerJwk = this.requireIssuerJwk();
+    const publicIssuerJwk = issuerPublicJwk(issuerJwk);
+    await ensureCurrentIssuerKey(this.env.GUILD_DB, {
+      keyId: issuerKeyId,
+      publicJwk: publicIssuerJwk,
+      observedAt: issuedAt,
+    });
     const unsigned = {
       protocol: "commitment/v1" as const,
       kind: "receipt" as const,
@@ -1440,6 +1513,9 @@ export class MissionCoordinator extends DurableObject<GuildhallEnv> {
         roleSlotId: artifact.metadata.roleSlotId,
         producingAgentId: artifact.metadata.producingAgentId,
         contentDigest: artifact.metadata.contentDigest,
+        ...(artifact.metadata.deliveryEvidence === undefined
+          ? {}
+          : { deliveryEvidence: artifact.metadata.deliveryEvidence }),
       })),
       verification:
         verification === null
@@ -1476,10 +1552,10 @@ export class MissionCoordinator extends DurableObject<GuildhallEnv> {
         monetaryValue: false as const,
       },
       reputationDeltas,
-      issuerKeyId: this.requireIssuerKeyId(),
+      issuerKeyId,
       issuedAt,
     };
-    const privateKey = await importEd25519PrivateJwk(this.requireIssuerJwk());
+    const privateKey = await importEd25519PrivateJwk(issuerJwk);
     const digest = await canonicalJsonDigest(unsigned);
     const issuerSignature = await signEd25519(
       privateKey,
@@ -1718,7 +1794,33 @@ export class MissionCoordinator extends DurableObject<GuildhallEnv> {
         actor: completeActor(command),
         payload: {
           commandId: command.commandId,
+          expectedSequence: command.expectedSequence ?? null,
+          issuedAt: command.issuedAt,
           command: command.command,
+          ...(command.proof === undefined
+            ? {}
+            : {
+                commandProof: command.proof,
+                commandProofMaterial: {
+                  commandId: command.commandId,
+                  action: command.proofAction ?? command.command.type,
+                  missionId: after.missionId,
+                  expectedSequence: command.expectedSequence,
+                  actor:
+                    command.actor === null
+                      ? null
+                      : {
+                          agentId: command.actor.agentId,
+                          keyId: command.actor.keyId,
+                        },
+                  issuedAt: command.issuedAt,
+                  payload: structuredClone(
+                    command.proofPayload ?? command.command,
+                  ),
+                },
+                proofVerifiedAt: command.proofVerifiedAt,
+                keyStatusCheckedAt: command.keyStatusCheckedAt,
+              }),
         },
         previousEventHash,
       });
@@ -2424,8 +2526,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-/** Transport retry time is audit metadata, not part of command identity. */
+/** Server verification time is audit metadata, not part of client command identity. */
 function coordinatorRequestHash(input: CoordinatorCommand): string {
-  const { issuedAt: _issuedAt, ...semanticCommand } = input;
-  return canonicalDigestSync(semanticCommand);
+  const {
+    proofVerifiedAt: _proofVerifiedAt,
+    keyStatusCheckedAt: _keyStatusCheckedAt,
+    ...semanticCommand
+  } = input;
+  if (semanticCommand.proof !== undefined) {
+    return canonicalDigestSync(semanticCommand);
+  }
+  const { issuedAt: _issuedAt, ...unsignedInternalCommand } = semanticCommand;
+  return canonicalDigestSync(unsignedInternalCommand);
 }

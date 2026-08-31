@@ -1,4 +1,9 @@
-import { MissionSchema, type Mission } from "@guildhall/contracts";
+import {
+  CommandProofSchema,
+  MissionSchema,
+  type CommandProof,
+  type Mission,
+} from "@guildhall/contracts";
 import {
   PUBLIC_SAFETY_RULESET_VERSION,
   createRedactedPublicPayload,
@@ -13,6 +18,7 @@ import {
   createPrivateDraft,
   getAutonomyPolicy,
   getPendingPairingChallenge,
+  listOwnedAgentCapabilities,
   listAgentKeys,
   readOwnedAgent,
   readPrivateDraft,
@@ -21,6 +27,7 @@ import {
   registerAgentKey,
   revokeAgentKey,
   revokeScopedCredential,
+  replaceOwnedAgentCapabilities,
   setAutonomyPolicy,
   updateOwnedAgent,
   type AgentProfile,
@@ -31,6 +38,7 @@ import {
   authorizeAgentAction,
   type AgentAuthorization,
 } from "./agentAuthorization.js";
+import { verifyAuthenticatedCommandProof } from "./commandProof.js";
 import {
   canonicalizeEd25519PublicJwk,
   deriveEd25519KeyId,
@@ -52,6 +60,7 @@ const BROWSER_KEY_REPLACE_ROUTE =
 const CREDENTIAL_REVOKE_ROUTE =
   /^\/api\/agents\/([^/]+)\/credentials\/([^/]+)\/revoke$/u;
 const AUTONOMY_ROUTE = /^\/api\/agents\/([^/]+)\/autonomy$/u;
+const CAPABILITIES_ROUTE = /^\/api\/agents\/([^/]+)\/capabilities$/u;
 const DRAFT_ROUTE = /^\/api\/drafts\/([^/]+)$/u;
 const DRAFT_PUBLISH_ROUTE = /^\/api\/drafts\/([^/]+)\/publish$/u;
 const WEBMCP_DRAFT_PUBLISH_ROUTE = /^\/api\/webmcp\/drafts\/([^/]+)\/publish$/u;
@@ -115,6 +124,21 @@ export async function handleAgentRoute(
   if (autonomyMatch !== null && request.method === "PUT") {
     return changeAutonomy(request, env, decodeURIComponent(autonomyMatch[1]!));
   }
+  const capabilitiesMatch = CAPABILITIES_ROUTE.exec(url.pathname);
+  if (capabilitiesMatch !== null && request.method === "GET") {
+    return readCapabilities(
+      request,
+      env,
+      decodeURIComponent(capabilitiesMatch[1]!),
+    );
+  }
+  if (capabilitiesMatch !== null && request.method === "PUT") {
+    return changeCapabilities(
+      request,
+      env,
+      decodeURIComponent(capabilitiesMatch[1]!),
+    );
+  }
   const publishMatch = DRAFT_PUBLISH_ROUTE.exec(url.pathname);
   if (publishMatch !== null && request.method === "POST") {
     return publishPrivateDraft(
@@ -129,7 +153,6 @@ export async function handleAgentRoute(
       request,
       env,
       decodeURIComponent(webMcpPublishMatch[1]!),
-      "webmcp",
     );
   }
   const draftMatch = DRAFT_ROUTE.exec(url.pathname);
@@ -644,6 +667,47 @@ async function readAutonomy(
   });
 }
 
+async function readCapabilities(
+  request: Request,
+  env: GuildhallEnv,
+  agentId: string,
+): Promise<Response> {
+  const owner = await authenticateOwner(request, env);
+  if (!owner.ok) return owner.response;
+  const capabilities = await listOwnedAgentCapabilities(
+    env.GUILD_DB,
+    owner.principal.ownerId,
+    agentId,
+  );
+  return capabilities === null
+    ? noStoreJson({ error: "AGENT_NOT_FOUND" }, { status: 404 })
+    : noStoreJson({ agentId, capabilities });
+}
+
+async function changeCapabilities(
+  request: Request,
+  env: GuildhallEnv,
+  agentId: string,
+): Promise<Response> {
+  const owner = await authorizeOwnerMutation(request, env);
+  if (!owner.ok) return owner.response;
+  const body = await readJsonRecord(request);
+  const capabilities = parseCapabilityNames(body?.capabilities);
+  if (capabilities === null) return invalid("agent capabilities");
+  const scan = scanPublicPayload({ capabilities });
+  if (!scan.safe) return unsafe(scan);
+  const declarations = await replaceOwnedAgentCapabilities(env.GUILD_DB, {
+    ownerId: owner.principal.ownerId,
+    agentId,
+    capabilities,
+    declaredLevel: 50,
+    updatedAt: new Date().toISOString(),
+  });
+  return declarations === null
+    ? noStoreJson({ error: "AGENT_NOT_FOUND" }, { status: 404 })
+    : noStoreJson({ agentId, capabilities: declarations });
+}
+
 async function savePrivateDraft(
   request: Request,
   env: GuildhallEnv,
@@ -740,16 +804,20 @@ async function publishPrivateDraft(
   request: Request,
   env: GuildhallEnv,
   draftId: string,
-  trustedSource?: "webmcp",
 ): Promise<Response> {
   const bodyText = await request.text();
   const body = parseJsonRecord(bodyText);
   const requesterAgentId = stringField(body, "requesterAgentId", 1, 100);
+  const keyId = uuidField(body, "keyId");
+  const commandId = uuidField(body, "commandId");
+  const issuedAt = stringField(body, "issuedAt", 1, 40);
+  const proof = CommandProofSchema.safeParse(body?.proof);
   if (requesterAgentId === null) return invalid("requester agent");
   const authorization = await authorizeAgentAction(request, env, {
     agentId: requesterAgentId,
     bodyText,
     requiredScope: "missions:write",
+    ...(keyId === null ? {} : { keyId }),
   });
   if (!authorization.ok) return authorization.response;
   const ownerId =
@@ -797,17 +865,42 @@ async function publishPrivateDraft(
   ) {
     return invalid("mission payload");
   }
-  const commandId =
-    trustedSource === "webmcp" ? uuidField(body, "commandId") : null;
-  if (trustedSource === "webmcp" && commandId === null) {
-    return invalid("WebMCP command identifier");
+  if (
+    keyId === null ||
+    commandId === null ||
+    issuedAt === null ||
+    !proof.success ||
+    authorization.keyId !== keyId
+  ) {
+    return invalid("publication proof");
+  }
+  const verifiedProof = await verifyAuthenticatedCommandProof({
+    authorization,
+    commandId,
+    action: "publish",
+    missionId: parsedMission.data.missionId,
+    expectedSequence: 0,
+    issuedAt,
+    payload: parsedMission.data,
+    proof: proof.data,
+  });
+  if (verifiedProof === null) {
+    return noStoreJson(
+      {
+        error: "COMMAND_PROOF_INVALID",
+        message: "The publication signature is missing, stale, or invalid",
+      },
+      { status: 403 },
+    );
   }
   return publishMission(
     env,
     parsedMission.data,
     authorization,
-    trustedSource,
-    commandId ?? undefined,
+    commandId,
+    issuedAt,
+    proof.data,
+    verifiedProof.verifiedAt,
   );
 }
 
@@ -815,8 +908,10 @@ async function publishMission(
   env: GuildhallEnv,
   mission: Mission,
   authorization: Extract<AgentAuthorization, { ok: true }>,
-  trustedSource?: "webmcp",
-  commandId: string = crypto.randomUUID(),
+  commandId: string,
+  issuedAt: string,
+  proof: CommandProof,
+  proofVerifiedAt: string,
 ): Promise<Response> {
   const coordinator = env.MISSIONS.getByName(mission.missionId);
   const publicOwnerId =
@@ -831,9 +926,14 @@ async function publishMission(
       ownerId: publicOwnerId,
       keyId: authorization.keyId,
     },
-    source: trustedSource ?? (authorization.kind === "owner" ? "http" : "mcp"),
-    issuedAt: new Date().toISOString(),
+    source: authorization.kind === "owner" ? "http" : "mcp",
+    issuedAt,
     command: { type: "publish" },
+    proof,
+    proofVerifiedAt,
+    keyStatusCheckedAt: authorization.keyStatusCheckedAt,
+    proofAction: "publish",
+    proofPayload: mission,
   } as const;
   const result = await coordinator.publishMission(mission, publicationCommand);
   return result.ok
@@ -841,8 +941,7 @@ async function publishMission(
         {
           missionId: mission.missionId,
           published: true,
-          source:
-            trustedSource ?? (authorization.kind === "owner" ? "http" : "mcp"),
+          source: authorization.kind === "owner" ? "http" : "mcp",
           resultingSequence: result.resultingSequence,
         },
         { status: 201 },
@@ -880,16 +979,6 @@ async function emergencyRedaction(
   );
   if (requester === null)
     return noStoreJson({ error: "MISSION_NOT_FOUND" }, { status: 404 });
-  const browserKey = (
-    await listAgentKeys(env.GUILD_DB, requester.agentId)
-  ).find(
-    (candidate) =>
-      candidate.source === "browser" && candidate.status === "active",
-  );
-  if (browserKey === undefined) {
-    return noStoreJson({ error: "AGENT_NOT_AUTHORIZED" }, { status: 403 });
-  }
-
   const now = new Date().toISOString();
   const requestedRedactionId = crypto.randomUUID();
   const coordinator = env.MISSIONS.getByName(missionId);
@@ -902,7 +991,7 @@ async function emergencyRedaction(
       pauseCommand: {
         commandId: string;
         expectedSequence: number;
-        actor: { agentId: string; ownerId: string; keyId: string };
+        actor: null;
         source: "http";
         issuedAt: string;
         command: { type: "safety_redact"; redactedEventId: string };
@@ -931,11 +1020,9 @@ async function emergencyRedaction(
       pauseCommand: {
         commandId: crypto.randomUUID(),
         expectedSequence: snapshot.latestSequence,
-        actor: {
-          agentId: catalog.requester_agent_id,
-          ownerId: `github:${owner.principal.githubUserId}`,
-          keyId: browserKey.keyId,
-        },
+        // Owner-authenticated emergency administration is not an agent
+        // signature. The separate redaction audit record names the owner.
+        actor: null,
         source: "http",
         issuedAt: now,
         command: { type: "safety_redact", redactedEventId: eventId },
@@ -1040,6 +1127,23 @@ function parseAgentProfile(body: Record<string, unknown> | null) {
     guildName,
     publicBio,
   };
+}
+
+function parseCapabilityNames(value: unknown): readonly string[] | null {
+  if (
+    !Array.isArray(value) ||
+    value.length < 1 ||
+    value.length > 16 ||
+    value.some(
+      (capability) =>
+        typeof capability !== "string" ||
+        !/^[a-z0-9][a-z0-9._-]{0,79}$/u.test(capability),
+    )
+  ) {
+    return null;
+  }
+  const unique = [...new Set(value)].sort();
+  return unique.length === value.length ? unique : null;
 }
 
 function parsePublicKey(value: unknown): {

@@ -92,8 +92,10 @@
 .owner-account .account-session-row,
 .owner-account .account-session-identity,
 .owner-account .agent-connection-main,
+.owner-account .account-capabilities-row,
 .owner-account .account-security-row,
-.owner-account .account-autonomy-row {
+.owner-account .account-autonomy-row,
+.owner-account .account-pairing-row {
   display: flex;
   align-items: center;
 }
@@ -191,7 +193,9 @@
 }
 
 .owner-account .account-security-row,
-.owner-account .account-autonomy-row {
+.owner-account .account-autonomy-row,
+.owner-account .account-capabilities-row,
+.owner-account .account-pairing-row {
   justify-content: space-between;
   gap: 18px;
   padding: 14px 16px;
@@ -208,19 +212,25 @@
 }
 
 .owner-account .account-security-row > div:first-child,
-.owner-account .account-autonomy-row > div:first-child {
+.owner-account .account-autonomy-row > div:first-child,
+.owner-account .account-capabilities-row > div:first-child,
+.owner-account .account-pairing-row > div:first-child {
   min-width: 0;
   max-width: 500px;
 }
 
 .owner-account .account-security-row strong,
-.owner-account .account-autonomy-row strong {
+.owner-account .account-autonomy-row strong,
+.owner-account .account-capabilities-row strong,
+.owner-account .account-pairing-row strong {
   display: block;
   font-size: 0.72rem;
 }
 
 .owner-account .account-security-row p,
 .owner-account .account-autonomy-row p,
+.owner-account .account-capabilities-row p,
+.owner-account .account-pairing-row p,
 .owner-account .account-inline-confirmation p {
   margin: 4px 0 0;
   color: var(--hud-muted, #9baab0);
@@ -239,10 +249,156 @@
 }
 
 .owner-account .account-security-row > button,
-.owner-account .account-autonomy-row > button {
+.owner-account .account-autonomy-row > button,
+.owner-account .account-capabilities-row > button,
+.owner-account .account-pairing-row > button {
   min-width: 150px;
   min-height: 44px;
   flex: 0 0 auto;
+}
+
+.owner-account .account-capabilities-row {
+  align-items: flex-start;
+  background: rgba(102, 153, 255, 0.035);
+}
+
+.owner-account .account-capability-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.owner-account .account-capability-tags > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 25px;
+  padding: 4px 8px;
+  border: 1px solid rgba(131, 215, 194, 0.22);
+  border-radius: 999px;
+  color: var(--hud-copy, #d7e5e6);
+  background: rgba(131, 215, 194, 0.06);
+  font-family: var(--font-code, monospace);
+  font-size: 0.59rem;
+}
+
+.owner-account .account-capability-tags small {
+  color: var(--hud-verified, #9cdda0);
+}
+
+.owner-account .account-capability-editor {
+  width: min(360px, 100%);
+  flex: 0 0 auto;
+}
+
+.owner-account .account-capability-editor label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--hud-muted, #9baab0);
+  font-size: 0.55rem;
+}
+
+.owner-account .account-capability-editor input {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid var(--hud-edge-bright, rgba(131, 215, 194, 0.25));
+  border-radius: 8px;
+  color: var(--hud-copy, #d7e5e6);
+  background: rgba(2, 10, 14, 0.62);
+  font: inherit;
+  font-size: 0.66rem;
+}
+
+.owner-account .account-capability-editor > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.owner-account .account-capability-editor button {
+  min-height: 44px;
+}
+
+.owner-account .account-pairing-row {
+  align-items: flex-start;
+  background: rgba(131, 215, 194, 0.035);
+}
+
+.owner-account .account-pairing-error {
+  color: #f3bd9f;
+}
+
+.owner-account .account-pairing-row > .account-pairing-packet:first-child {
+  width: 100%;
+  max-width: none;
+}
+
+.owner-account .account-pairing-heading,
+.owner-account .account-pairing-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.owner-account
+  .account-pairing-heading
+  .account-status-pill[data-tone="expired"] {
+  border-color: rgba(233, 184, 114, 0.35);
+  color: var(--hud-warm, #e9b872);
+  background: rgba(233, 184, 114, 0.08);
+}
+
+.owner-account .account-pairing-values {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.owner-account .account-pairing-values > div {
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.owner-account .account-pairing-values dt {
+  padding-top: 8px;
+  color: var(--hud-muted, #9baab0);
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.owner-account .account-pairing-values dd {
+  min-width: 0;
+  margin: 0;
+}
+
+.owner-account .account-pairing-values code {
+  display: block;
+  max-height: 92px;
+  padding: 8px 10px;
+  overflow: auto;
+  border: 1px solid var(--hud-edge, rgba(255, 255, 255, 0.1));
+  border-radius: 8px;
+  background: rgba(2, 10, 14, 0.62);
+  font-size: 0.62rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.owner-account .account-pairing-actions {
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.owner-account .account-pairing-actions button {
+  min-height: 44px;
 }
 
 .owner-account .account-revoke-action {
@@ -343,8 +499,10 @@
   }
 
   .owner-account .agent-connection-main,
+  .owner-account .account-capabilities-row,
   .owner-account .account-security-row,
-  .owner-account .account-autonomy-row {
+  .owner-account .account-autonomy-row,
+  .owner-account .account-pairing-row {
     align-items: stretch;
     flex-direction: column;
     gap: 12px;
@@ -352,6 +510,8 @@
 
   .owner-account .account-security-row > button,
   .owner-account .account-autonomy-row > button,
+  .owner-account .account-capabilities-row > button,
+  .owner-account .account-pairing-row > button,
   .owner-account .account-inline-confirmation {
     width: 100%;
     min-width: 0;
@@ -366,6 +526,25 @@
   }
 
   .owner-account .agent-connection-actions > button {
+    width: 100%;
+  }
+
+  .owner-account .account-pairing-heading,
+  .owner-account .account-pairing-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .owner-account .account-pairing-actions button {
+    width: 100%;
+  }
+
+  .owner-account .account-pairing-values > div {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .owner-account .account-capability-editor {
     width: 100%;
   }
 }

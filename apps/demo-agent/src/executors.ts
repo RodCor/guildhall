@@ -79,6 +79,7 @@ async function executeScout(
     attempt,
     artifactType: "accessibility-findings",
     content,
+    ...artifactBinding(payload),
   });
   return completedResult(artifact.artifactId, [artifact]);
 }
@@ -120,6 +121,7 @@ async function executeScribe(
     attempt,
     artifactType: "remediation-plan",
     content,
+    ...artifactBinding(payload),
   });
   return completedResult(artifact.artifactId, [artifact]);
 }
@@ -218,6 +220,7 @@ async function executeWarden(
     attempt,
     artifactType,
     content,
+    ...artifactBinding(payload),
   });
   const artifact = {
     ...signedArtifact,
@@ -444,6 +447,34 @@ function requiredString(value: JsonObject, key: string): string {
     throw rejectedAssignment(`${key} is required.`);
   }
   return candidate;
+}
+
+function stringValues(value: JsonValue | undefined): string[] {
+  if (
+    !Array.isArray(value) ||
+    !value.every((entry) => typeof entry === "string")
+  ) {
+    throw rejectedAssignment("dependencyArtifactIds must be a string array.");
+  }
+  return [...value];
+}
+
+function artifactBinding(payload: JsonObject): {
+  readonly outputId?: string;
+  readonly dependencyArtifactIds?: readonly string[];
+} {
+  const outputId = payload.outputId;
+  const dependencies = payload.dependencyArtifactIds;
+  if (outputId === undefined && dependencies === undefined) return {};
+  if (typeof outputId !== "string" || outputId.length === 0) {
+    throw rejectedAssignment(
+      "outputId is required with artifact dependencies.",
+    );
+  }
+  return {
+    outputId,
+    dependencyArtifactIds: stringValues(dependencies),
+  };
 }
 
 function optionalString(value: JsonObject, key: string): string | null {

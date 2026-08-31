@@ -14,6 +14,10 @@ import {
   upsertGithubOwnerAndSession,
 } from "../../apps/guildhall/src/worker/repositories";
 import { createAgentRequestSignatureMessage } from "../../packages/trust-engine/src";
+import {
+  commandBodyHash,
+  commandSigningBytes,
+} from "../../packages/contracts/src";
 
 import {
   A2A_CONTENT_TYPE,
@@ -503,11 +507,53 @@ async function seedGuildNode(githubUserId = 9_910_001): Promise<{
 async function signedA2ARequest(
   body: Record<string, unknown>,
   identity: {
+    readonly agentId: string;
     readonly credential: string;
     readonly keyId: string;
     readonly privateKey: CryptoKey;
   },
 ): Promise<Request> {
+  const message = body.message as Record<string, unknown>;
+  const part = (message.parts as Record<string, unknown>[])[0]!;
+  const input = part.data as Record<string, unknown>;
+  const metadata = message.metadata as Record<string, Record<string, unknown>>;
+  const commitment = metadata[COMMITMENT_V1_EXTENSION_URI]!;
+  const commandIssuedAt = new Date().toISOString();
+  const commandId =
+    typeof input.commandId === "string"
+      ? input.commandId
+      : String(message.messageId);
+  const {
+    protocol: _protocol,
+    action,
+    missionId,
+    agentId: _agentId,
+    commandIssuedAt: _priorIssuedAt,
+    commandProof: _priorProof,
+    ...unsignedCommitment
+  } = commitment;
+  const bodyHash = await commandBodyHash({
+    commandId,
+    action: String(action),
+    missionId: String(missionId),
+    expectedSequence: Number(input.expectedSequence),
+    actor: { agentId: identity.agentId, keyId: identity.keyId },
+    issuedAt: commandIssuedAt,
+    payload: { input, commitment: unsignedCommitment },
+  });
+  commitment.commandIssuedAt = commandIssuedAt;
+  commitment.commandProof = {
+    bodyHash,
+    signature: encodeBase64Url(
+      new Uint8Array(
+        await crypto.subtle.sign(
+          "Ed25519",
+          identity.privateKey,
+          commandSigningBytes(bodyHash).slice().buffer as ArrayBuffer,
+        ),
+      ),
+    ),
+  };
   const bodyText = JSON.stringify(body);
   const requestTarget = "/a2a/guild/v1/message:send";
   const issuedAt = new Date().toISOString();
