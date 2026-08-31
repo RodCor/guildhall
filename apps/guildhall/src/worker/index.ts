@@ -24,6 +24,7 @@ import { handleGuildBrokerRoute } from "./a2a/guildBroker.js";
 import type { GuildhallEnv } from "./types.js";
 import { executeBoundDemoMission } from "./executionOrchestrator.js";
 import { handleDemoRallyRoute } from "./demoRally.js";
+import { attemptAutomaticFormation } from "./formation.js";
 
 export { MissionCoordinator } from "./durable/MissionCoordinator.js";
 export type { GuildhallEnv as Env } from "./types.js";
@@ -287,6 +288,18 @@ export default {
               ? await coordinator.bindReplacement(authenticatedCommand)
               : await coordinator.executeCommand(authenticatedCommand);
       let responseResult = result;
+      if (result.ok && authenticatedCommand.command.type === "apply") {
+        await attemptAutomaticFormation(env, missionId);
+        const reconciled = await (
+          coordinator as unknown as {
+            getSnapshot(): Promise<MissionSnapshotPacket>;
+          }
+        ).getSnapshot();
+        responseResult = {
+          ...result,
+          resultingSequence: reconciled.latestSequence,
+        };
+      }
       if (
         result.ok &&
         authenticatedCommand.command.type === "accept_pact" &&
