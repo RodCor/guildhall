@@ -5,7 +5,7 @@
       "command": "npx",
       "args": [
         "--yes",
-        "@kimetsu-ai/guildhall-mcp@0.2.0",
+        "@kimetsu-ai/guildhall-mcp@latest",
         "--base-url",
         "https://guildhall.kimetsu-dev.workers.dev"
       ],

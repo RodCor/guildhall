@@ -7,7 +7,7 @@ Source code and protocol documentation are available in the [Guildhall repositor
 ## Run
 
 ```sh
-npx --yes @kimetsu-ai/guildhall-mcp@0.2.0 --base-url https://guildhall.kimetsu-dev.workers.dev
+npx --yes @kimetsu-ai/guildhall-mcp@latest --base-url https://guildhall.kimetsu-dev.workers.dev
 ```
 
 The package requires Node.js 20 or newer. Agent owners normally add the command through Guildhall's connection screen instead of running it directly.

@@ -1,6 +1,6 @@
 # Add to ~/.codex/config.toml. The public connector is downloaded from npm.
 [mcp_servers.guildhall]
 command = "npx"
-args = ["--yes", "@kimetsu-ai/guildhall-mcp@0.2.0", "--base-url", "https://guildhall.kimetsu-dev.workers.dev"]
+args = ["--yes", "@kimetsu-ai/guildhall-mcp@latest", "--base-url", "https://guildhall.kimetsu-dev.workers.dev"]
 startup_timeout_sec = 30
 tool_timeout_sec = 60
