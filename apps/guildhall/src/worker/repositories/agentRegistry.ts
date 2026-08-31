@@ -55,6 +55,24 @@ export interface DeclareAgentCapabilityInput {
   readonly updatedAt: string;
 }
 
+export interface ReplaceOwnedAgentCapabilitiesInput {
+  readonly ownerId: string;
+  readonly agentId: string;
+  readonly capabilities: readonly string[];
+  readonly declaredLevel: number;
+  readonly updatedAt: string;
+}
+
+export interface AgentCapabilityDeclaration {
+  readonly capability: string;
+  readonly declaredLevel: number;
+  readonly verifiedPoints: number;
+  readonly verifiedMissions: number;
+  readonly reliability: number;
+  readonly timeliness: number;
+  readonly updatedAt: string;
+}
+
 export interface AgentKeyRecord {
   readonly keyId: string;
   readonly agentId: string;
@@ -299,6 +317,16 @@ interface AutonomyRow {
   readonly updated_at: string;
 }
 
+interface CapabilityDeclarationRow {
+  readonly capability: string;
+  readonly declared_level: number;
+  readonly verified_points: number;
+  readonly verified_missions: number;
+  readonly reliability: number;
+  readonly timeliness: number;
+  readonly updated_at: string;
+}
+
 interface PrivateDraftRow {
   readonly draft_id: string;
   readonly owner_id: string;
@@ -456,6 +484,129 @@ export async function declareAgentCapability(
     )
     .run();
   return result.meta.changes > 0;
+}
+
+/**
+ * Replaces owner declarations without deleting receipt-owned reputation.
+ * Removed capabilities remain as inactive rows when they carry verified proof.
+ */
+export async function replaceOwnedAgentCapabilities(
+  database: D1Database,
+  input: ReplaceOwnedAgentCapabilitiesInput,
+): Promise<readonly AgentCapabilityDeclaration[] | null> {
+  const capabilities = [...new Set(input.capabilities)].sort();
+  if (
+    capabilities.length < 1 ||
+    capabilities.length > 16 ||
+    capabilities.some(
+      (capability) => !/^[a-z0-9][a-z0-9._-]{0,79}$/u.test(capability),
+    ) ||
+    !Number.isSafeInteger(input.declaredLevel) ||
+    input.declaredLevel < 1 ||
+    input.declaredLevel > 100
+  ) {
+    throw new TypeError("Capability declarations are invalid");
+  }
+
+  const statements = [
+    database
+      .prepare(
+        `UPDATE agent_capabilities
+         SET declared_level = 0, updated_at = ?
+         WHERE agent_id = ?
+           AND EXISTS (
+             SELECT 1 FROM agents
+             WHERE agents.agent_id = agent_capabilities.agent_id
+               AND agents.owner_id = ?
+           )`,
+      )
+      .bind(input.updatedAt, input.agentId, input.ownerId),
+    ...capabilities.map((capability) =>
+      database
+        .prepare(
+          `INSERT INTO agent_capabilities (
+             agent_id, capability, declared_level, verified_points,
+             verified_missions, reliability, timeliness, updated_at
+           )
+           SELECT agents.agent_id, ?, ?, 0, 0, 0, 0, ?
+           FROM agents
+           WHERE agents.agent_id = ? AND agents.owner_id = ?
+           ON CONFLICT(agent_id, capability) DO UPDATE SET
+             declared_level = excluded.declared_level,
+             updated_at = excluded.updated_at`,
+        )
+        .bind(
+          capability,
+          input.declaredLevel,
+          input.updatedAt,
+          input.agentId,
+          input.ownerId,
+        ),
+    ),
+    database
+      .prepare(
+        `SELECT
+           capability,
+           declared_level,
+           verified_points,
+           verified_missions,
+           reliability,
+           timeliness,
+           updated_at
+         FROM agent_capabilities
+         WHERE agent_id = ? AND declared_level > 0
+           AND EXISTS (
+             SELECT 1 FROM agents
+             WHERE agents.agent_id = agent_capabilities.agent_id
+               AND agents.owner_id = ?
+           )
+         ORDER BY capability`,
+      )
+      .bind(input.agentId, input.ownerId),
+  ];
+  const results = await database.batch<CapabilityDeclarationRow>(statements);
+  const rows = results.at(-1)?.results ?? [];
+  return rows.length === 0 ? null : rows.map(toCapabilityDeclaration);
+}
+
+export async function listOwnedAgentCapabilities(
+  database: D1Database,
+  ownerId: string,
+  agentId: string,
+): Promise<readonly AgentCapabilityDeclaration[] | null> {
+  const results = await database.batch<
+    CapabilityDeclarationRow | { agent_id: string }
+  >([
+    database
+      .prepare(
+        `SELECT agent_id FROM agents
+         WHERE agent_id = ? AND owner_id = ?
+         LIMIT 1`,
+      )
+      .bind(agentId, ownerId),
+    database
+      .prepare(
+        `SELECT
+           capability,
+           declared_level,
+           verified_points,
+           verified_missions,
+           reliability,
+           timeliness,
+           updated_at
+         FROM agent_capabilities
+         WHERE agent_id = ? AND declared_level > 0
+         ORDER BY capability`,
+      )
+      .bind(agentId),
+  ]);
+  if (results[0]?.results.length !== 1) return null;
+  return (results[1]?.results ?? []).map((row) => {
+    if (!("capability" in row)) {
+      throw new Error("D1 returned an invalid capability declaration");
+    }
+    return toCapabilityDeclaration(row);
+  });
 }
 
 export async function readOwnedAgent(
@@ -1534,6 +1685,20 @@ function toAutonomyPolicy(row: AutonomyRow): AutonomyPolicy {
     version: row.policy_version,
     consentedAt: row.consented_at,
     revokedAt: row.revoked_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function toCapabilityDeclaration(
+  row: CapabilityDeclarationRow,
+): AgentCapabilityDeclaration {
+  return {
+    capability: row.capability,
+    declaredLevel: row.declared_level,
+    verifiedPoints: row.verified_points,
+    verifiedMissions: row.verified_missions,
+    reliability: row.reliability,
+    timeliness: row.timeliness,
     updatedAt: row.updated_at,
   };
 }

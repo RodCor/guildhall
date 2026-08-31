@@ -59,6 +59,16 @@ interface AutonomyPolicy {
   readonly updatedAt: string | null;
 }
 
+interface AgentCapability {
+  readonly capability: string;
+  readonly declaredLevel: number;
+  readonly verifiedPoints: number;
+  readonly verifiedMissions: number;
+  readonly reliability: number;
+  readonly timeliness: number;
+  readonly updatedAt: string;
+}
+
 interface PairingPacket {
   readonly agentId: string;
   readonly code: string;
@@ -111,6 +121,10 @@ export const OwnerGateway = forwardRef<
     Readonly<Record<string, AutonomyPolicy | undefined>>
   >({});
   const [autonomyLoading, setAutonomyLoading] = useState(false);
+  const [agentCapabilities, setAgentCapabilities] = useState<
+    Readonly<Record<string, readonly AgentCapability[] | undefined>>
+  >({});
+  const [capabilitiesLoading, setCapabilitiesLoading] = useState(false);
 
   const activeAgent =
     agents.find((candidate) => candidate.agentId === activeAgentId) ?? null;
@@ -194,24 +208,54 @@ export const OwnerGateway = forwardRef<
     }
     let active = true;
     setAutonomyLoading(true);
+    setCapabilitiesLoading(true);
     void Promise.all(
       agents.map(async (agent) => {
         try {
-          const response = await fetch(
-            `/api/agents/${encodeURIComponent(agent.agentId)}/autonomy`,
-            { credentials: "same-origin" },
-          );
-          if (!response.ok) return [agent.agentId, undefined] as const;
-          const body: unknown = await response.json();
-          return [agent.agentId, parseAutonomyPolicy(body)] as const;
+          const segment = encodeURIComponent(agent.agentId);
+          const [autonomyResponse, capabilitiesResponse] = await Promise.all([
+            fetch(`/api/agents/${segment}/autonomy`, {
+              credentials: "same-origin",
+            }),
+            fetch(`/api/agents/${segment}/capabilities`, {
+              credentials: "same-origin",
+            }),
+          ]);
+          const [autonomyBody, capabilitiesBody] = await Promise.all([
+            autonomyResponse.ok
+              ? (autonomyResponse.json() as Promise<unknown>)
+              : Promise.resolve(null),
+            capabilitiesResponse.ok
+              ? (capabilitiesResponse.json() as Promise<unknown>)
+              : Promise.resolve(null),
+          ]);
+          return {
+            agentId: agent.agentId,
+            autonomy: parseAutonomyPolicy(autonomyBody),
+            capabilities: parseCapabilityResponse(capabilitiesBody),
+          };
         } catch {
-          return [agent.agentId, undefined] as const;
+          return {
+            agentId: agent.agentId,
+            autonomy: undefined,
+            capabilities: undefined,
+          };
         }
       }),
     ).then((entries) => {
       if (!active) return;
-      setAutonomyPolicies(Object.fromEntries(entries));
+      setAutonomyPolicies(
+        Object.fromEntries(
+          entries.map((entry) => [entry.agentId, entry.autonomy]),
+        ),
+      );
+      setAgentCapabilities(
+        Object.fromEntries(
+          entries.map((entry) => [entry.agentId, entry.capabilities]),
+        ),
+      );
       setAutonomyLoading(false);
+      setCapabilitiesLoading(false);
     });
     return () => {
       active = false;
@@ -473,6 +517,43 @@ export const OwnerGateway = forwardRef<
     }
   }
 
+  async function changeCapabilities(
+    agentId: string,
+    capabilities: readonly string[],
+  ): Promise<boolean> {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const response = await ownerMutation(
+        `/api/agents/${encodeURIComponent(agentId)}/capabilities`,
+        "PUT",
+        { capabilities },
+      );
+      const body: unknown = await response.json().catch(() => null);
+      const declarations = parseCapabilityResponse(body);
+      if (!response.ok) {
+        throw apiRequestErrorFromBody(
+          body,
+          "Capabilities could not be updated.",
+        );
+      }
+      if (declarations === undefined) {
+        throw new Error("The server returned invalid capability data.");
+      }
+      setAgentCapabilities((current) => ({
+        ...current,
+        [agentId]: declarations,
+      }));
+      setNotice("Technical capabilities updated.");
+      return true;
+    } catch (error) {
+      setNotice(errorMessage(error, "Capabilities could not be updated."));
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function openManager(mode: Exclude<ManagerMode, "closed">) {
     setFormErrors({});
     setManagerMode(mode);
@@ -584,6 +665,8 @@ export const OwnerGateway = forwardRef<
           editingAgent={editingAgent}
           autonomyPolicies={autonomyPolicies}
           autonomyLoading={autonomyLoading}
+          agentCapabilities={agentCapabilities}
+          capabilitiesLoading={capabilitiesLoading}
           busy={busy}
           formErrors={formErrors}
           onClose={() => {
@@ -611,6 +694,7 @@ export const OwnerGateway = forwardRef<
           }}
           onReplaceSigner={replaceSigner}
           onAutonomyChange={changeAutonomy}
+          onCapabilitiesChange={changeCapabilities}
           onSignOut={signOut}
           onCreate={createAgent}
           onUpdate={updateAgent}
@@ -630,6 +714,8 @@ function AgentManagerDialog({
   editingAgent,
   autonomyPolicies,
   autonomyLoading,
+  agentCapabilities,
+  capabilitiesLoading,
   busy,
   formErrors,
   onClose,
@@ -639,6 +725,7 @@ function AgentManagerDialog({
   onSelect,
   onReplaceSigner,
   onAutonomyChange,
+  onCapabilitiesChange,
   onSignOut,
   onCreate,
   onUpdate,
@@ -654,6 +741,10 @@ function AgentManagerDialog({
     Record<string, AutonomyPolicy | undefined>
   >;
   readonly autonomyLoading: boolean;
+  readonly agentCapabilities: Readonly<
+    Record<string, readonly AgentCapability[] | undefined>
+  >;
+  readonly capabilitiesLoading: boolean;
   readonly busy: boolean;
   readonly formErrors: ProfileFormErrors;
   readonly onClose: () => void;
@@ -667,6 +758,10 @@ function AgentManagerDialog({
     enabled: boolean,
     expectedVersion: number,
   ) => Promise<void>;
+  readonly onCapabilitiesChange: (
+    agentId: string,
+    capabilities: readonly string[],
+  ) => Promise<boolean>;
   readonly onSignOut: () => Promise<void>;
   readonly onCreate: (event: FormEvent<HTMLFormElement>) => void;
   readonly onUpdate: (event: FormEvent<HTMLFormElement>) => void;
@@ -693,6 +788,11 @@ function AgentManagerDialog({
     "idle" | "copied" | "failed"
   >("idle");
   const [pairingNow, setPairingNow] = useState(() => Date.now());
+  const [capabilityEditorId, setCapabilityEditorId] = useState<string | null>(
+    null,
+  );
+  const [capabilityDraft, setCapabilityDraft] = useState("");
+  const [capabilityError, setCapabilityError] = useState<string | null>(null);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -785,6 +885,30 @@ function AgentManagerDialog({
     setPairingCopyState(copied ? "copied" : "failed");
   }
 
+  function beginCapabilityEdit(
+    agentId: string,
+    capabilities: readonly AgentCapability[] | undefined,
+  ) {
+    setCapabilityEditorId(agentId);
+    setCapabilityDraft(
+      (capabilities ?? []).map((item) => item.capability).join(", "),
+    );
+    setCapabilityError(null);
+  }
+
+  async function saveCapabilities(agentId: string) {
+    const parsed = capabilitiesFromDraft(capabilityDraft);
+    if (!parsed.ok) {
+      setCapabilityError(parsed.message);
+      return;
+    }
+    if (await onCapabilitiesChange(agentId, parsed.capabilities)) {
+      setCapabilityEditorId(null);
+      setCapabilityDraft("");
+      setCapabilityError(null);
+    }
+  }
+
   const isEditing = mode === "edit" && editingAgent !== null;
   const isForm = mode === "create" || isEditing;
   const title = isEditing
@@ -867,14 +991,17 @@ function AgentManagerDialog({
         ) : (
           <>
             <p className="agent-manager-intro">
-              Choose the agent this browser should use, review its signer, and
-              control whether it may publish public drafts autonomously.
+              Choose the active agent, declare what it can do, review its
+              signer, and control autonomous public publishing.
             </p>
             <ul className="agent-connection-list">
               {agents.map((agent) => {
                 const isActive = agent.agentId === activeAgentId;
                 const signerAvailable = localSignerKeyIds.has(agent.keyId);
                 const autonomy = autonomyPolicies[agent.agentId];
+                const capabilities = agentCapabilities[agent.agentId];
+                const editingCapabilities =
+                  capabilityEditorId === agent.agentId;
                 const confirmingSigner = signerConfirmationId === agent.agentId;
                 const confirmingAutonomy =
                   autonomyConfirmationId === agent.agentId;
@@ -931,6 +1058,116 @@ function AgentManagerDialog({
                           </dd>
                         </div>
                       </dl>
+                    </div>
+
+                    <div className="account-capabilities-row">
+                      <div>
+                        <span className="account-section-label">
+                          Technical capabilities
+                        </span>
+                        {capabilitiesLoading && capabilities === undefined ? (
+                          <strong>Loading capabilities…</strong>
+                        ) : capabilities === undefined ? (
+                          <strong>Capabilities unavailable</strong>
+                        ) : capabilities.length === 0 ? (
+                          <>
+                            <strong>No capabilities declared</strong>
+                            <p>
+                              This agent cannot be selected for a mission until
+                              at least one matching capability is declared.
+                            </p>
+                          </>
+                        ) : (
+                          <div className="account-capability-tags">
+                            {capabilities.map((item) => (
+                              <span key={item.capability}>
+                                {item.capability}
+                                {item.verifiedMissions > 0 ? (
+                                  <small title="Verified through completed missions">
+                                    ✓
+                                  </small>
+                                ) : null}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      {editingCapabilities ? (
+                        <form
+                          className="account-capability-editor"
+                          onSubmit={(event) => {
+                            event.preventDefault();
+                            void saveCapabilities(agent.agentId);
+                          }}
+                        >
+                          <label
+                            htmlFor={`agent-capabilities-${agent.agentId}`}
+                          >
+                            Comma-separated capability IDs
+                          </label>
+                          <input
+                            id={`agent-capabilities-${agent.agentId}`}
+                            value={capabilityDraft}
+                            onChange={(event) => {
+                              setCapabilityDraft(event.currentTarget.value);
+                              setCapabilityError(null);
+                            }}
+                            placeholder="typescript, protocol-security"
+                            autoComplete="off"
+                            spellCheck={false}
+                            maxLength={1_295}
+                            aria-invalid={capabilityError !== null}
+                            aria-describedby={
+                              capabilityError === null
+                                ? undefined
+                                : `agent-capabilities-error-${agent.agentId}`
+                            }
+                            autoFocus
+                          />
+                          {capabilityError === null ? null : (
+                            <p
+                              id={`agent-capabilities-error-${agent.agentId}`}
+                              className="account-pairing-error"
+                              role="alert"
+                            >
+                              {capabilityError}
+                            </p>
+                          )}
+                          <div>
+                            <button
+                              className="text-action"
+                              type="button"
+                              onClick={() => {
+                                setCapabilityEditorId(null);
+                                setCapabilityError(null);
+                              }}
+                              disabled={busy}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              className="quiet-action"
+                              type="submit"
+                              disabled={busy}
+                            >
+                              {busy ? "Saving…" : "Save Capabilities"}
+                            </button>
+                          </div>
+                        </form>
+                      ) : (
+                        <button
+                          className="quiet-action"
+                          type="button"
+                          onClick={() =>
+                            beginCapabilityEdit(agent.agentId, capabilities)
+                          }
+                          disabled={busy || capabilities === undefined}
+                        >
+                          {capabilities?.length === 0
+                            ? "Add Capabilities"
+                            : "Edit Capabilities"}
+                        </button>
+                      )}
                     </div>
 
                     <div
@@ -1631,6 +1868,69 @@ function parseAutonomyPolicy(body: unknown): AutonomyPolicy | undefined {
     revokedAt: policy.revokedAt,
     updatedAt: policy.updatedAt,
   };
+}
+
+function parseCapabilityResponse(
+  body: unknown,
+): readonly AgentCapability[] | undefined {
+  if (!isRecord(body) || !Array.isArray(body.capabilities)) return undefined;
+  const capabilities: AgentCapability[] = [];
+  for (const value of body.capabilities) {
+    if (
+      !isRecord(value) ||
+      typeof value.capability !== "string" ||
+      !/^[a-z0-9][a-z0-9._-]{0,79}$/u.test(value.capability) ||
+      typeof value.declaredLevel !== "number" ||
+      !Number.isSafeInteger(value.declaredLevel) ||
+      typeof value.verifiedPoints !== "number" ||
+      typeof value.verifiedMissions !== "number" ||
+      !Number.isSafeInteger(value.verifiedMissions) ||
+      typeof value.reliability !== "number" ||
+      typeof value.timeliness !== "number" ||
+      typeof value.updatedAt !== "string"
+    ) {
+      return undefined;
+    }
+    capabilities.push({
+      capability: value.capability,
+      declaredLevel: value.declaredLevel,
+      verifiedPoints: value.verifiedPoints,
+      verifiedMissions: value.verifiedMissions,
+      reliability: value.reliability,
+      timeliness: value.timeliness,
+      updatedAt: value.updatedAt,
+    });
+  }
+  return capabilities;
+}
+
+function capabilitiesFromDraft(
+  value: string,
+):
+  | { readonly ok: true; readonly capabilities: readonly string[] }
+  | { readonly ok: false; readonly message: string } {
+  const entries = value
+    .split(/[\s,]+/u)
+    .map((entry) => entry.trim().toLowerCase())
+    .filter((entry) => entry !== "");
+  const capabilities = [...new Set(entries)].sort();
+  if (capabilities.length < 1) {
+    return { ok: false, message: "Declare at least one capability." };
+  }
+  if (capabilities.length > 16) {
+    return { ok: false, message: "Use no more than 16 capabilities." };
+  }
+  if (
+    capabilities.some(
+      (capability) => !/^[a-z0-9][a-z0-9._-]{0,79}$/u.test(capability),
+    )
+  ) {
+    return {
+      ok: false,
+      message: "Use lowercase letters, numbers, dots, underscores, or hyphens.",
+    };
+  }
+  return { ok: true, capabilities };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

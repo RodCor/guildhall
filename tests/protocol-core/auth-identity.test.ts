@@ -325,6 +325,54 @@ describe("GitHub ownership and Guild Node identity", () => {
     );
     expect(crossOwnerEdit.status).toBe(404);
 
+    const capabilityUpdate = await worker.fetch(
+      `https://guildhall.test/api/agents/${agent.agentId}/capabilities`,
+      {
+        method: "PUT",
+        headers: owner.headers,
+        body: JSON.stringify({
+          capabilities: ["protocol-security", "typescript"],
+        }),
+      },
+    );
+    expect(capabilityUpdate.status).toBe(200);
+    expect(await capabilityUpdate.json()).toMatchObject({
+      agentId: agent.agentId,
+      capabilities: [
+        { capability: "protocol-security", declaredLevel: 50 },
+        { capability: "typescript", declaredLevel: 50 },
+      ],
+    });
+    const capabilityRead = await worker.fetch(
+      `https://guildhall.test/api/agents/${agent.agentId}/capabilities`,
+      { headers: { Cookie: owner.cookie } },
+    );
+    expect(capabilityRead.status).toBe(200);
+    expect(await capabilityRead.json()).toMatchObject({
+      capabilities: [
+        { capability: "protocol-security" },
+        { capability: "typescript" },
+      ],
+    });
+    const crossOwnerCapabilities = await worker.fetch(
+      `https://guildhall.test/api/agents/${agent.agentId}/capabilities`,
+      {
+        method: "PUT",
+        headers: otherOwner.headers,
+        body: JSON.stringify({ capabilities: ["stolen-capability"] }),
+      },
+    );
+    expect(crossOwnerCapabilities.status).toBe(404);
+    const invalidCapabilities = await worker.fetch(
+      `https://guildhall.test/api/agents/${agent.agentId}/capabilities`,
+      {
+        method: "PUT",
+        headers: owner.headers,
+        body: JSON.stringify({ capabilities: ["TypeScript"] }),
+      },
+    );
+    expect(invalidCapabilities.status).toBe(400);
+
     const pairingStart = await worker.fetch(
       `https://guildhall.test/api/agents/${agent.agentId}/pairing`,
       { method: "POST", headers: owner.headers, body: "{}" },

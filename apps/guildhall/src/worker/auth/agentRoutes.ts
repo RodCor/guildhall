@@ -18,6 +18,7 @@ import {
   createPrivateDraft,
   getAutonomyPolicy,
   getPendingPairingChallenge,
+  listOwnedAgentCapabilities,
   listAgentKeys,
   readOwnedAgent,
   readPrivateDraft,
@@ -26,6 +27,7 @@ import {
   registerAgentKey,
   revokeAgentKey,
   revokeScopedCredential,
+  replaceOwnedAgentCapabilities,
   setAutonomyPolicy,
   updateOwnedAgent,
   type AgentProfile,
@@ -58,6 +60,7 @@ const BROWSER_KEY_REPLACE_ROUTE =
 const CREDENTIAL_REVOKE_ROUTE =
   /^\/api\/agents\/([^/]+)\/credentials\/([^/]+)\/revoke$/u;
 const AUTONOMY_ROUTE = /^\/api\/agents\/([^/]+)\/autonomy$/u;
+const CAPABILITIES_ROUTE = /^\/api\/agents\/([^/]+)\/capabilities$/u;
 const DRAFT_ROUTE = /^\/api\/drafts\/([^/]+)$/u;
 const DRAFT_PUBLISH_ROUTE = /^\/api\/drafts\/([^/]+)\/publish$/u;
 const WEBMCP_DRAFT_PUBLISH_ROUTE = /^\/api\/webmcp\/drafts\/([^/]+)\/publish$/u;
@@ -120,6 +123,21 @@ export async function handleAgentRoute(
   }
   if (autonomyMatch !== null && request.method === "PUT") {
     return changeAutonomy(request, env, decodeURIComponent(autonomyMatch[1]!));
+  }
+  const capabilitiesMatch = CAPABILITIES_ROUTE.exec(url.pathname);
+  if (capabilitiesMatch !== null && request.method === "GET") {
+    return readCapabilities(
+      request,
+      env,
+      decodeURIComponent(capabilitiesMatch[1]!),
+    );
+  }
+  if (capabilitiesMatch !== null && request.method === "PUT") {
+    return changeCapabilities(
+      request,
+      env,
+      decodeURIComponent(capabilitiesMatch[1]!),
+    );
   }
   const publishMatch = DRAFT_PUBLISH_ROUTE.exec(url.pathname);
   if (publishMatch !== null && request.method === "POST") {
@@ -649,6 +667,47 @@ async function readAutonomy(
   });
 }
 
+async function readCapabilities(
+  request: Request,
+  env: GuildhallEnv,
+  agentId: string,
+): Promise<Response> {
+  const owner = await authenticateOwner(request, env);
+  if (!owner.ok) return owner.response;
+  const capabilities = await listOwnedAgentCapabilities(
+    env.GUILD_DB,
+    owner.principal.ownerId,
+    agentId,
+  );
+  return capabilities === null
+    ? noStoreJson({ error: "AGENT_NOT_FOUND" }, { status: 404 })
+    : noStoreJson({ agentId, capabilities });
+}
+
+async function changeCapabilities(
+  request: Request,
+  env: GuildhallEnv,
+  agentId: string,
+): Promise<Response> {
+  const owner = await authorizeOwnerMutation(request, env);
+  if (!owner.ok) return owner.response;
+  const body = await readJsonRecord(request);
+  const capabilities = parseCapabilityNames(body?.capabilities);
+  if (capabilities === null) return invalid("agent capabilities");
+  const scan = scanPublicPayload({ capabilities });
+  if (!scan.safe) return unsafe(scan);
+  const declarations = await replaceOwnedAgentCapabilities(env.GUILD_DB, {
+    ownerId: owner.principal.ownerId,
+    agentId,
+    capabilities,
+    declaredLevel: 50,
+    updatedAt: new Date().toISOString(),
+  });
+  return declarations === null
+    ? noStoreJson({ error: "AGENT_NOT_FOUND" }, { status: 404 })
+    : noStoreJson({ agentId, capabilities: declarations });
+}
+
 async function savePrivateDraft(
   request: Request,
   env: GuildhallEnv,
@@ -1068,6 +1127,23 @@ function parseAgentProfile(body: Record<string, unknown> | null) {
     guildName,
     publicBio,
   };
+}
+
+function parseCapabilityNames(value: unknown): readonly string[] | null {
+  if (
+    !Array.isArray(value) ||
+    value.length < 1 ||
+    value.length > 16 ||
+    value.some(
+      (capability) =>
+        typeof capability !== "string" ||
+        !/^[a-z0-9][a-z0-9._-]{0,79}$/u.test(capability),
+    )
+  ) {
+    return null;
+  }
+  const unique = [...new Set(value)].sort();
+  return unique.length === value.length ? unique : null;
 }
 
 function parsePublicKey(value: unknown): {
