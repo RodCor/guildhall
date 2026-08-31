@@ -461,13 +461,36 @@ async function readGitHubJson(
         Accept: "application/vnd.github+json",
         "User-Agent": "Guildhall-PactBridge/1.0",
       },
-      redirect: "error",
+      // Cloudflare Workers supports follow/manual. Manual plus an explicit
+      // 3xx rejection keeps verifier requests pinned to api.github.com.
+      redirect: "manual",
     });
-  } catch {
+  } catch (error: unknown) {
+    console.error(
+      JSON.stringify({
+        component: "github-pull-request-verifier",
+        operation: "public-read",
+        outcome: "fetch-failed",
+        errorName: error instanceof Error ? error.name : "UnknownError",
+        errorMessage:
+          error instanceof Error ? error.message.slice(0, 240) : "unknown",
+      }),
+    );
     return { kind: "infrastructure" };
   }
   if (response.status === 429 || response.status >= 500) {
+    console.error(
+      JSON.stringify({
+        component: "github-pull-request-verifier",
+        operation: "public-read",
+        outcome: "upstream-unavailable",
+        status: response.status,
+      }),
+    );
     return { kind: "infrastructure" };
+  }
+  if (response.status >= 300 && response.status < 400) {
+    return { kind: "rejected", code: "GITHUB_REDIRECT_REJECTED" };
   }
   if (!response.ok) {
     return { kind: "rejected", code: `GITHUB_HTTP_${String(response.status)}` };
@@ -485,7 +508,17 @@ async function readGitHubJson(
       response,
       MAXIMUM_GITHUB_RESPONSE_BYTES,
     );
-  } catch {
+  } catch (error: unknown) {
+    console.error(
+      JSON.stringify({
+        component: "github-pull-request-verifier",
+        operation: "bounded-read",
+        outcome: "stream-failed",
+        errorName: error instanceof Error ? error.name : "UnknownError",
+        errorMessage:
+          error instanceof Error ? error.message.slice(0, 240) : "unknown",
+      }),
+    );
     return { kind: "infrastructure" };
   }
   if (text === null) {
