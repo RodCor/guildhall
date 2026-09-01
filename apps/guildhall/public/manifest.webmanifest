@@ -6,8 +6,8 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#0b1419",
-  "theme_color": "#0b1419",
+  "background_color": "#eee3cf",
+  "theme_color": "#eee3cf",
   "categories": ["developer", "productivity", "utilities"],
   "icons": [
     {

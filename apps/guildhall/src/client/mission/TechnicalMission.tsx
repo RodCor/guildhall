@@ -73,14 +73,14 @@ const DEMO_CHAPTERS: readonly DemoChapter[] = [
   { id: "recruit", label: "Recruit", protocol: "A2A", sigil: "A" },
   { id: "pact", label: "Pact", protocol: "PactBridge", sigil: "P" },
   { id: "work", label: "Work", protocol: "A2A", sigil: "✦" },
-  { id: "verify", label: "Verify", protocol: "Verifier", sigil: "✓" },
-  { id: "mismatch", label: "Mismatch", protocol: "Verifier", sigil: "!" },
+  { id: "mismatch", label: "Failure", protocol: "Verifier", sigil: "!" },
   {
     id: "correction",
-    label: "Correct",
+    label: "Replace",
     protocol: "A2A",
     sigil: "↺",
   },
+  { id: "verify", label: "Verify", protocol: "Verifier", sigil: "✓" },
   { id: "reward", label: "Reward", protocol: "Receipt", sigil: "+" },
 ] as const;
 
@@ -427,12 +427,12 @@ export function TechnicalMission({
     >
       <div className="guildglass-casebar">
         <div>
-          <p className="eyebrow">Verified Mission Replay</p>
+          <p className="eyebrow">Pact Ledger · Mission Folio 001</p>
           <h3 id="mission-console-title">GitHub Delivery With Correction</h3>
         </div>
         <div className="guildglass-case-meta">
           <p className="demo-provenance">
-            <strong>Real mission · 2 agents · 1 receipt</strong>
+            <strong>Public record · 2 agents · 1 signed receipt</strong>
           </p>
           <span className={`stream-chip stream-${streamState}`}>
             <span aria-hidden="true" />
@@ -785,7 +785,7 @@ function MissionChamber({
 
           {chapterId === "correction" ? (
             <p className="recovery-handoff">
-              <strong>Attempt 2 Submitted</strong>
+              <strong>Work Resumed</strong>
               <span>Pact Unchanged</span>
             </p>
           ) : null}
@@ -905,14 +905,14 @@ function hudChapterContent(chapterId: DemoChapterId): HudContent {
       };
     case "mismatch":
       return {
-        title: "GitHub rejects the stale commit.",
+        title: "Attempt 1 fails verification.",
         detail:
-          "The public PR moved after submission. Points stay locked and one correction opens.",
+          "The PR moved after submission. Points stay locked and one replacement opens.",
       };
     case "correction":
       return {
-        title: "The helper signs a correction.",
-        detail: "Attempt 2 uses the current commit without changing the pact.",
+        title: "The helper replaces the evidence.",
+        detail: "Attempt 2 resumes the same work with the pact unchanged.",
       };
     case "verify":
       return {
@@ -1008,14 +1008,14 @@ function HudStepTrack({
           viewBox="0 0 600 58"
           preserveAspectRatio="none"
         >
-          <path className="branch-path branch-path-mismatch" d="M500 0 V58" />
+          <path className="branch-path branch-path-mismatch" d="M400 0 V58" />
           <path
             className="branch-path branch-path-correction"
-            d="M500 58 H400"
+            d="M400 58 H300"
           />
           <path
             className="branch-path branch-path-return"
-            d="M400 58 Q440 12 500 0"
+            d="M300 58 Q340 12 400 0"
           />
         </svg>
         <span className="hud-branch-runner">
@@ -1062,7 +1062,7 @@ function HudStepTrack({
 
 function mainTimelineIndex(chapterId: DemoChapterId): number {
   if (chapterId === "mismatch" || chapterId === "correction") {
-    return MAIN_HUD_STEPS.findIndex((step) => step.id === "verify");
+    return MAIN_HUD_STEPS.findIndex((step) => step.id === "work");
   }
   return MAIN_HUD_STEPS.findIndex((step) => step.id === chapterId);
 }
@@ -1274,12 +1274,12 @@ function ProtocolMoment({
             </div>
             <div className="signature-pair">
               <span>
-                <i aria-hidden="true">✓</i>
+                <i aria-hidden="true">Signed</i>
                 <small>Requester</small>
                 <strong>{requesterName}</strong>
               </span>
               <span>
-                <i aria-hidden="true">✓</i>
+                <i aria-hidden="true">Signed</i>
                 <small>Helper</small>
                 <strong>{helperName}</strong>
               </span>
@@ -1294,8 +1294,8 @@ function ProtocolMoment({
         return (
           <>
             <MomentHeader
-              eyebrow="A2A envelope"
-              operation="artifact_submitted"
+              eyebrow="Attached evidence"
+              operation="A2A · artifact_submitted"
               badge="ATTEMPT 1"
             />
             <div className="evidence-envelope">
@@ -1315,9 +1315,9 @@ function ProtocolMoment({
         return (
           <>
             <MomentHeader
-              eyebrow="Public verification"
+              eyebrow="Ledger exception"
               operation="compare exact PR head"
-              badge="REJECTED"
+              badge="FAILED"
               tone="danger"
             />
             <div className="sha-comparison comparison-failed">
@@ -1341,9 +1341,9 @@ function ProtocolMoment({
         return (
           <>
             <MomentHeader
-              eyebrow="A2A correction"
-              operation="replace signed evidence"
-              badge="ATTEMPT 2"
+              eyebrow="Replacement evidence"
+              operation="resume same work order"
+              badge="REPLACED"
               tone="recovery"
             />
             <div className="sha-correction">
@@ -1589,14 +1589,14 @@ function GuildglassScene({
         className="node-requester"
         role="Requester"
         name={requesterName}
-        sigil="✦"
+        sigil="RQ"
         state={isReward ? "verified" : chapterIndex >= 1 ? "active" : "ready"}
       />
       <HudAgentNode
         className="node-scout"
         role="Helper Agent"
         name={helperPresent ? helperName : "Open seat"}
-        sigil="⚔"
+        sigil="AG"
         state={
           isReward
             ? "verified"
@@ -1611,7 +1611,7 @@ function GuildglassScene({
         className="node-second"
         role="Public Verifier"
         name={verifierPresent ? verifierName : "Waiting for mission"}
-        sigil="✓"
+        sigil="VR"
         state={
           isMismatch
             ? "failed"

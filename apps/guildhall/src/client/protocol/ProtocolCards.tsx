@@ -129,8 +129,8 @@ function ProtocolCard({ move }: { readonly move: ProtocolMove }) {
             <p>{move.simple}</p>
           </div>
           <footer>
-            <span>Technical details</span>
-            <span aria-hidden="true">↻</span>
+            <span>Inspect protocol record</span>
+            <span aria-hidden="true">↗</span>
           </footer>
         </article>
 
@@ -141,7 +141,6 @@ function ProtocolCard({ move }: { readonly move: ProtocolMove }) {
           <header>
             <span className="protocol-card-index">{move.index}</span>
             <code translate="no">{move.protocol}</code>
-            <span className="protocol-card-mode">Technical</span>
           </header>
           <div className="protocol-card-copy">
             <h3>{move.technicalTitle}</h3>

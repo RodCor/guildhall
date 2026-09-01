@@ -5,6 +5,7 @@ import { App } from "./App";
 import { GuildCatalogProvider } from "./catalog/GuildCatalog";
 import "./styles.css";
 import "./mission-theater.css";
+import "./pact-ledger.css";
 
 const rootElement = document.getElementById("root");
 

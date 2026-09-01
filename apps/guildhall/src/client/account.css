@@ -1,4 +1,31 @@
 .owner-account {
+  --account-paper: var(--ledger-paper, #f1e6cc);
+  --account-paper-strong: var(--ledger-paper-strong, #fff9e9);
+  --account-paper-muted: var(--ledger-paper-muted, #e4d5b5);
+  --account-ink: var(--ledger-ink, #241d16);
+  --account-muted: var(--ledger-ink-muted, #695d4e);
+  --account-line: var(--ledger-line, #9b8969);
+  --account-line-soft: var(--ledger-line-soft, #cbbd9f);
+  --account-red: var(--ledger-red, #8c342f);
+  --account-ochre: var(--ledger-ochre, #a66f24);
+  --account-green: var(--ledger-green, #4d6749);
+  --account-focus: var(--ledger-focus, #245d63);
+  --account-display: var(
+    --ledger-display-font,
+    "Iowan Old Style",
+    "Palatino Linotype",
+    Georgia,
+    serif
+  );
+  --account-code: var(
+    --ledger-code-font,
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Consolas,
+    monospace
+  );
+
   min-width: 0;
 }
 
@@ -14,26 +41,39 @@
   grid-template-columns: 34px minmax(0, 1fr) auto auto;
   gap: 9px;
   padding: 5px 10px 5px 6px;
-  border-color: var(--hud-edge-bright, rgba(131, 215, 194, 0.25));
-  background: rgba(131, 215, 194, 0.07);
+  color: var(--account-ink);
+  background: var(--account-paper);
+  border: 1px solid var(--account-line);
+  border-left: 4px solid var(--account-red);
+  border-radius: 0;
+  box-shadow: none;
+  touch-action: manipulation;
 }
 
 .owner-account .account-trigger:hover {
-  background: rgba(131, 215, 194, 0.13);
+  color: var(--account-red);
+  background: var(--account-paper-strong);
+  border-color: var(--account-red);
 }
 
 .owner-account .account-trigger:focus-visible,
 .owner-account .agent-manager-dialog button:focus-visible,
 .owner-account .agent-manager-dialog input:focus-visible,
 .owner-account .agent-manager-dialog select:focus-visible,
-.owner-account .agent-manager-dialog textarea:focus-visible {
-  outline: 2px solid var(--hud-aether, #83d7c2);
+.owner-account .agent-manager-dialog textarea:focus-visible,
+.owner-account .agent-manager-dialog code:focus-visible {
+  outline: 3px solid var(--account-focus);
   outline-offset: 3px;
 }
 
-.owner-account .account-avatar {
+.owner-account .account-avatar,
+.owner-account .owner-avatar {
   width: 34px;
   height: 34px;
+  color: var(--account-paper-strong);
+  background: var(--account-red);
+  border: 1px solid var(--account-ink);
+  border-radius: 0;
 }
 
 .owner-account .account-trigger-copy {
@@ -52,41 +92,115 @@
 }
 
 .owner-account .account-trigger-copy strong {
+  color: inherit;
   font-size: 0.72rem;
 }
 
 .owner-account .account-trigger-copy small {
   margin-top: 2px;
-  color: var(--hud-muted, #9baab0);
-  font-size: 0.55rem;
+  color: var(--account-muted);
+  font-family: var(--account-code);
+  font-size: 0.54rem;
 }
 
 .owner-account .account-trigger .signer-ready-mark {
   width: 20px;
   height: 20px;
   flex-basis: 20px;
+  color: var(--account-green);
+  background: transparent;
+  border: 1px solid var(--account-green);
+  border-radius: 0;
+  box-shadow: none;
   font-size: 0.58rem;
 }
 
 .owner-account .account-trigger-chevron {
-  color: var(--hud-muted, #9baab0);
+  color: var(--account-muted);
   font-size: 0.7rem;
 }
 
 .owner-account-signed-out .account-sign-in {
   min-height: 44px;
+  color: var(--account-paper-strong);
+  background: var(--account-red);
+  border: 1px solid var(--account-red);
+  border-radius: 0;
+  box-shadow: none;
   white-space: nowrap;
 }
 
+.owner-account-signed-out .account-sign-in:hover {
+  color: #fffdf5;
+  background: color-mix(in srgb, var(--account-red) 86%, #000);
+  border-color: var(--account-ink);
+}
+
 .owner-account .agent-manager-dialog {
-  width: min(780px, calc(100vw - 32px));
+  width: min(820px, calc(100vw - 32px));
   max-height: calc(100svh - 32px);
-  border-radius: 22px 22px 22px 7px;
+  padding: 0;
+  overflow: hidden;
+  overscroll-behavior: contain;
+  color: var(--account-ink);
+  background: var(--account-paper);
+  border: 2px solid var(--account-ink);
+  border-top: 5px solid var(--account-red);
+  border-radius: 0;
+  box-shadow: 8px 8px 0 rgba(20, 15, 10, 0.34);
+  color-scheme: light;
+}
+
+.owner-account .agent-manager-dialog::backdrop {
+  background: rgba(20, 16, 12, 0.76);
+  backdrop-filter: none;
 }
 
 .owner-account .agent-manager-shell {
-  max-height: calc(100svh - 34px);
+  max-height: calc(100svh - 36px);
   padding: 22px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.owner-account .agent-manager-heading {
+  padding-bottom: 16px;
+  border-bottom: 2px solid var(--account-ink);
+}
+
+.owner-account .agent-manager-heading .eyebrow {
+  color: var(--account-red);
+  font-family: var(--account-code);
+  letter-spacing: 0.1em;
+}
+
+.owner-account .agent-manager-heading h2 {
+  color: var(--account-ink);
+  font-family: var(--account-display);
+  font-size: clamp(1.55rem, 4vw, 2.25rem);
+  font-weight: 650;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
+
+.owner-account .dialog-close {
+  width: 44px;
+  height: 44px;
+  flex-basis: 44px;
+  color: var(--account-ink);
+  background: var(--account-paper-strong);
+  border: 1px solid var(--account-ink);
+  border-radius: 0;
+  box-shadow: none;
+  touch-action: manipulation;
+}
+
+.owner-account .dialog-close:hover {
+  color: var(--account-paper-strong);
+  background: var(--account-red);
+  border-color: var(--account-red);
 }
 
 .owner-account .account-session-row,
@@ -103,8 +217,9 @@
 .owner-account .account-session-row {
   justify-content: space-between;
   gap: 16px;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--hud-edge, rgba(255, 255, 255, 0.1));
+  padding: 12px;
+  background: var(--account-paper-muted);
+  border-bottom: 1px solid var(--account-line);
 }
 
 .owner-account .account-session-identity {
@@ -122,14 +237,17 @@
 }
 
 .owner-account .account-session-identity small {
-  color: var(--hud-muted, #9baab0);
-  font-size: 0.58rem;
+  color: var(--account-muted);
+  font-family: var(--account-code);
+  font-size: 0.56rem;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
 .owner-account .account-session-identity strong {
   margin-top: 2px;
   overflow: hidden;
+  color: var(--account-ink);
   font-size: 0.75rem;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -140,18 +258,20 @@
   padding-inline: 12px;
 }
 
-.owner-account .dialog-close {
-  width: 44px;
-  height: 44px;
-  flex-basis: 44px;
-}
-
 .owner-account .agent-manager-intro {
+  max-width: 680px;
   padding-block: 16px 12px;
+  color: var(--account-muted);
+  line-height: 1.55;
+  text-wrap: pretty;
 }
 
 .owner-account .agent-connection-list {
-  gap: 12px;
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .owner-account .agent-connection-list > li {
@@ -160,11 +280,19 @@
   gap: 0;
   padding: 0;
   overflow: hidden;
-  border-radius: 17px 17px 17px 5px;
+  color: var(--account-ink);
+  background: var(--account-paper-strong);
+  border: 1px solid var(--account-line);
+  border-left: 4px solid var(--account-line);
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .owner-account .agent-connection-list > li[data-active] {
-  box-shadow: inset 3px 0 0 var(--hud-aether, #83d7c2);
+  background: var(--account-paper-strong);
+  border-color: var(--account-red);
+  border-left-color: var(--account-red);
+  box-shadow: none;
 }
 
 .owner-account .agent-connection-main {
@@ -173,19 +301,73 @@
   padding: 16px;
 }
 
+.owner-account .agent-connection-copy {
+  min-width: 0;
+}
+
 .owner-account .agent-connection-copy > div {
   flex-wrap: wrap;
+}
+
+.owner-account .agent-connection-copy strong {
+  color: var(--account-ink);
+  font-family: var(--account-display);
+  font-size: 1.05rem;
+}
+
+.owner-account .agent-connection-copy span,
+.owner-account .agent-connection-copy small,
+.owner-account .agent-connection-copy p {
+  color: var(--account-muted);
+}
+
+.owner-account .agent-connection-copy p,
+.owner-account .agent-connection-copy small {
+  overflow-wrap: anywhere;
+}
+
+.owner-account .agent-connection-stats {
+  display: flex;
+  gap: 0;
+  margin: 0;
+  text-align: right;
+  border: 1px solid var(--account-line-soft);
+}
+
+.owner-account .agent-connection-stats div {
+  min-width: 74px;
+  padding: 8px 10px;
+  border-right: 1px solid var(--account-line-soft);
+}
+
+.owner-account .agent-connection-stats div:last-child {
+  border-right: 0;
+}
+
+.owner-account .agent-connection-stats dt {
+  color: var(--account-muted);
+  font-family: var(--account-code);
+  font-size: 0.52rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.owner-account .agent-connection-stats dd {
+  margin: 4px 0 0;
+  color: var(--account-ink);
+  font-variant-numeric: tabular-nums;
 }
 
 .owner-account .account-status-pill {
   display: inline-flex;
   align-items: center;
-  min-height: 20px;
+  min-height: 22px;
   padding: 2px 7px;
-  border: 1px solid rgba(156, 221, 160, 0.35);
-  border-radius: 999px;
-  color: var(--hud-verified, #9cdda0);
-  background: rgba(156, 221, 160, 0.08);
+  color: var(--account-green);
+  background: transparent;
+  border: 1px solid var(--account-green);
+  border-radius: 0;
+  font-family: var(--account-code);
   font-size: 0.5rem;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -199,16 +381,25 @@
   justify-content: space-between;
   gap: 18px;
   padding: 14px 16px;
-  border-top: 1px solid var(--hud-edge, rgba(255, 255, 255, 0.1));
+  border-top: 1px solid var(--account-line-soft);
 }
 
 .owner-account .account-security-row {
-  background: rgba(131, 215, 194, 0.025);
+  background: var(--account-paper);
+  border-left: 3px solid var(--account-green);
 }
 
 .owner-account .account-security-row[data-tone="warning"] {
-  border-left: 3px solid var(--hud-warm, #e9b872);
-  background: rgba(233, 184, 114, 0.06);
+  background: color-mix(
+    in srgb,
+    var(--account-ochre) 9%,
+    var(--account-paper-strong)
+  );
+  border-left-color: var(--account-ochre);
+}
+
+.owner-account .account-autonomy-row {
+  background: var(--account-paper-strong);
 }
 
 .owner-account .account-security-row > div:first-child,
@@ -224,7 +415,8 @@
 .owner-account .account-capabilities-row strong,
 .owner-account .account-pairing-row strong {
   display: block;
-  font-size: 0.72rem;
+  color: var(--account-ink);
+  font-size: 0.75rem;
 }
 
 .owner-account .account-security-row p,
@@ -233,18 +425,21 @@
 .owner-account .account-pairing-row p,
 .owner-account .account-inline-confirmation p {
   margin: 4px 0 0;
-  color: var(--hud-muted, #9baab0);
-  font-size: 0.64rem;
+  overflow-wrap: anywhere;
+  color: var(--account-muted);
+  font-size: 0.66rem;
   line-height: 1.5;
+  text-wrap: pretty;
 }
 
 .owner-account .account-section-label {
   display: block;
   margin-bottom: 4px;
-  color: var(--hud-muted, #9baab0);
+  color: var(--account-red);
+  font-family: var(--account-code);
   font-size: 0.52rem;
   font-weight: 700;
-  letter-spacing: 0.07em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
@@ -259,7 +454,7 @@
 
 .owner-account .account-capabilities-row {
   align-items: flex-start;
-  background: rgba(102, 153, 255, 0.035);
+  background: var(--account-paper-muted);
 }
 
 .owner-account .account-capability-tags {
@@ -273,17 +468,19 @@
   align-items: center;
   gap: 5px;
   min-height: 25px;
+  max-width: 100%;
   padding: 4px 8px;
-  border: 1px solid rgba(131, 215, 194, 0.22);
-  border-radius: 999px;
-  color: var(--hud-copy, #d7e5e6);
-  background: rgba(131, 215, 194, 0.06);
-  font-family: var(--font-code, monospace);
+  overflow-wrap: anywhere;
+  color: var(--account-ink);
+  background: var(--account-paper-strong);
+  border: 1px solid var(--account-line);
+  border-radius: 0;
+  font-family: var(--account-code);
   font-size: 0.59rem;
 }
 
 .owner-account .account-capability-tags small {
-  color: var(--hud-verified, #9cdda0);
+  color: var(--account-green);
 }
 
 .owner-account .account-capability-editor {
@@ -294,20 +491,43 @@
 .owner-account .account-capability-editor label {
   display: block;
   margin-bottom: 6px;
-  color: var(--hud-muted, #9baab0);
+  color: var(--account-muted);
+  font-family: var(--account-code);
   font-size: 0.55rem;
 }
 
-.owner-account .account-capability-editor input {
+.owner-account .account-capability-editor input,
+.owner-account .agent-profile-form input,
+.owner-account .agent-profile-form select,
+.owner-account .agent-profile-form textarea {
   width: 100%;
   min-height: 44px;
-  padding: 8px 10px;
-  border: 1px solid var(--hud-edge-bright, rgba(131, 215, 194, 0.25));
-  border-radius: 8px;
-  color: var(--hud-copy, #d7e5e6);
-  background: rgba(2, 10, 14, 0.62);
+  padding: 9px 10px;
+  color: var(--account-ink);
+  background-color: var(--account-paper-strong);
+  border: 1px solid var(--account-line);
+  border-radius: 0;
+  box-shadow: none;
+  caret-color: var(--account-red);
   font: inherit;
-  font-size: 0.66rem;
+}
+
+.owner-account .agent-profile-form select,
+.owner-account .agent-profile-form select option {
+  color: var(--account-ink);
+  background-color: var(--account-paper-strong);
+}
+
+.owner-account .agent-profile-form textarea {
+  min-height: 116px;
+  resize: vertical;
+}
+
+.owner-account .account-capability-editor input::placeholder,
+.owner-account .agent-profile-form input::placeholder,
+.owner-account .agent-profile-form textarea::placeholder {
+  color: var(--account-muted);
+  opacity: 0.78;
 }
 
 .owner-account .account-capability-editor > div {
@@ -323,11 +543,13 @@
 
 .owner-account .account-pairing-row {
   align-items: flex-start;
-  background: rgba(131, 215, 194, 0.035);
+  background: var(--account-paper);
+  border-left: 3px solid var(--account-red);
 }
 
-.owner-account .account-pairing-error {
-  color: #f3bd9f;
+.owner-account .account-pairing-error,
+.owner-account .field-error {
+  color: var(--account-red);
 }
 
 .owner-account .account-pairing-row > .account-pairing-packet:first-child {
@@ -346,15 +568,16 @@
 .owner-account
   .account-pairing-heading
   .account-status-pill[data-tone="expired"] {
-  border-color: rgba(233, 184, 114, 0.35);
-  color: var(--hud-warm, #e9b872);
-  background: rgba(233, 184, 114, 0.08);
+  color: var(--account-ochre);
+  background: transparent;
+  border-color: var(--account-ochre);
 }
 
 .owner-account .account-pairing-values {
   display: grid;
-  gap: 8px;
+  gap: 0;
   margin: 12px 0;
+  border-top: 1px solid var(--account-line-soft);
 }
 
 .owner-account .account-pairing-values > div {
@@ -362,11 +585,14 @@
   grid-template-columns: 82px minmax(0, 1fr);
   gap: 10px;
   align-items: start;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--account-line-soft);
 }
 
 .owner-account .account-pairing-values dt {
   padding-top: 8px;
-  color: var(--hud-muted, #9baab0);
+  color: var(--account-muted);
+  font-family: var(--account-code);
   font-size: 0.55rem;
   font-weight: 700;
   letter-spacing: 0.07em;
@@ -380,16 +606,19 @@
 
 .owner-account .account-pairing-values code {
   display: block;
-  max-height: 92px;
+  max-height: 96px;
   padding: 8px 10px;
   overflow: auto;
-  border: 1px solid var(--hud-edge, rgba(255, 255, 255, 0.1));
-  border-radius: 8px;
-  background: rgba(2, 10, 14, 0.62);
+  color: var(--account-paper-strong);
+  background: var(--account-ink);
+  border: 1px solid var(--account-ink);
+  border-radius: 0;
+  font-family: var(--account-code);
   font-size: 0.62rem;
   line-height: 1.45;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+  scrollbar-gutter: stable;
 }
 
 .owner-account .account-pairing-actions {
@@ -402,17 +631,25 @@
 }
 
 .owner-account .account-revoke-action {
-  border-color: rgba(233, 184, 114, 0.35);
-  color: var(--hud-warm, #e9b872);
+  color: var(--account-red) !important;
+  background: var(--account-paper-strong) !important;
+  border-color: var(--account-red) !important;
+}
+
+.owner-account .account-revoke-action:hover {
+  color: var(--account-paper-strong) !important;
+  background: var(--account-red) !important;
 }
 
 .owner-account .account-inline-confirmation {
-  width: min(260px, 100%);
+  width: min(280px, 100%);
   flex: 0 0 auto;
   padding: 10px;
-  border: 1px solid var(--hud-edge-bright, rgba(131, 215, 194, 0.25));
-  border-radius: 10px;
-  background: rgba(2, 10, 14, 0.5);
+  color: var(--account-ink);
+  background: var(--account-paper-muted);
+  border: 1px solid var(--account-red);
+  border-left-width: 4px;
+  border-radius: 0;
 }
 
 .owner-account .account-inline-confirmation p {
@@ -435,7 +672,8 @@
 .owner-account .agent-connection-actions {
   justify-content: flex-end;
   padding: 10px 16px 14px;
-  border-top: 1px solid var(--hud-edge, rgba(255, 255, 255, 0.1));
+  background: var(--account-paper);
+  border-top: 1px solid var(--account-line-soft);
 }
 
 .owner-account .agent-connection-actions button,
@@ -444,23 +682,204 @@
   min-height: 44px;
 }
 
+.owner-account .agent-manager-actions {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 2px solid var(--account-ink);
+}
+
+.owner-account .agent-manager-actions p {
+  color: var(--account-muted);
+}
+
+.owner-account .agent-manager-dialog :is(.primary-action, .quiet-action),
+.owner-account .agent-manager-dialog .active-agent-action,
+.owner-account .agent-manager-dialog .text-action {
+  border-radius: 0;
+  box-shadow: none;
+  font-family: inherit;
+  font-weight: 700;
+  touch-action: manipulation;
+}
+
+.owner-account .agent-manager-dialog .primary-action {
+  color: var(--account-paper-strong);
+  background: var(--account-red);
+  border: 1px solid var(--account-red);
+}
+
+.owner-account .agent-manager-dialog .primary-action:hover {
+  color: #fffdf5;
+  background: color-mix(in srgb, var(--account-red) 86%, #000);
+  border-color: var(--account-ink);
+}
+
+.owner-account .agent-manager-dialog .quiet-action {
+  color: var(--account-ink);
+  background: var(--account-paper-strong);
+  border: 1px solid var(--account-line);
+}
+
+.owner-account .agent-manager-dialog .quiet-action:hover {
+  color: var(--account-red);
+  background: var(--account-paper-muted);
+  border-color: var(--account-red);
+}
+
+.owner-account .agent-manager-dialog .active-agent-action {
+  color: var(--account-paper-strong);
+  background: var(--account-green);
+  border: 1px solid var(--account-green);
+}
+
+.owner-account .agent-manager-dialog .text-action {
+  color: var(--account-red);
+  background: transparent;
+  border: 1px solid transparent;
+}
+
+.owner-account .agent-manager-dialog .text-action:hover {
+  color: var(--account-ink);
+  background: transparent;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.owner-account .agent-profile-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  padding-top: 20px;
+}
+
+.owner-account .agent-profile-form .form-wide {
+  grid-column: 1 / -1;
+}
+
+.owner-account .agent-profile-form label {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  color: var(--account-muted);
+  font-family: var(--account-code);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.owner-account .agent-form-explainer {
+  margin: 0;
+  padding: 12px;
+  color: var(--account-muted);
+  background: var(--account-paper-muted);
+  border: 1px solid var(--account-line);
+  border-left: 4px solid var(--account-ochre);
+  border-radius: 0;
+  line-height: 1.55;
+}
+
+.owner-account .agent-guild-field {
+  padding: 12px;
+  color: var(--account-ink);
+  background: var(--account-paper-muted);
+  border: 1px solid var(--account-line);
+  border-radius: 0;
+}
+
+.owner-account .agent-field-label {
+  color: var(--account-red);
+  font-family: var(--account-code);
+}
+
+.owner-account .agent-guild-status strong {
+  color: var(--account-ink);
+}
+
+.owner-account .agent-guild-status p,
+.owner-account .agent-profile-form small {
+  color: var(--account-muted);
+  overflow-wrap: anywhere;
+  text-transform: none;
+}
+
 .owner-account .agent-profile-form [aria-invalid="true"] {
-  border-color: var(--hud-warm, #e9b872);
-  box-shadow: 0 0 0 2px rgba(233, 184, 114, 0.1);
+  border-color: var(--account-red);
+  box-shadow: inset 4px 0 0 var(--account-red);
 }
 
 .owner-account .field-error {
-  color: #f3bd9f;
   font-size: 0.63rem;
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: normal;
   line-height: 1.4;
   text-transform: none;
 }
 
+.owner-account .agent-form-error {
+  margin: 0;
+  padding: 12px;
+  color: var(--account-red);
+  background: var(--account-paper-muted);
+  border: 1px solid var(--account-red);
+  border-left-width: 4px;
+  border-radius: 0;
+}
+
 .owner-account .agent-form-error:focus {
-  outline: 2px solid var(--hud-warm, #e9b872);
+  outline: 3px solid var(--account-focus);
   outline-offset: 3px;
+}
+
+.owner-account .agent-form-actions {
+  padding-top: 16px;
+  border-top: 1px solid var(--account-line);
+}
+
+.owner-account .agent-manager-dialog :is(button, input, select, textarea) {
+  -webkit-tap-highlight-color: color-mix(
+    in srgb,
+    var(--account-red) 20%,
+    transparent
+  );
+}
+
+.gateway-toast {
+  grid-template-columns: 5px minmax(0, 1fr) 32px;
+  color: var(--ledger-ink, #241d16);
+  background: var(--ledger-paper-strong, #fff9e9);
+  border: 1px solid var(--ledger-ink, #241d16);
+  border-left: 4px solid var(--ledger-red, #8c342f);
+  border-radius: 0;
+  box-shadow: 5px 5px 0 rgba(20, 15, 10, 0.3);
+}
+
+.gateway-toast-mark {
+  width: 5px;
+  height: 18px;
+  background: var(--ledger-red, #8c342f);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.gateway-toast button {
+  width: 44px;
+  height: 44px;
+  color: var(--ledger-ink-muted, #695d4e);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 0;
+}
+
+.gateway-toast button:hover {
+  color: var(--ledger-paper-strong, #fff9e9);
+  background: var(--ledger-red, #8c342f);
+}
+
+.gateway-toast button:focus-visible {
+  outline: 3px solid var(--ledger-focus, #245d63);
+  outline-offset: 2px;
 }
 
 @media (max-width: 700px) {
@@ -486,7 +905,7 @@
     border-right: 0;
     border-bottom: 0;
     border-left: 0;
-    border-radius: 20px 20px 0 0;
+    box-shadow: none;
   }
 
   .owner-account .agent-manager-shell {
@@ -495,7 +914,7 @@
   }
 
   .owner-account .agent-manager-heading h2 {
-    font-size: 1.35rem;
+    font-size: 1.45rem;
   }
 
   .owner-account .agent-connection-main,
@@ -519,10 +938,12 @@
 
   .owner-account .agent-connection-stats {
     align-self: flex-start;
+    text-align: left;
   }
 
   .owner-account .agent-connection-actions {
     align-items: stretch;
+    flex-direction: column;
   }
 
   .owner-account .agent-connection-actions > button {
@@ -547,6 +968,14 @@
   .owner-account .account-capability-editor {
     width: 100%;
   }
+
+  .owner-account .agent-profile-form {
+    grid-template-columns: 1fr;
+  }
+
+  .owner-account .agent-profile-form .form-wide {
+    grid-column: 1;
+  }
 }
 
 @media (max-width: 420px) {
@@ -562,12 +991,25 @@
     display: grid;
     grid-template-columns: 1fr;
   }
+
+  .owner-account .agent-manager-actions,
+  .owner-account .agent-form-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .owner-account .agent-manager-actions button,
+  .owner-account .agent-form-actions button {
+    width: 100%;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .owner-account *,
   .owner-account *::before,
-  .owner-account *::after {
+  .owner-account *::after,
+  .gateway-toast,
+  .gateway-toast * {
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
   }

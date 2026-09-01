@@ -6,36 +6,32 @@
 .protocol-card-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  gap: clamp(14px, 1.8vw, 24px);
   margin: 0;
   padding: 0;
   list-style: none;
-  perspective: 1400px;
+  perspective: 1800px;
 }
 
 .protocol-card {
-  --protocol-accent: var(--hud-aether);
-  --protocol-accent-rgb: 131, 215, 194;
+  --protocol-accent: var(--ledger-ochre, #a76f23);
   position: relative;
   min-width: 0;
-  height: 330px;
-  border-radius: 22px;
+  height: 352px;
+  border-radius: 2px;
   isolation: isolate;
 }
 
 .protocol-card-network {
-  --protocol-accent: var(--hud-scout);
-  --protocol-accent-rgb: 120, 184, 211;
+  --protocol-accent: var(--ledger-sage, #52614d);
 }
 
 .protocol-card-pact {
-  --protocol-accent: var(--hud-scribe);
-  --protocol-accent-rgb: 186, 145, 198;
+  --protocol-accent: var(--ledger-oxblood, #7a2730);
 }
 
 .protocol-card-receipt {
-  --protocol-accent: var(--hud-verified);
-  --protocol-accent-rgb: 156, 221, 160;
+  --protocol-accent: var(--ledger-ink, #171713);
 }
 
 .protocol-card-inner {
@@ -43,7 +39,7 @@
   width: 100%;
   height: 100%;
   transform-style: preserve-3d;
-  transition: transform 700ms var(--hud-ease);
+  transition: transform 620ms var(--ledger-ease, cubic-bezier(0.16, 1, 0.3, 1));
 }
 
 .protocol-card.is-technical .protocol-card-inner {
@@ -56,52 +52,42 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  padding: clamp(22px, 2.6vw, 32px);
+  padding: clamp(24px, 2.6vw, 36px);
   overflow: hidden;
-  border: 1px solid rgba(var(--protocol-accent-rgb), 0.28);
+  border: 1px solid var(--ledger-line, #9b9484);
   border-radius: inherit;
-  background:
-    linear-gradient(
-      145deg,
-      rgba(var(--protocol-accent-rgb), 0.1),
-      transparent 46%
-    ),
-    rgba(13, 28, 35, 0.92);
-  box-shadow:
-    inset 0 1px rgba(255, 255, 255, 0.035),
-    0 20px 55px rgba(0, 0, 0, 0.16);
+  color: var(--ledger-ink, #171713);
+  background: var(--ledger-paper, #e8e0d0);
+  box-shadow: 6px 7px 0 rgba(36, 28, 23, 0.14);
   backface-visibility: hidden;
 }
 
 .protocol-card-face::before {
   position: absolute;
-  inset: 0;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 7px;
   z-index: -1;
-  background-image:
-    linear-gradient(
-      rgba(var(--protocol-accent-rgb), 0.055) 1px,
-      transparent 1px
-    ),
-    linear-gradient(
-      90deg,
-      rgba(var(--protocol-accent-rgb), 0.055) 1px,
-      transparent 1px
-    );
-  background-size: 34px 34px;
-  mask-image: linear-gradient(to bottom right, black, transparent 62%);
+  background: var(--protocol-accent);
+  content: "";
+}
+
+.protocol-card-face::after {
+  position: absolute;
+  top: 11px;
+  right: 11px;
+  width: 18px;
+  height: 18px;
+  border-top: 1px solid var(--ledger-line, #9b9484);
+  border-right: 1px solid var(--ledger-line, #9b9484);
   content: "";
 }
 
 .protocol-card-technical {
   transform: rotateY(180deg);
-  border-color: rgba(var(--protocol-accent-rgb), 0.48);
-  background:
-    radial-gradient(
-      circle at 92% 8%,
-      rgba(var(--protocol-accent-rgb), 0.14),
-      transparent 32%
-    ),
-    #0b181e;
+  border-color: var(--ledger-ink, #171713);
+  background: var(--ledger-paper-deep, #d8ceba);
 }
 
 .protocol-card-face > header,
@@ -112,37 +98,43 @@
 
 .protocol-card-face > header {
   gap: 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--ledger-line, #9b9484);
 }
 
 .protocol-card-index {
   display: grid;
-  width: 34px;
-  height: 34px;
+  width: 42px;
+  height: 32px;
   place-items: center;
-  border: 1px solid rgba(var(--protocol-accent-rgb), 0.38);
-  border-radius: 50%;
-  color: var(--protocol-accent);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.64rem;
+  border-right: 1px solid var(--ledger-line, #9b9484);
+  color: var(--ledger-ink, #171713);
+  font-family: var(
+    --ledger-mono,
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Consolas,
+    monospace
+  );
+  font-size: 0.72rem;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
 }
 
 .protocol-card-face > header > code {
   color: var(--protocol-accent);
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-}
-
-.protocol-card-mode {
-  margin-left: auto;
-  padding: 5px 8px;
-  border: 1px solid rgba(var(--protocol-accent-rgb), 0.2);
-  border-radius: 999px;
-  color: var(--hud-muted);
-  font-size: 0.58rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  font-family: var(
+    --ledger-mono,
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Consolas,
+    monospace
+  );
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
@@ -158,17 +150,21 @@
 .protocol-card-copy h3 {
   max-width: 560px;
   margin: 0 0 14px;
-  font-size: clamp(1.7rem, 2.7vw, 2.5rem);
-  font-weight: 560;
-  line-height: 1;
+  color: var(--ledger-ink, #171713);
+  font-family: var(--ledger-serif, Georgia, "Times New Roman", serif);
+  font-size: clamp(1.9rem, 2.9vw, 2.8rem);
+  font-weight: 520;
+  line-height: 0.96;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
 }
 
 .protocol-card-simple .protocol-card-copy > p {
   max-width: 590px;
   margin: 0;
-  color: var(--hud-muted);
-  font-size: clamp(0.86rem, 1.2vw, 1rem);
-  line-height: 1.65;
+  color: var(--ledger-muted, #565348);
+  font-size: clamp(0.88rem, 1.2vw, 1.02rem);
+  line-height: 1.6;
   text-wrap: pretty;
 }
 
@@ -178,8 +174,8 @@
 }
 
 .protocol-card-technical .protocol-card-copy h3 {
-  margin-bottom: 10px;
-  font-size: clamp(1.28rem, 2vw, 1.8rem);
+  margin-bottom: 12px;
+  font-size: clamp(1.35rem, 2vw, 1.9rem);
 }
 
 .protocol-card-technical dl {
@@ -192,8 +188,8 @@
   display: grid;
   grid-template-columns: minmax(88px, 0.32fr) minmax(0, 1fr);
   gap: 14px;
-  padding: 7px 0;
-  border-top: 1px solid rgba(var(--protocol-accent-rgb), 0.14);
+  padding: 8px 0;
+  border-top: 1px solid var(--ledger-line, rgba(23, 23, 19, 0.2));
 }
 
 .protocol-card-technical dt,
@@ -202,16 +198,24 @@
 }
 
 .protocol-card-technical dt {
-  color: var(--hud-muted);
+  color: var(--ledger-muted, #565348);
+  font-family: var(
+    --ledger-mono,
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Consolas,
+    monospace
+  );
   font-size: 0.65rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
+  font-weight: 750;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
 .protocol-card-technical dd {
   min-width: 0;
-  color: var(--hud-text);
+  color: var(--ledger-ink, #171713);
   font-size: 0.75rem;
   line-height: 1.45;
   overflow-wrap: anywhere;
@@ -219,23 +223,39 @@
 
 .protocol-card-technical dd code {
   color: var(--protocol-accent);
+  font-family: var(
+    --ledger-mono,
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Consolas,
+    monospace
+  );
   font-size: 0.72rem;
 }
 
 .protocol-card-face > footer {
   justify-content: space-between;
   padding-top: 14px;
-  border-top: 1px solid rgba(var(--protocol-accent-rgb), 0.15);
-  color: var(--hud-muted);
-  font-size: 0.66rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
+  border-top: 1px solid var(--ledger-line, #9b9484);
+  color: var(--ledger-muted, #565348);
+  font-family: var(
+    --ledger-mono,
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Consolas,
+    monospace
+  );
+  font-size: 0.64rem;
+  font-weight: 750;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
 .protocol-card-face > footer span:last-child {
   color: var(--protocol-accent);
-  font-size: 1rem;
+  font-size: 0.9rem;
 }
 
 .protocol-card-trigger {
@@ -249,22 +269,23 @@
   border: 0;
   border-radius: inherit;
   background: transparent;
+  touch-action: manipulation;
 }
 
 .protocol-card-trigger:focus-visible {
-  outline: 2px solid var(--protocol-accent);
-  outline-offset: 4px;
+  outline: 3px solid var(--ledger-oxblood, #7a2730);
+  outline-offset: 5px;
 }
 
 @media (hover: hover) {
   .protocol-card:not(.is-technical):has(.protocol-card-trigger:hover)
     .protocol-card-inner {
-    transform: translateY(-5px);
+    transform: translate(-3px, -3px);
   }
 
   .protocol-card.is-technical:has(.protocol-card-trigger:hover)
     .protocol-card-inner {
-    transform: translateY(-5px) rotateY(180deg);
+    transform: translate(-3px, -3px) rotateY(180deg);
   }
 }
 
@@ -276,7 +297,7 @@
 
 @media (max-width: 520px) {
   .protocol-card {
-    height: 360px;
+    height: 372px;
   }
 
   .protocol-card-face {
@@ -306,6 +327,7 @@
 
   .protocol-card-face {
     position: relative;
+    box-shadow: none;
   }
 
   .protocol-card-technical,

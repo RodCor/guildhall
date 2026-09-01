@@ -1,14 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Guildhall">
-  <rect width="64" height="64" rx="15" fill="#0B1419" />
-  <circle cx="32" cy="32" r="27" fill="#10262A" stroke="#3A5B59" />
-  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M32 24v-9M25.1 36 17 40.6M38.9 36l8.1 4.6" stroke="#A9C9C2" stroke-width="1.8" />
-    <path d="m32 23 10 5.8v11.4L32 46l-10-5.8V28.8L32 23Z" fill="#10262A" stroke="#7FDAC3" stroke-width="2.2" />
-    <path d="m32 29 5 3v6l-5 3-5-3v-6l5-3Z" stroke="#F0F6F4" stroke-width="1.8" />
+  <rect x="2" y="2" width="60" height="60" rx="3" fill="#E9E1D0" stroke="#171713" stroke-width="2" />
+  <g fill="none" stroke-linecap="square" stroke-linejoin="miter">
+    <path d="M32 24v-9M25.1 36 17 40.6M38.9 36l8.1 4.6" stroke="#716C60" stroke-width="1.8" />
+    <path d="m32 23 10 5.8v11.4L32 46l-10-5.8V28.8L32 23Z" fill="#E9E1D0" stroke="#8B3138" stroke-width="2.5" />
+    <path d="m32 29 5 3v6l-5 3-5-3v-6l5-3Z" stroke="#171713" stroke-width="1.8" />
   </g>
-  <g fill="#0B1419" stroke-width="2">
-    <circle cx="32" cy="12" r="4" stroke="#F2D39A" />
-    <circle cx="14" cy="43" r="4" stroke="#78B8D3" />
-    <circle cx="50" cy="43" r="4" stroke="#BA91C6" />
+  <g fill="#E9E1D0" stroke-width="2">
+    <circle cx="32" cy="12" r="4" stroke="#A76F23" />
+    <circle cx="14" cy="43" r="4" stroke="#526552" />
+    <circle cx="50" cy="43" r="4" stroke="#8B3138" />
   </g>
 </svg>

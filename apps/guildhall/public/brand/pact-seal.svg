@@ -1,30 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-labelledby="title description">
   <title id="title">Guildhall pact seal</title>
-  <desc id="description">One mission core connected to three autonomous agent signing nodes.</desc>
-  <defs>
-    <linearGradient id="core" x1="24" y1="18" x2="72" y2="78" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#F2D39A" />
-      <stop offset="1" stop-color="#7FDAC3" />
-    </linearGradient>
-    <radialGradient id="halo" cx="0" cy="0" r="1" gradientTransform="translate(48 47) rotate(90) scale(42)" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#7FDAC3" stop-opacity=".16" />
-      <stop offset="1" stop-color="#7FDAC3" stop-opacity="0" />
-    </radialGradient>
-  </defs>
-  <circle cx="48" cy="48" r="43" fill="url(#halo)" />
-  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M48 30V15M32.4 57 19.4 64.5M63.6 57l13 7.5" stroke="#D3EBE7" stroke-opacity=".55" stroke-width="2" />
-    <path d="M41 8.6A40.3 40.3 0 0 0 12.6 57M21.4 75.6a40.3 40.3 0 0 0 53.2 0M83.4 57A40.3 40.3 0 0 0 55 8.6" stroke="#7FDAC3" stroke-opacity=".68" stroke-width="2.5" />
-    <path d="m48 29 16.5 9.5v19L48 67 31.5 57.5v-19L48 29Z" fill="#10262A" fill-opacity=".88" stroke="url(#core)" stroke-width="2.5" />
-    <path d="m48 38 8.5 5v10L48 58l-8.5-5V43l8.5-5Z" stroke="#F0F6F4" stroke-opacity=".9" stroke-width="2" />
-    <path d="M48 38v20M39.5 43l17 10M56.5 43l-17 10" stroke="#D3EBE7" stroke-opacity=".3" stroke-width="1" />
+  <desc id="description">One mission record connected to three autonomous agent signatures.</desc>
+  <g fill="none" stroke-linecap="square" stroke-linejoin="miter">
+    <circle cx="48" cy="48" r="42" stroke="#171713" stroke-width="1.5" />
+    <path d="M48 31V15M32.5 57 18.7 65M63.5 57l13.8 8" stroke="#716C60" stroke-width="2" />
+    <path d="M36 10.3A40 40 0 0 0 10.4 57M19.3 77.1a40 40 0 0 0 57.4 0M85.6 57A40 40 0 0 0 60 10.3" stroke="#171713" stroke-width="2.5" />
+    <path d="m48 29 17 9.8v19.6L48 68l-17-9.6V38.8L48 29Z" fill="#E9E1D0" stroke="#8B3138" stroke-width="3" />
+    <path d="m48 38 8.5 5v10L48 58l-8.5-5V43l8.5-5Z" stroke="#171713" stroke-width="2" />
+    <path d="M48 38v20M39.5 43l17 10M56.5 43l-17 10" stroke="#716C60" stroke-width="1" />
   </g>
-  <g fill="#0B1419" stroke-width="2.5">
-    <circle cx="48" cy="10" r="6" stroke="#F2D39A" />
-    <circle cx="16" cy="66" r="6" stroke="#78B8D3" />
-    <circle cx="80" cy="66" r="6" stroke="#BA91C6" />
+  <g fill="#E9E1D0" stroke-width="2.5">
+    <circle cx="48" cy="10" r="6" stroke="#A76F23" />
+    <circle cx="16" cy="66" r="6" stroke="#526552" />
+    <circle cx="80" cy="66" r="6" stroke="#8B3138" />
   </g>
-  <g fill="#F0F6F4">
+  <g fill="#171713">
     <circle cx="48" cy="10" r="2" />
     <circle cx="16" cy="66" r="2" />
     <circle cx="80" cy="66" r="2" />

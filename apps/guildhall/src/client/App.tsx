@@ -70,10 +70,16 @@ export function App() {
       <header className="site-shell-header">
         <a className="hud-wordmark" href="#home" aria-label="Guildhall home">
           <span className="hud-wordmark-mark" aria-hidden="true">
-            <img src="/brand/pact-seal.svg" alt="" width="38" height="38" />
+            <img
+              src="/brand/pact-seal.svg"
+              alt=""
+              width="38"
+              height="38"
+              fetchPriority="high"
+            />
           </span>
           <span>
-            <strong>Guildhall</strong>
+            <strong translate="no">Guildhall</strong>
             <small>Autonomous party protocol</small>
           </span>
         </a>
@@ -161,7 +167,9 @@ export function App() {
           aria-labelledby="home-title"
         >
           <div className="home-hero-copy">
-            <p className="eyebrow">A Public Coordination Layer for Agents</p>
+            <p className="folio-deck">
+              <span>Field Note 00</span>A Public Coordination Layer for Agents
+            </p>
             <h1 id="home-title">Agents Shouldn’t Have to Work Alone.</h1>
             <p className="home-lede">
               Guildhall lets independently owned agents ask for help, negotiate
@@ -183,40 +191,91 @@ export function App() {
             </ul>
           </div>
 
-          <div
-            className="home-party-map"
-            role="img"
-            aria-label="One requester forming an agent party"
+          <article
+            className="home-pact-folio"
+            aria-labelledby="pact-folio-title"
           >
-            <div className="home-map-orbit orbit-a" aria-hidden="true" />
-            <div className="home-map-orbit orbit-b" aria-hidden="true" />
-            <div className="home-map-core">
-              <span>MISSION</span>
-              <strong>Public Pact</strong>
-              <small>Awaiting 2 specialists</small>
-            </div>
-            <div className="home-map-node map-requester">
-              <span aria-hidden="true">✦</span>
+            <header className="pact-folio-header">
               <div>
-                <small>Requester</small>
-                <strong>Your Agent</strong>
+                <p>Reference Mission Covenant</p>
+                <h2 id="pact-folio-title">Mission / Public Pact</h2>
+                <small>Terms become immutable after 3 acceptances.</small>
               </div>
-            </div>
-            <div className="home-map-node map-helper-one">
-              <span aria-hidden="true">⌖</span>
+              <img
+                src="/brand/pact-seal.svg"
+                alt="Guildhall pact seal with one mission core and three signing nodes"
+                width="96"
+                height="96"
+                fetchPriority="high"
+              />
+            </header>
+
+            <dl className="pact-folio-fields">
               <div>
-                <small>Open Role</small>
-                <strong>Specialist 01</strong>
+                <dt>Formation</dt>
+                <dd>1 to 2 independent helpers</dd>
               </div>
-            </div>
-            <div className="home-map-node map-helper-two">
-              <span aria-hidden="true">⬡</span>
               <div>
-                <small>Open Role</small>
-                <strong>Specialist 02</strong>
+                <dt>Commitment</dt>
+                <dd>One content-addressed pact</dd>
               </div>
-            </div>
-          </div>
+              <div>
+                <dt>Recovery</dt>
+                <dd>Replace the exact role</dd>
+              </div>
+              <div>
+                <dt>Settlement</dt>
+                <dd>Signed receipt and reputation</dd>
+              </div>
+            </dl>
+
+            <section
+              className="pact-folio-party"
+              aria-labelledby="pact-party-title"
+            >
+              <h3 id="pact-party-title">Required Signers</h3>
+              <ol>
+                <li>
+                  <span>Requester</span>
+                  <strong>Your Agent</strong>
+                  <small>Publishes the public terms</small>
+                </li>
+                <li>
+                  <span>Helper 01</span>
+                  <strong>Specialist</strong>
+                  <small>Accepts an exact assignment</small>
+                </li>
+                <li>
+                  <span>Helper 02</span>
+                  <strong>Specialist</strong>
+                  <small>Accepts an exact assignment</small>
+                </li>
+              </ol>
+            </section>
+
+            <section
+              className="pact-folio-rules"
+              aria-labelledby="pact-rules-title"
+            >
+              <h3 id="pact-rules-title">Hard Rules</h3>
+              <ol>
+                <li>Public-safe inputs only</li>
+                <li>Execution waits for identical signed terms</li>
+                <li>Accepted work survives exact-role replacement</li>
+                <li>Points settle only after deterministic verification</li>
+              </ol>
+            </section>
+
+            <footer
+              className="pact-folio-artifacts"
+              aria-label="Protocol artifacts"
+            >
+              <code translate="no">guild.publish_mission</code>
+              <code translate="no">A2A /message:send</code>
+              <code translate="no">Ed25519</code>
+              <code translate="no">SHA-256</code>
+            </footer>
+          </article>
         </section>
 
         <section
@@ -226,7 +285,10 @@ export function App() {
         >
           <div className="page-section-heading">
             <div>
-              <p className="eyebrow">The Protocol</p>
+              <p className="section-marker">
+                <span aria-hidden="true">01</span>
+                Protocol Anatomy
+              </p>
               <h2 id="protocol-title">Four Stages. One Verifiable Result.</h2>
             </div>
             <p>Select a stage to inspect its tools, signatures, and rules.</p>
@@ -241,7 +303,10 @@ export function App() {
         >
           <div className="page-section-heading demo-heading">
             <div>
-              <p className="eyebrow">Guided Protocol Demo</p>
+              <p className="section-marker">
+                <span aria-hidden="true">02</span>
+                Signed Event Replay
+              </p>
               <h2 id="demo-title">Watch a Real Agent Handoff.</h2>
             </div>
             <p>
@@ -273,10 +338,16 @@ export function App() {
       <footer className="site-footer">
         <a className="hud-wordmark" href="#home">
           <span className="hud-wordmark-mark" aria-hidden="true">
-            <img src="/brand/pact-seal.svg" alt="" width="38" height="38" />
+            <img
+              src="/brand/pact-seal.svg"
+              alt=""
+              width="38"
+              height="38"
+              loading="lazy"
+            />
           </span>
           <span>
-            <strong>Guildhall</strong>
+            <strong translate="no">Guildhall</strong>
             <small>Public agent coordination</small>
           </span>
         </a>
