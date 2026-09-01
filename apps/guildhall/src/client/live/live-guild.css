@@ -99,75 +99,50 @@
   font-weight: 750;
 }
 
-.live-paths {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-  margin: 32px 0 14px;
-}
-
-.live-paths > article {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 16px 20px;
-  align-items: start;
-  min-height: 224px;
-  padding: 24px;
-  background: rgba(11, 27, 39, 0.9);
-  border: 1px solid rgba(128, 218, 255, 0.16);
-  border-radius: 16px;
-  transition:
-    border-color 180ms ease,
-    transform 180ms ease;
-}
-
-.live-paths > article:hover {
-  border-color: rgba(109, 225, 255, 0.42);
-  transform: translateY(-2px);
-}
-
-.live-path-index {
-  display: grid;
-  width: 42px;
-  height: 42px;
-  color: #6ee5ff;
-  background: rgba(64, 199, 236, 0.08);
-  border: 1px solid rgba(105, 224, 255, 0.24);
-  border-radius: 50%;
-  font:
-    700 0.74rem/1 ui-monospace,
-    monospace;
-  place-items: center;
-}
-
-.live-paths h3 {
-  margin: 4px 0 8px;
-  font-size: clamp(1.15rem, 2vw, 1.5rem);
-  letter-spacing: -0.025em;
-}
-
-.live-paths p:not(.eyebrow) {
-  margin: 0;
-  color: #93aab8;
-  line-height: 1.55;
-}
-
-.live-paths .primary-action {
-  grid-column: 2;
-  justify-self: start;
-  min-height: 44px;
-  margin-top: auto;
-}
-
-.live-readiness-bar {
+.live-entry-bar {
   display: flex;
-  gap: 13px;
+  gap: 24px;
   align-items: center;
-  min-height: 62px;
-  padding: 12px 18px;
+  justify-content: space-between;
+  min-height: 76px;
+  margin-top: 24px;
+  padding: 14px 16px 14px 18px;
   background: #0a1a25;
   border: 1px solid rgba(128, 218, 255, 0.17);
-  border-radius: 13px;
+  border-radius: 14px;
+}
+
+.live-entry-status,
+.live-entry-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.live-entry-status > div {
+  display: grid;
+  gap: 2px;
+}
+
+.live-entry-status strong {
+  font-size: 0.88rem;
+}
+
+.live-entry-status span:not(.readiness-indicator) {
+  color: #829aa8;
+  font-size: 0.8rem;
+}
+
+.live-entry-actions {
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.live-entry-actions .primary-action,
+.live-entry-actions .quiet-action,
+.live-entry-actions .text-action {
+  min-height: 44px;
+  white-space: nowrap;
 }
 
 .readiness-indicator {
@@ -190,23 +165,7 @@
   background: #72dcfa;
 }
 
-.live-readiness-bar > div {
-  display: flex;
-  flex: 1;
-  flex-wrap: wrap;
-  gap: 4px 12px;
-  align-items: baseline;
-}
-
-.live-readiness-bar strong {
-  font-size: 0.88rem;
-}
-.live-readiness-bar span:not(.readiness-indicator) {
-  color: #829aa8;
-  font-size: 0.82rem;
-}
-.live-readiness-bar .text-action {
-  min-height: 40px;
+.live-entry-actions .text-action {
   color: #72dcfa;
 }
 
@@ -227,7 +186,7 @@
 }
 
 .guild-registry-shell {
-  margin-top: 32px;
+  margin-top: 18px;
   overflow: hidden;
   background: #07111a;
   border: 1px solid rgba(128, 218, 255, 0.18);
@@ -282,7 +241,6 @@
 }
 
 .registry-refresh,
-.activity-ledger button,
 .agent-profile-button {
   display: inline-flex;
   gap: 7px;
@@ -305,7 +263,6 @@
   stroke-width: 1.8;
 }
 .registry-refresh:hover,
-.activity-ledger button:hover,
 .agent-profile-button:hover {
   color: #ecfbff;
   border-color: rgba(128, 218, 255, 0.42);
@@ -322,7 +279,7 @@
 
 .mission-filters {
   display: grid;
-  grid-template-columns: minmax(240px, 1fr) repeat(3, minmax(130px, 0.42fr));
+  grid-template-columns: minmax(240px, 1fr) repeat(2, minmax(150px, 0.42fr));
   gap: 10px;
   margin-bottom: 22px;
 }
@@ -383,7 +340,6 @@
 .mission-board-grid,
 .agent-leaderboard,
 .guild-directory-grid,
-.activity-ledger,
 .agent-capabilities {
   padding: 0;
   margin: 0;
@@ -544,8 +500,7 @@
 }
 
 .leaderboard-heading,
-.guild-directory-heading,
-.activity-heading {
+.guild-directory-heading {
   display: flex;
   gap: 30px;
   align-items: end;
@@ -555,16 +510,14 @@
   border-bottom: 1px solid rgba(128, 218, 255, 0.13);
 }
 .leaderboard-heading h3,
-.guild-directory-heading h3,
-.activity-heading h3 {
+.guild-directory-heading h3 {
   margin: 5px 0 0;
   font-size: 1.45rem;
 }
 .leaderboard-heading label {
   width: min(260px, 100%);
 }
-.guild-directory-heading > p,
-.activity-heading > span {
+.guild-directory-heading > p {
   max-width: 390px;
   margin: 0;
   color: #7e96a4;
@@ -782,44 +735,6 @@
 }
 .guild-member-stack button:first-child {
   margin-left: 0;
-}
-
-.activity-ledger {
-  display: grid;
-  gap: 3px;
-}
-.activity-ledger li {
-  display: grid;
-  grid-template-columns: 12px 1fr auto auto;
-  gap: 14px;
-  align-items: center;
-  min-height: 70px;
-  padding: 10px 12px;
-  border-bottom: 1px solid rgba(128, 218, 255, 0.09);
-}
-.activity-state {
-  width: 8px;
-  height: 8px;
-  background: #6adef8;
-  border-radius: 50%;
-}
-.activity-state.state-complete {
-  background: #62e1b8;
-}
-.activity-state.state-danger {
-  background: #ff7b88;
-}
-.activity-ledger strong {
-  font-size: 0.86rem;
-}
-.activity-ledger p {
-  margin: 4px 0 0;
-  color: #7993a0;
-  font-size: 0.76rem;
-}
-.activity-ledger time {
-  color: #607b89;
-  font-size: 0.7rem;
 }
 
 .registry-empty {
@@ -1520,9 +1435,6 @@
   .mission-filters {
     grid-template-columns: repeat(3, 1fr);
   }
-  .registry-search {
-    grid-column: 1 / -1;
-  }
   .agent-leaderboard > li {
     grid-template-columns: 38px 46px 1fr 86px 58px;
   }
@@ -1541,14 +1453,10 @@
   .live-guild-hero h2 {
     font-size: clamp(2.3rem, 12vw, 3.5rem);
   }
-  .live-paths,
   .mission-board-grid,
   .guild-directory-grid,
   .registry-skeleton {
     grid-template-columns: 1fr;
-  }
-  .live-paths > article {
-    min-height: 0;
   }
   .live-network-pulse {
     padding: 15px;
@@ -1562,14 +1470,13 @@
   .live-network-pulse dd {
     font-size: 1.2rem;
   }
-  .live-readiness-bar {
-    align-items: flex-start;
-  }
-  .live-readiness-bar > div {
+  .live-entry-bar {
     display: grid;
+    gap: 14px;
+    align-items: start;
   }
-  .live-readiness-bar .text-action {
-    margin-left: auto;
+  .live-entry-actions {
+    flex-wrap: wrap;
   }
   .registry-toolbar {
     align-items: flex-start;
@@ -1597,15 +1504,14 @@
   .mission-filters {
     grid-template-columns: 1fr 1fr;
   }
-  .mission-filters label:last-child {
+  .registry-search {
     grid-column: 1 / -1;
   }
   .mission-board-card {
     min-height: 310px;
   }
   .leaderboard-heading,
-  .guild-directory-heading,
-  .activity-heading {
+  .guild-directory-heading {
     display: grid;
     align-items: start;
   }
@@ -1625,12 +1531,6 @@
   .agent-profile-button::after {
     font-size: 1rem;
     content: "›";
-  }
-  .activity-ledger li {
-    grid-template-columns: 10px 1fr auto;
-  }
-  .activity-ledger time {
-    display: none;
   }
   .registry-error {
     display: grid;
@@ -1680,25 +1580,14 @@
 }
 
 @media (max-width: 480px) {
-  .live-paths > article {
-    grid-template-columns: 38px 1fr;
-    padding: 18px 15px;
+  .live-entry-status {
+    align-items: flex-start;
   }
-  .live-path-index {
-    width: 36px;
-    height: 36px;
-  }
-  .live-paths .primary-action {
-    grid-column: 1 / -1;
-    width: 100%;
-    justify-content: center;
-  }
-  .live-readiness-bar {
+  .live-entry-actions {
     display: grid;
-    grid-template-columns: auto 1fr;
+    grid-template-columns: 1fr;
   }
-  .live-readiness-bar .text-action {
-    grid-column: 1 / -1;
+  .live-entry-actions > * {
     width: 100%;
     justify-content: center;
   }
@@ -1713,7 +1602,6 @@
     grid-template-columns: 1fr;
   }
   .mission-filters label,
-  .mission-filters label:last-child,
   .registry-search {
     grid-column: 1;
   }
@@ -1739,7 +1627,6 @@
     animation: none;
   }
   .mission-board-card,
-  .live-paths > article,
   .mission-open-button svg {
     transition: none;
   }

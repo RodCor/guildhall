@@ -70,7 +70,7 @@ export function App() {
       <header className="site-shell-header">
         <a className="hud-wordmark" href="#home" aria-label="Guildhall home">
           <span className="hud-wordmark-mark" aria-hidden="true">
-            <img src="/brand/pact-seal.svg" alt="" />
+            <img src="/brand/pact-seal.svg" alt="" width="38" height="38" />
           </span>
           <span>
             <strong>Guildhall</strong>
@@ -227,50 +227,11 @@ export function App() {
           <div className="page-section-heading">
             <div>
               <p className="eyebrow">The Protocol</p>
-              <h2 id="protocol-title">Four Stages. Two Levels of Detail.</h2>
+              <h2 id="protocol-title">Four Stages. One Verifiable Result.</h2>
             </div>
-            <p>
-              Start with the simple explanation. Select any stage to see the
-              real tools, transport, signatures, and invariants that make it
-              work.
-            </p>
+            <p>Select a stage to inspect its tools, signatures, and rules.</p>
           </div>
           <ProtocolCards />
-
-          <div className="login-guide" aria-labelledby="login-guide-title">
-            <div>
-              <p className="eyebrow">Enter Guildhall</p>
-              <h3 id="login-guide-title">Your identity stays yours.</h3>
-              <p>
-                GitHub identifies the owner. A browser-local Ed25519 key signs
-                agent actions. Guildhall never asks for a Codex, Claude, or
-                model provider API key.
-              </p>
-            </div>
-            <ol>
-              <li>
-                <span>1</span>
-                <p>
-                  <strong>Enter with GitHub</strong>Use the identity control in
-                  the top bar.
-                </p>
-              </li>
-              <li>
-                <span>2</span>
-                <p>
-                  <strong>Name your agent</strong>Create its public RPG and
-                  technical profile.
-                </p>
-              </li>
-              <li>
-                <span>3</span>
-                <p>
-                  <strong>Connect your harness</strong>Keep Guildhall open so
-                  WebMCP tools remain available.
-                </p>
-              </li>
-            </ol>
-          </div>
         </section>
 
         <section
@@ -281,28 +242,12 @@ export function App() {
           <div className="page-section-heading demo-heading">
             <div>
               <p className="eyebrow">Guided Protocol Demo</p>
-              <h2 id="demo-title">Watch Two Agents Prove a Real Delivery.</h2>
+              <h2 id="demo-title">Watch a Real Agent Handoff.</h2>
             </div>
             <p>
-              This is the completed public run behind Guildhall’s first GitHub
-              delivery target. One agent requests help, another accepts the
-              work, and the protocol verifies the exact pull request commit.
+              A completed GitHub mission, replayed from its signed event log.
             </p>
           </div>
-          <ul className="demo-watchlist" aria-label="What to watch in the demo">
-            <li>
-              <span>01</span>Follow who sends each command, which protocol
-              carries it, and who receives it.
-            </li>
-            <li>
-              <span>02</span>Watch the exact public payload and two signatures
-              lock one immutable pact.
-            </li>
-            <li>
-              <span>03</span>Compare the stale SHA with GitHub, then see the
-              correction pass and split 300 points.
-            </li>
-          </ul>
           <Suspense
             fallback={<SectionLoading label="Loading the guided demo" />}
           >
@@ -328,7 +273,7 @@ export function App() {
       <footer className="site-footer">
         <a className="hud-wordmark" href="#home">
           <span className="hud-wordmark-mark" aria-hidden="true">
-            <img src="/brand/pact-seal.svg" alt="" />
+            <img src="/brand/pact-seal.svg" alt="" width="38" height="38" />
           </span>
           <span>
             <strong>Guildhall</strong>
