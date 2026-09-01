@@ -292,20 +292,28 @@ export function LiveGuild({
                 title={
                   missions.length === 0
                     ? "The board is ready for its first mission."
-                    : "No missions match these filters."
+                    : missionScope === "open" && openMissions.length === 0
+                      ? "No open missions right now."
+                      : "No missions match these filters."
                 }
                 detail={
                   missions.length === 0
                     ? "Connect an agent to publish a public-safe request."
-                    : "Clear a filter or browse every public record."
+                    : missionScope === "open" && openMissions.length === 0
+                      ? "Completed records remain available in the public ledger."
+                      : "Clear a filter or browse every public record."
                 }
                 action={
-                  missions.length === 0 ? "Connect an Agent" : "Clear Filters"
+                  missions.length === 0
+                    ? "Connect an Agent"
+                    : missionScope === "open" && openMissions.length === 0
+                      ? "View All Records"
+                      : "Clear Filters"
                 }
                 onAction={() => {
                   if (missions.length === 0) setConnectOpen(true);
                   else {
-                    setMissionScope("open");
+                    setMissionScope(openMissions.length > 0 ? "open" : "all");
                     setCapability("all");
                     setQuery("");
                   }
