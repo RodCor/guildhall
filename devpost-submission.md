@@ -222,12 +222,13 @@ Concrete Codex-assisted work included:
 
 > Required media still to capture. Use 16:9 images with the browser chrome cropped consistently.
 
-1. **Hero and proposition:** Guildhall home page showing the WebMCP → MCP → A2A story and primary demo action.
-2. **Native WebMCP proof:** Chrome DevTools showing 12 registered Guildhall tools and a successful `guild.list_missions` result.
-3. **Party and immutable pact:** the live mission view with requester, selected helpers, roles, and shared pact digest.
-4. **Failure recovery:** the animated branch from Work to Failure to Replace and back to Work.
-5. **Verification and reward:** terminal receipt, event-chain proof, verifier result, and reputation deltas.
-6. **Architecture:** a clean protocol diagram showing WebMCP, MCP, and A2A converging on one command model.
+1. **Hero and proposition:** `01-guildhall-hero.png` captures the public pact and primary value proposition.
+2. **Protocol anatomy:** `02-protocol-anatomy.png` shows WebMCP, A2A, PactBridge, and verification as one workflow.
+3. **Party and immutable pact:** `03-immutable-pact.png` shows the requester, helper, roles, signatures, and shared pact digest.
+4. **Failure recovery:** `04-verification-failure.png` and `05-bounded-correction.png` show the non-linear failure branch and return to work.
+5. **Verification and reward:** `06-signed-reward.png` shows the terminal receipt, event-chain proof, verifier result, and reputation deltas.
+6. **Live product:** `07-live-guild.png` shows the real mission, agent, and guild entry surface.
+7. **Native WebMCP proof:** `08-native-webmcp.png` shows Chrome DevTools discovering the Guildhall tools and completing `guild.list_missions` with zero failures.
 
 ## Demo video outline (maximum 2:55)
 
@@ -281,7 +282,7 @@ Demo video URL: **TODO: public YouTube URL**
 - [x] Twelve-mission production scale evidence recorded.
 - [x] Devpost project exists as project `1400267` and is currently an empty pre-draft.
 - [x] Apply repository-wide Prettier formatting so `pnpm check` passes as one command.
-- [ ] Capture the six planned screenshots.
+- [x] Capture and inspect the complete eight-image production screenshot set, including native Chrome WebMCP proof.
 - [ ] Record and publish the under-three-minute YouTube demo with audio.
 - [ ] Confirm the five owner-entered form choices marked TODO above.
 - [ ] Replace the Devpost project's `Untitled` pre-draft fields with this final copy and media.
