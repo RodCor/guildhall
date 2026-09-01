@@ -427,17 +427,16 @@ export function TechnicalMission({
     >
       <div className="guildglass-casebar">
         <div>
-          <p className="eyebrow">Demo Case 001 / Verified Live Run</p>
+          <p className="eyebrow">Verified Mission Replay</p>
           <h3 id="mission-console-title">GitHub Delivery With Correction</h3>
         </div>
         <div className="guildglass-case-meta">
           <p className="demo-provenance">
-            <strong>2 agents · 1 signed receipt</strong>
-            <span>The actual 300-point mission, replayed from event 0</span>
+            <strong>Real mission · 2 agents · 1 receipt</strong>
           </p>
           <span className={`stream-chip stream-${streamState}`}>
             <span aria-hidden="true" />
-            {streamState === "live" ? "Verified Ledger Live" : "Protocol Ready"}
+            {streamState === "live" ? "Ledger live" : "Ready"}
           </span>
         </div>
       </div>
@@ -746,14 +745,7 @@ function MissionChamber({
     findingCount: 0,
     remediationCount: 0,
   });
-  const content = hudChapterContent(chapterId, {
-    acceptanceCount,
-    applicationCount: helperPresent ? 1 : 0,
-    artifactCount,
-    findingCount: 0,
-    remediationCount: 0,
-    eventCount: visibleEvents.length,
-  });
+  const content = hudChapterContent(chapterId);
   const pactDigest = text(candidate?.pactDigest);
   const artifactHeadShas = (packet.artifacts ?? [])
     .map((artifact) =>
@@ -786,18 +778,10 @@ function MissionChamber({
         <article className="hud-narration" key={chapterId}>
           <div className="hud-step-kicker">
             <span>{String(stepIndex).padStart(2, "0")}</span>
-            <code translate="no">{protocolActionLabel(chapterId)}</code>
+            <code translate="no">{HUD_STEPS[stepIndex]?.label ?? "Ready"}</code>
           </div>
           <h4>{content.title}</h4>
           <p>{content.detail}</p>
-          <dl className="hud-facts">
-            {content.facts.slice(0, 2).map((fact) => (
-              <div key={fact.label}>
-                <dt>{fact.label}</dt>
-                <dd>{fact.value}</dd>
-              </div>
-            ))}
-          </dl>
 
           {chapterId === "correction" ? (
             <p className="recovery-handoff">
@@ -891,119 +875,62 @@ function MissionChamber({
 interface HudContent {
   readonly title: string;
   readonly detail: string;
-  readonly facts: readonly ChapterEvidenceFact[];
 }
 
-function hudChapterContent(
-  chapterId: DemoChapterId,
-  context: ChapterEvidenceContext,
-): HudContent {
+function hudChapterContent(chapterId: DemoChapterId): HudContent {
   switch (chapterId) {
     case "publish":
       return {
-        title: "Kirito publishes a bounded code mission.",
+        title: "The requester publishes the mission.",
         detail:
-          "WebMCP records the public repository, main branch, pull-request delivery rule, required capabilities, and 300-point reward. No model credentials are shared.",
-        facts: [
-          { label: "Target", value: "RodCor/guildhall → main" },
-          { label: "Delivery", value: "Exact public PR head" },
-        ],
+          "WebMCP fixes the repository, required skills, delivery rule, and 300-point reward.",
       };
     case "recruit":
       return {
-        title: "The guild matches one qualified helper.",
+        title: "A qualified helper joins.",
         detail:
-          "A separately owned Guild Node applies with TypeScript and protocol-security capabilities. The direct MCP path forms the party immediately.",
-        facts: [
-          {
-            label: "Party",
-            value: `${Math.min(context.applicationCount, 1)}/1 helper`,
-          },
-          { label: "Match", value: "2/2 required capabilities" },
-        ],
+          "The agent matches both required capabilities and applies through the Guild Node.",
       };
     case "pact":
       return {
-        title: "Both agents sign one exact work order.",
+        title: "Both agents lock the pact.",
         detail:
-          "After two proposal rounds, requester and helper sign the same scope, GitHub target, verification criterion, deadline, and 300-point allocation.",
-        facts: [
-          {
-            label: "Signatures",
-            value: `${context.acceptanceCount}/2 matching`,
-          },
-          { label: "Negotiation", value: "2 rounds, 1 pact" },
-        ],
+          "Two signatures bind one scope, target, deadline, success rule, and reward.",
       };
     case "work":
       return {
         title: "The helper submits signed PR evidence.",
         detail:
-          "The artifact binds the repository, canonical pull-request URL, base branch, and exact 40-character head commit to the accepted pact.",
-        facts: [
-          {
-            label: "Attempt",
-            value: context.artifactCount >= 2 ? "2 of 2" : "1 of 2",
-          },
-          {
-            label: "Evidence",
-            value: "PR #1 + base + exact SHA",
-          },
-        ],
+          "Attempt 1 binds the pull request and exact head commit to the pact.",
       };
     case "mismatch":
       return {
-        title: "The verifier rejects the stale head commit.",
+        title: "GitHub rejects the stale commit.",
         detail:
-          "A runtime fix advanced the pull request after attempt 1. GitHub reports a different head SHA, so Guildhall awards nothing and opens one correction.",
-        facts: [
-          { label: "Failure", value: "PR_HEAD_SHA_MISMATCH" },
-          { label: "Reward", value: "300 points still locked" },
-        ],
+          "The public PR moved after submission. Points stay locked and one correction opens.",
       };
     case "correction":
       return {
-        title: "The helper uses the one correction.",
-        detail:
-          "Attempt 2 signs the new exact PR head. The mission, role, criterion, and pact digest remain unchanged before verification runs again.",
-        facts: [
-          { label: "Attempt", value: "2 of 2" },
-          { label: "Contract", value: "Pact v2 unchanged" },
-        ],
+        title: "The helper signs a correction.",
+        detail: "Attempt 2 uses the current commit without changing the pact.",
       };
     case "verify":
       return {
-        title: "Guildhall reads the public PR itself.",
+        title: "Guildhall checks the public PR.",
         detail:
-          "The tokenless verifier rejects redirects, reads GitHub’s public API, and confirms repository, open PR, main base, and the exact signed head SHA.",
-        facts: [
-          { label: "Criterion", value: "1/1 public GitHub check" },
-          {
-            label: "Attempt",
-            value: context.artifactCount >= 2 ? "2, passed" : "1, checking",
-          },
-        ],
+          "The verifier confirms the repository, branch, PR state, and signed commit without a token.",
       };
     case "reward":
       return {
-        title: "The signed receipt awards reputation.",
+        title: "The verified receipt issues reputation.",
         detail:
-          "Only after public verification passes does Guildhall award the helper 300 non-monetary points: 150 for TypeScript and 150 for protocol security.",
-        facts: [
-          { label: "Receipt", value: "+300 points issued" },
-          { label: "Proof", value: "Signature + event chain valid" },
-        ],
+          "The helper earns 300 points split across the two proven capabilities.",
       };
     case "ready":
     default:
       return {
-        title: "One agent needs help shipping verified code.",
-        detail:
-          "Replay the real public mission where two independently signed agents negotiate, deliver a GitHub pull request, correct stale evidence, and earn a receipt.",
-        facts: [
-          { label: "Mission", value: "1 requester + 1 helper" },
-          { label: "Reward", value: "300 non-monetary points" },
-        ],
+        title: "One agent needs help shipping code.",
+        detail: "Replay a real mission from public request to signed result.",
       };
   }
 }
@@ -1286,21 +1213,6 @@ function ProtocolMoment({
       </div>
 
       <div className="moment-card">{protocolMomentBody()}</div>
-
-      <ol className="moment-sequence">
-        <li>
-          <span aria-hidden="true" />
-          Action
-        </li>
-        <li>
-          <span aria-hidden="true" />
-          Signed proof
-        </li>
-        <li>
-          <span aria-hidden="true" />
-          Public state
-        </li>
-      </ol>
     </div>
   );
 
@@ -1656,17 +1568,6 @@ function GuildglassScene({
       <div className="aether-orbit orbit-one" />
       <div className="aether-orbit orbit-two" />
 
-      <div className="mission-shard">
-        <span className="shard-index">CASE 001</span>
-        <strong>Verified GitHub Delivery</strong>
-        <small>Real PR · Real signatures · Real receipt</small>
-      </div>
-
-      <div className={`scene-action scene-action-${chapterId}`} key={chapterId}>
-        <span aria-hidden="true" />
-        {sceneActionLabel(chapterId)}
-      </div>
-
       <div className={`protocol-gate${chapterIndex >= 1 ? " gate-open" : ""}`}>
         <span>W</span>
         <small>WebMCP</small>
@@ -1743,30 +1644,6 @@ function GuildglassScene({
       />
     </div>
   );
-}
-
-function sceneActionLabel(chapterId: DemoChapterId): string {
-  switch (chapterId) {
-    case "publish":
-      return "Requester calls guild.publish_mission";
-    case "recruit":
-      return "Registry matches both required capabilities";
-    case "pact":
-      return "Both agents sign the same pact digest";
-    case "work":
-      return "Helper sends signed attempt 1 over A2A";
-    case "mismatch":
-      return "GitHub live state rejects the signed evidence";
-    case "correction":
-      return "Helper signs attempt 2; the pact stays fixed";
-    case "verify":
-      return "Verifier reads GitHub without credentials";
-    case "reward":
-      return "Signed receipt unlocks 300 points";
-    case "ready":
-    default:
-      return "Guild capability ready";
-  }
 }
 
 function protocolActionLabel(chapterId: DemoChapterId): string {
@@ -2506,14 +2383,7 @@ function EmptyMissionStage({
   readonly busy: boolean;
   readonly onRun: () => void;
 }) {
-  const content = hudChapterContent("ready", {
-    acceptanceCount: 0,
-    applicationCount: 0,
-    artifactCount: 0,
-    eventCount: 0,
-    findingCount: 0,
-    remediationCount: 0,
-  });
+  const content = hudChapterContent("ready");
   return (
     <div className="hud-demo chapter-ready">
       <HudStepTrack chapterId="ready" />
@@ -2540,14 +2410,6 @@ function EmptyMissionStage({
           </div>
           <h4>{content.title}</h4>
           <p>{content.detail}</p>
-          <dl className="hud-facts">
-            {content.facts.map((fact) => (
-              <div key={fact.label}>
-                <dt>{fact.label}</dt>
-                <dd>{fact.value}</dd>
-              </div>
-            ))}
-          </dl>
           {activeAgentId === null ? (
             <p className="ready-guidance">
               Sign in above to let your browser agent call the party.

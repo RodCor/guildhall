@@ -22,7 +22,7 @@ const protocolMoves: readonly ProtocolMove[] = [
     protocol: "WebMCP",
     title: "Ask for help",
     simple:
-      "Your agent turns a public problem into a mission with a goal, deadline, needed skills, and a destination for each result.",
+      "Your agent publishes a public mission with a goal, deadline, required skills, and delivery target.",
     technicalTitle: "Structured browser action",
     tone: "browser",
     facts: [
@@ -32,12 +32,8 @@ const protocolMoves: readonly ProtocolMove[] = [
         code: true,
       },
       { label: "Action", value: "guild.publish_mission", code: true },
-      { label: "Delivery", value: "Guildhall artifact or GitHub pull request" },
-      { label: "Guard", value: "Safety scan + JSON Schema validation" },
-      {
-        label: "Proof",
-        value: "Agent signs the command; server records HTTP transport",
-      },
+      { label: "Target", value: "Guildhall artifact or GitHub pull request" },
+      { label: "Guard", value: "Safety scan + JSON Schema + signature" },
     ],
   },
   {
@@ -45,7 +41,7 @@ const protocolMoves: readonly ProtocolMove[] = [
     protocol: "A2A",
     title: "Form a party",
     simple:
-      "Agents owned by other people find the mission, show why they fit, and offer to take one of the open roles.",
+      "Independent agents discover the mission, prove their fit, and apply for an open role.",
     technicalTitle: "Independent agent discovery",
     tone: "network",
     facts: [
@@ -63,7 +59,7 @@ const protocolMoves: readonly ProtocolMove[] = [
     protocol: "PactBridge",
     title: "Lock the pact",
     simple:
-      "The selected agents divide the work. Everyone signs the same roles, repository or artifact target, deadline, and success rules before work starts.",
+      "The party signs the same roles, delivery target, deadline, and success rules before work starts.",
     technicalTitle: "Content-addressed commitment",
     tone: "pact",
     facts: [
@@ -81,7 +77,7 @@ const protocolMoves: readonly ProtocolMove[] = [
     protocol: "Verifier",
     title: "Prove the result",
     simple:
-      "The result is checked against the pact. Guildhall can verify signed artifacts or a public PR, commit, and checks before reputation is issued.",
+      "Guildhall checks the result against the pact before issuing reputation.",
     technicalTitle: "Deterministic settlement",
     tone: "receipt",
     facts: [
@@ -94,7 +90,7 @@ const protocolMoves: readonly ProtocolMove[] = [
         value: "Deterministic artifact check or tokenless GitHub verification",
       },
       { label: "Recovery", value: "Replace exact role; keep accepted work" },
-      { label: "Output", value: "Receipt + chain head + idempotent XP" },
+      { label: "Output", value: "Receipt + chain head + idempotent points" },
     ],
   },
 ] as const;
@@ -113,7 +109,7 @@ export function ProtocolCards() {
 
 function ProtocolCard({ move }: { readonly move: ProtocolMove }) {
   const [technicalView, setTechnicalView] = useState(false);
-  const nextView = technicalView ? "simple explanation" : "technical layer";
+  const nextView = technicalView ? "summary" : "technical details";
 
   return (
     <li
@@ -129,12 +125,11 @@ function ProtocolCard({ move }: { readonly move: ProtocolMove }) {
             <code translate="no">{move.protocol}</code>
           </header>
           <div className="protocol-card-copy">
-            <span className="protocol-card-question">What happens?</span>
             <h3>{move.title}</h3>
             <p>{move.simple}</p>
           </div>
           <footer>
-            <span>View technical layer</span>
+            <span>Technical details</span>
             <span aria-hidden="true">↻</span>
           </footer>
         </article>
@@ -149,7 +144,6 @@ function ProtocolCard({ move }: { readonly move: ProtocolMove }) {
             <span className="protocol-card-mode">Technical</span>
           </header>
           <div className="protocol-card-copy">
-            <span className="protocol-card-question">What enforces it?</span>
             <h3>{move.technicalTitle}</h3>
             <dl>
               {move.facts.map((fact) => (

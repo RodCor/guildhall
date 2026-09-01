@@ -9,7 +9,7 @@ import "./live-guild.css";
 export type LiveWebMcpStatus =
   "checking" | "registered" | "unavailable" | "failed";
 
-type RegistryView = "missions" | "agents" | "guilds" | "activity";
+type RegistryView = "missions" | "agents" | "guilds";
 type MissionScope = "open" | "all" | "completed";
 const REFERENCE_GUILD_NAME = "Guildhall Reference Party";
 const CHATGPT_URL = "https://chatgpt.com/";
@@ -35,11 +35,9 @@ export function LiveGuild({
   readonly onOpenIdentity: () => void;
   readonly webMcpStatus: LiveWebMcpStatus;
 }) {
-  const { missions, agents, loading, error, refreshedAt, refresh } =
-    useGuildCatalog();
+  const { missions, agents, loading, error, refresh } = useGuildCatalog();
   const [view, setView] = useState<RegistryView>("missions");
   const [missionScope, setMissionScope] = useState<MissionScope>("open");
-  const [difficulty, setDifficulty] = useState("all");
   const [capability, setCapability] = useState("all");
   const [query, setQuery] = useState("");
   const [selectedMission, setSelectedMission] = useState<MissionCard | null>(
@@ -89,9 +87,6 @@ export function LiveGuild({
       if (missionScope === "completed" && !isCompletedMission(mission)) {
         return false;
       }
-      if (difficulty !== "all" && mission.difficulty !== difficulty) {
-        return false;
-      }
       if (
         capability !== "all" &&
         !mission.requiredCapabilities.includes(capability)
@@ -107,7 +102,7 @@ export function LiveGuild({
         )
       );
     });
-  }, [capability, difficulty, missionScope, missions, query]);
+  }, [capability, missionScope, missions, query]);
   const rankedAgents = useMemo(
     () => rankAgents(publicAgents, capability),
     [capability, publicAgents],
@@ -147,17 +142,18 @@ export function LiveGuild({
         </div>
       </div>
 
-      <div className="live-paths" aria-label="Choose how to enter Guildhall">
-        <article>
-          <span className="live-path-index">01</span>
+      <div className="live-entry-bar" aria-label="Live Guild controls">
+        <div className="live-entry-status">
+          <span
+            className={`readiness-indicator readiness-${webMcpStatus}`}
+            aria-hidden="true"
+          />
           <div>
-            <p className="eyebrow">Request help</p>
-            <h3>Post a mission with fixed public terms.</h3>
-            <p>
-              Your agent sets the goal, capabilities, party size, deadline,
-              evidence, and point reward before anyone commits.
-            </p>
+            <strong>{readinessTitle(webMcpStatus)}</strong>
+            <span>{readinessDetail(webMcpStatus)}</span>
           </div>
+        </div>
+        <div className="live-entry-actions">
           <button
             className="primary-action"
             type="button"
@@ -165,54 +161,25 @@ export function LiveGuild({
           >
             {activeAgentId === null ? "Create an Agent" : "Manage My Agent"}
           </button>
-        </article>
-        <article>
-          <span className="live-path-index">02</span>
-          <div>
-            <p className="eyebrow">Find work</p>
-            <h3>Connect your harness and inspect the board.</h3>
-            <p>
-              Use your existing Codex, Claude Code, Cursor, or Pi subscription.
-              No model API key is sent to Guildhall.
-            </p>
-          </div>
           <button
-            className="primary-action"
+            className="quiet-action"
             type="button"
             onClick={() => setConnectOpen(true)}
           >
-            Connect My Harness
+            Connect Harness
           </button>
-        </article>
-      </div>
-
-      <div className="live-readiness-bar">
-        <span
-          className={`readiness-indicator readiness-${webMcpStatus}`}
-          aria-hidden="true"
-        />
-        <div>
-          <strong>{readinessTitle(webMcpStatus)}</strong>
-          <span>{readinessDetail(webMcpStatus)}</span>
+          {webMcpStatus === "registered" ||
+          webMcpStatus === "checking" ? null : (
+            <a
+              className="text-action chatgpt-shortcut"
+              href={CHATGPT_URL}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open ChatGPT <ArrowIcon />
+            </a>
+          )}
         </div>
-        {webMcpStatus === "registered" || webMcpStatus === "checking" ? (
-          <button
-            type="button"
-            className="text-action"
-            onClick={() => setConnectOpen(true)}
-          >
-            Connection details
-          </button>
-        ) : (
-          <a
-            className="text-action chatgpt-shortcut"
-            href={CHATGPT_URL}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Open ChatGPT <ArrowIcon />
-          </a>
-        )}
       </div>
 
       <div className="guild-registry-shell">
@@ -227,13 +194,13 @@ export function LiveGuild({
                 ["missions", "Missions", missions.length],
                 ["agents", "Adventurers", publicAgents.length],
                 ["guilds", "Guilds", guilds.length],
-                ["activity", "Activity", missions.length],
               ] as const
             ).map(([value, label, count]) => (
               <button
                 key={value}
                 type="button"
                 role="tab"
+                id={`registry-${value}-tab`}
                 aria-selected={view === value}
                 aria-controls={`registry-${value}`}
                 onClick={() => setView(value)}
@@ -248,7 +215,7 @@ export function LiveGuild({
             onClick={refresh}
             disabled={loading}
           >
-            <RefreshIcon /> {loading ? "Updating" : "Refresh"}
+            <RefreshIcon /> {loading ? "Updating…" : "Refresh"}
           </button>
         </div>
 
@@ -266,59 +233,57 @@ export function LiveGuild({
           <div
             id="registry-missions"
             role="tabpanel"
+            aria-labelledby="registry-missions-tab"
             className="registry-panel"
           >
-            <div className="mission-filters" aria-label="Filter missions">
-              <label className="registry-search">
-                <span className="sr-only">Search missions</span>
-                <SearchIcon />
-                <input
-                  type="search"
-                  value={query}
-                  onChange={(event) => setQuery(event.currentTarget.value)}
-                  placeholder="Search missions or capabilities"
-                />
-              </label>
-              <label>
-                <span>State</span>
-                <select
-                  value={missionScope}
-                  onChange={(event) =>
-                    setMissionScope(event.currentTarget.value as MissionScope)
-                  }
-                >
-                  <option value="open">Open now</option>
-                  <option value="all">All records</option>
-                  <option value="completed">Completed</option>
-                </select>
-              </label>
-              <label>
-                <span>Difficulty</span>
-                <select
-                  value={difficulty}
-                  onChange={(event) => setDifficulty(event.currentTarget.value)}
-                >
-                  <option value="all">Any level</option>
-                  <option value="novice">Novice</option>
-                  <option value="adept">Adept</option>
-                  <option value="expert">Expert</option>
-                </select>
-              </label>
-              <label>
-                <span>Capability</span>
-                <select
-                  value={capability}
-                  onChange={(event) => setCapability(event.currentTarget.value)}
-                >
-                  <option value="all">Any capability</option>
-                  {capabilities.map((entry) => (
-                    <option key={entry} value={entry}>
-                      {humanize(entry)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
+            {missions.length > 0 ? (
+              <div className="mission-filters" aria-label="Filter missions">
+                <label className="registry-search">
+                  <span className="sr-only">Search missions</span>
+                  <SearchIcon />
+                  <input
+                    type="search"
+                    name="mission-search"
+                    autoComplete="off"
+                    spellCheck={false}
+                    value={query}
+                    onChange={(event) => setQuery(event.currentTarget.value)}
+                    placeholder="Search missions or capabilities…"
+                  />
+                </label>
+                <label>
+                  <span>State</span>
+                  <select
+                    name="mission-state"
+                    value={missionScope}
+                    onChange={(event) =>
+                      setMissionScope(event.currentTarget.value as MissionScope)
+                    }
+                  >
+                    <option value="open">Open now</option>
+                    <option value="all">All records</option>
+                    <option value="completed">Completed</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Capability</span>
+                  <select
+                    name="mission-capability"
+                    value={capability}
+                    onChange={(event) =>
+                      setCapability(event.currentTarget.value)
+                    }
+                  >
+                    <option value="all">Any capability</option>
+                    {capabilities.map((entry) => (
+                      <option key={entry} value={entry}>
+                        {humanize(entry)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            ) : null}
 
             {loading && missions.length === 0 ? (
               <RegistrySkeleton />
@@ -341,7 +306,6 @@ export function LiveGuild({
                   if (missions.length === 0) setConnectOpen(true);
                   else {
                     setMissionScope("open");
-                    setDifficulty("all");
                     setCapability("all");
                     setQuery("");
                   }
@@ -362,7 +326,12 @@ export function LiveGuild({
         ) : null}
 
         {view === "agents" ? (
-          <div id="registry-agents" role="tabpanel" className="registry-panel">
+          <div
+            id="registry-agents"
+            role="tabpanel"
+            aria-labelledby="registry-agents-tab"
+            className="registry-panel"
+          >
             <div className="leaderboard-heading">
               <div>
                 <p className="eyebrow">Capability Rankings</p>
@@ -371,6 +340,7 @@ export function LiveGuild({
               <label>
                 <span>Rank by</span>
                 <select
+                  name="agent-rank-capability"
                   value={capability}
                   onChange={(event) => setCapability(event.currentTarget.value)}
                 >
@@ -407,7 +377,12 @@ export function LiveGuild({
         ) : null}
 
         {view === "guilds" ? (
-          <div id="registry-guilds" role="tabpanel" className="registry-panel">
+          <div
+            id="registry-guilds"
+            role="tabpanel"
+            aria-labelledby="registry-guilds-tab"
+            className="registry-panel"
+          >
             <div className="guild-directory-heading">
               <div>
                 <p className="eyebrow">Guild Directory</p>
@@ -463,63 +438,12 @@ export function LiveGuild({
                           type="button"
                           onClick={() => setSelectedAgent(member)}
                           title={member.characterName}
+                          aria-label={`Open ${member.characterName}'s profile`}
                         >
                           {member.characterName.slice(0, 1).toUpperCase()}
                         </button>
                       ))}
                     </div>
-                  </li>
-                ))}
-              </ol>
-            )}
-          </div>
-        ) : null}
-
-        {view === "activity" ? (
-          <div
-            id="registry-activity"
-            role="tabpanel"
-            className="registry-panel"
-          >
-            <div className="activity-heading">
-              <div>
-                <p className="eyebrow">Public Ledger</p>
-                <h3>Recent mission state changes.</h3>
-              </div>
-              <span>
-                {refreshedAt === null
-                  ? "Waiting for registry"
-                  : `Updated ${relativeTime(refreshedAt)}`}
-              </span>
-            </div>
-            {missions.length === 0 ? (
-              <EmptyState
-                title="No mission activity yet."
-                detail="Signed mission transitions will appear here."
-              />
-            ) : (
-              <ol className="activity-ledger">
-                {missions.map((mission) => (
-                  <li key={mission.missionId}>
-                    <span
-                      className={`activity-state ${stateTone(mission.displayState)}`}
-                      aria-hidden="true"
-                    />
-                    <div>
-                      <strong>{mission.title}</strong>
-                      <p>
-                        Mission is now <b>{mission.displayState}</b>.
-                      </p>
-                    </div>
-                    <time dateTime={mission.deliveryDeadline}>
-                      {dateFormatter.format(new Date(mission.deliveryDeadline))}
-                    </time>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedMission(mission)}
-                    >
-                      View
-                    </button>
                   </li>
                 ))}
               </ol>
@@ -1362,14 +1286,6 @@ function safeDate(value: string): string {
   return Number.isFinite(date.getTime())
     ? dateFormatter.format(date)
     : "Not available";
-}
-function relativeTime(timestamp: number): string {
-  const seconds = Math.max(0, Math.round((Date.now() - timestamp) / 1_000));
-  return seconds < 10
-    ? "just now"
-    : seconds < 60
-      ? `${seconds}s ago`
-      : `${Math.floor(seconds / 60)}m ago`;
 }
 async function copyText(value: string): Promise<boolean> {
   try {

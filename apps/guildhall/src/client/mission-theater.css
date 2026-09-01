@@ -68,6 +68,7 @@ button,
 summary,
 a {
   -webkit-tap-highlight-color: rgba(131, 215, 194, 0.2);
+  touch-action: manipulation;
 }
 
 button:focus-visible,
@@ -204,7 +205,6 @@ section.live-guild-section {
 
 .home-hero-copy .eyebrow,
 .page-section-heading .eyebrow,
-.login-guide .eyebrow,
 .live-entry-card .eyebrow,
 .live-panel-heading .eyebrow {
   margin-bottom: 12px;
@@ -457,112 +457,8 @@ section.live-guild-section {
   text-wrap: pretty;
 }
 
-.login-guide {
-  display: grid;
-  grid-template-columns: minmax(280px, 0.7fr) minmax(0, 1.3fr);
-  gap: clamp(36px, 7vw, 110px);
-  margin-top: 66px;
-  padding: clamp(28px, 4vw, 52px);
-  border: 1px solid rgba(131, 215, 194, 0.22);
-  border-radius: 26px 26px 26px 8px;
-  background: rgba(131, 215, 194, 0.045);
-}
-
-.login-guide h3 {
-  margin: 0 0 12px;
-  font-size: clamp(1.7rem, 3vw, 2.7rem);
-}
-
-.login-guide > div > p:last-child {
-  margin: 0;
-  color: var(--hud-muted);
-  line-height: 1.6;
-}
-
-.login-guide ol {
-  display: grid;
-  gap: 4px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.login-guide li {
-  display: grid;
-  grid-template-columns: 36px 1fr;
-  align-items: start;
-  gap: 13px;
-  padding: 15px 0;
-  border-bottom: 1px solid rgba(211, 235, 231, 0.12);
-}
-
-.login-guide li:last-child {
-  border-bottom: 0;
-}
-
-.login-guide li > span {
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  border: 1px solid rgba(131, 215, 194, 0.34);
-  border-radius: 50%;
-  color: var(--hud-aether);
-  font-size: 0.62rem;
-}
-
-.login-guide li p,
-.login-guide li strong {
-  display: block;
-}
-
-.login-guide li p {
-  margin: 0;
-  color: var(--hud-muted);
-  font-size: 0.75rem;
-  line-height: 1.5;
-}
-
-.login-guide li strong {
-  margin-bottom: 3px;
-  color: var(--hud-text);
-  font-size: 0.84rem;
-}
-
 .demo-heading {
-  margin-bottom: 28px;
-}
-
-.demo-watchlist {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin: 0 0 18px;
-  padding: 0;
-  border: 1px solid rgba(211, 235, 231, 0.14);
-  border-radius: 16px 16px 16px 5px;
-  background: rgba(225, 243, 239, 0.035);
-  list-style: none;
-}
-
-.demo-watchlist li {
-  min-height: 62px;
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  padding: 12px 16px;
-  border-right: 1px solid rgba(211, 235, 231, 0.12);
-  color: var(--hud-muted);
-  font-size: 0.68rem;
-}
-
-.demo-watchlist li:last-child {
-  border-right: 0;
-}
-
-.demo-watchlist span {
-  color: var(--hud-aether);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.56rem;
+  margin-bottom: 18px;
 }
 
 .live-entry-grid {
@@ -1921,97 +1817,6 @@ section.live-guild-section {
   aspect-ratio: 1;
   border-top-color: transparent;
   transform: translate(-50%, -50%) rotate(-28deg);
-}
-
-.mission-shard {
-  position: absolute;
-  z-index: 4;
-  top: 3.5%;
-  left: 50%;
-  width: min(290px, 42%);
-  display: grid;
-  gap: 3px;
-  padding: 13px 16px;
-  border: 1px solid rgba(239, 199, 126, 0.36);
-  border-radius: 14px 14px 14px 4px;
-  background: rgba(239, 199, 126, 0.075);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
-  transform: translateX(-50%);
-}
-
-.mission-shard::before {
-  position: absolute;
-  top: 10px;
-  bottom: 10px;
-  left: 0;
-  width: 2px;
-  content: "";
-  background: var(--hud-warm);
-}
-
-.mission-shard .shard-index,
-.mission-shard small {
-  color: var(--hud-muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.53rem;
-  letter-spacing: 0.05em;
-}
-
-.mission-shard strong {
-  font-size: 0.76rem;
-}
-
-.scene-action {
-  position: absolute;
-  z-index: 9;
-  top: 18.5%;
-  left: 50%;
-  min-height: 28px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  border: 1px solid rgba(131, 215, 194, 0.22);
-  border-radius: 999px;
-  color: #cfe5df;
-  background: rgba(7, 19, 24, 0.88);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.24);
-  font-size: 0.56rem;
-  transform: translateX(-50%);
-  white-space: nowrap;
-  animation: scene-action-enter 520ms var(--hud-ease) both;
-}
-
-.scene-action > span {
-  width: 6px;
-  height: 6px;
-  flex: 0 0 6px;
-  border-radius: 50%;
-  background: var(--hud-aether);
-  box-shadow: 0 0 10px rgba(131, 215, 194, 0.7);
-}
-
-.scene-action-failure {
-  border-color: rgba(223, 120, 109, 0.4);
-  color: #ffb5ad;
-}
-
-.scene-action-failure > span {
-  background: var(--hud-danger);
-  box-shadow: 0 0 10px rgba(223, 120, 109, 0.72);
-}
-
-.scene-action-replacement {
-  border-color: rgba(130, 155, 227, 0.42);
-}
-
-.scene-action-replacement > span {
-  background: var(--hud-warden);
-  box-shadow: 0 0 10px rgba(130, 155, 227, 0.72);
-}
-
-.aether-stage[data-chapter="publish"] .mission-shard {
-  animation: mission-publish 780ms var(--hud-ease) both;
 }
 
 .aether-stage[data-chapter="recruit"] .node-scout,
@@ -3379,86 +3184,6 @@ section.live-guild-section {
   text-align: center;
 }
 
-.moment-sequence {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0;
-  margin: 8px 0 0;
-  padding: 0;
-  color: rgba(169, 191, 186, 0.42);
-  font-size: 0.44rem;
-  list-style: none;
-  text-align: center;
-}
-
-.moment-sequence li {
-  position: relative;
-  display: grid;
-  justify-items: center;
-  gap: 5px;
-  opacity: 0.38;
-  animation: sequence-stage-confirm 380ms var(--hud-ease) forwards;
-}
-
-.moment-sequence li::before {
-  position: absolute;
-  top: 4px;
-  right: 50%;
-  left: -50%;
-  height: 1px;
-  content: "";
-  background: rgba(131, 215, 194, 0.16);
-  transform: scaleX(0);
-  transform-origin: left center;
-  animation: sequence-line-fill 420ms var(--hud-ease) forwards;
-}
-
-.moment-sequence li:first-child::before {
-  display: none;
-}
-
-.moment-sequence li:nth-child(1) {
-  animation-delay: 620ms;
-}
-
-.moment-sequence li:nth-child(2) {
-  animation-delay: 1.28s;
-}
-
-.moment-sequence li:nth-child(3) {
-  animation-delay: 1.94s;
-}
-
-.moment-sequence li:nth-child(2)::before {
-  animation-delay: 1.02s;
-}
-
-.moment-sequence li:nth-child(3)::before {
-  animation-delay: 1.68s;
-}
-
-.moment-sequence li > span {
-  z-index: 1;
-  width: 8px;
-  height: 8px;
-  border: 1px solid rgba(131, 215, 194, 0.34);
-  border-radius: 50%;
-  background: #0a1b21;
-  animation: sequence-dot-fill 380ms var(--hud-ease) forwards;
-}
-
-.moment-sequence li:nth-child(1) > span {
-  animation-delay: 620ms;
-}
-
-.moment-sequence li:nth-child(2) > span {
-  animation-delay: 1.28s;
-}
-
-.moment-sequence li:nth-child(3) > span {
-  animation-delay: 1.94s;
-}
-
 .hud-narration {
   min-width: 0;
   align-self: center;
@@ -3506,36 +3231,6 @@ section.live-guild-section {
   color: var(--hud-muted);
   font-size: clamp(0.88rem, 1.2vw, 1rem);
   line-height: 1.62;
-}
-
-.hud-facts {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  margin: 24px 0 0;
-}
-
-.hud-facts > div {
-  min-width: 0;
-  padding: 10px 11px;
-  border: 1px solid rgba(211, 235, 231, 0.14);
-  border-radius: 11px 11px 11px 4px;
-  background: var(--hud-glass);
-}
-
-.hud-facts dt {
-  margin-bottom: 4px;
-  color: var(--hud-muted);
-  font-size: 0.55rem;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
-
-.hud-facts dd {
-  margin: 0;
-  overflow-wrap: anywhere;
-  font-size: 0.68rem;
-  line-height: 1.35;
 }
 
 .primary-action,
@@ -3837,31 +3532,6 @@ section.live-guild-section {
   100% {
     opacity: 1;
     transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes scene-action-enter {
-  from {
-    opacity: 0;
-    transform: translate(-50%, 8px) scale(0.96);
-  }
-  to {
-    opacity: 1;
-    transform: translate(-50%, 0) scale(1);
-  }
-}
-
-@keyframes mission-publish {
-  0% {
-    opacity: 0.5;
-    transform: translate(-50%, -9px) scale(0.96);
-  }
-  68% {
-    transform: translate(-50%, 2px) scale(1.02);
-  }
-  100% {
-    opacity: 1;
-    transform: translate(-50%, 0) scale(1);
   }
 }
 
@@ -4370,27 +4040,6 @@ section.live-guild-section {
   }
 }
 
-@keyframes sequence-stage-confirm {
-  to {
-    opacity: 1;
-    color: var(--hud-aether);
-  }
-}
-
-@keyframes sequence-line-fill {
-  to {
-    transform: scaleX(1);
-  }
-}
-
-@keyframes sequence-dot-fill {
-  to {
-    border-color: var(--hud-aether);
-    background: var(--hud-aether);
-    box-shadow: 0 0 10px rgba(131, 215, 194, 0.48);
-  }
-}
-
 @media (max-width: 1080px) {
   .site-shell-header {
     grid-template-columns: auto 1fr;
@@ -4473,8 +4122,7 @@ section.live-guild-section {
     min-height: 510px;
   }
 
-  .page-section-heading,
-  .login-guide {
+  .page-section-heading {
     grid-template-columns: 1fr;
   }
 
@@ -4486,18 +4134,8 @@ section.live-guild-section {
     max-width: 720px;
   }
 
-  .demo-watchlist,
   .live-entry-grid {
     grid-template-columns: 1fr;
-  }
-
-  .demo-watchlist li {
-    border-right: 0;
-    border-bottom: 1px solid rgba(211, 235, 231, 0.12);
-  }
-
-  .demo-watchlist li:last-child {
-    border-bottom: 0;
   }
 
   .prompt-entry-card {
@@ -4614,10 +4252,6 @@ section.live-guild-section {
     max-width: 680px;
   }
 
-  .hud-facts {
-    margin-top: 16px;
-  }
-
   .protocol-gate {
     left: 2%;
   }
@@ -4728,10 +4362,6 @@ section.live-guild-section {
     right: 2%;
   }
 
-  .login-guide {
-    padding: 22px;
-  }
-
   .page-section-heading h2 {
     font-size: clamp(2.25rem, 12vw, 3.6rem);
   }
@@ -4770,20 +4400,8 @@ section.live-guild-section {
     font-size: 0.46rem;
   }
 
-  .scene-action {
-    top: 16.5%;
-    max-width: calc(100% - 32px);
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
   .aether-stage {
     min-height: 620px;
-  }
-
-  .mission-shard {
-    top: 2%;
-    width: 68%;
   }
 
   .protocol-gate {
@@ -4897,13 +4515,8 @@ section.live-guild-section {
     width: 190px;
   }
 
-  .hud-facts,
   .completion-actions {
     grid-template-columns: 1fr;
-  }
-
-  .hud-facts {
-    display: grid;
   }
 
   .completion-actions > * {

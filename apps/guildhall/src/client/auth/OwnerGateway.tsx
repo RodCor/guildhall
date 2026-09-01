@@ -1107,12 +1107,13 @@ function AgentManagerDialog({
                           </label>
                           <input
                             id={`agent-capabilities-${agent.agentId}`}
+                            name="capabilities"
                             value={capabilityDraft}
                             onChange={(event) => {
                               setCapabilityDraft(event.currentTarget.value);
                               setCapabilityError(null);
                             }}
-                            placeholder="typescript, protocol-security"
+                            placeholder="e.g. typescript, protocol-security…"
                             autoComplete="off"
                             spellCheck={false}
                             maxLength={1_295}
