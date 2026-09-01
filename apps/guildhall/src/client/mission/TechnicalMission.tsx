@@ -436,7 +436,7 @@ export function TechnicalMission({
           </p>
           <span className={`stream-chip stream-${streamState}`}>
             <span aria-hidden="true" />
-            {streamState === "live" ? "Ledger live" : "Ready"}
+            {streamState === "live" ? "Ledger live" : "Signed replay"}
           </span>
         </div>
       </div>
@@ -1005,17 +1005,14 @@ function HudStepTrack({
       <span className="hud-branch-visual" aria-hidden="true">
         <svg
           className="hud-branch-map"
-          viewBox="0 0 600 58"
+          viewBox="0 0 100 44"
           preserveAspectRatio="none"
         >
-          <path className="branch-path branch-path-mismatch" d="M400 0 V58" />
-          <path
-            className="branch-path branch-path-correction"
-            d="M400 58 H300"
-          />
+          <path className="branch-path branch-path-mismatch" d="M100 0 V40" />
+          <path className="branch-path branch-path-correction" d="M100 40 H0" />
           <path
             className="branch-path branch-path-return"
-            d="M300 58 Q340 12 400 0"
+            d="M0 40 Q28 6 100 0"
           />
         </svg>
         <span className="hud-branch-runner">
@@ -1118,16 +1115,20 @@ function scenePackets(
       return route === "scout"
         ? [
             {
-              label: "CORRECT",
-              direction: "outbound",
-              tone: "recovery",
-              delayMs: 260,
-            },
-            {
               label: "NEW SHA",
               direction: "inbound",
               tone: "recovery",
-              delayMs: 1_480,
+              delayMs: 420,
+            },
+          ]
+        : [];
+    case "verify":
+      return route === "second"
+        ? [
+            {
+              label: "PUBLIC GET",
+              direction: "outbound",
+              delayMs: 380,
             },
           ]
         : [];

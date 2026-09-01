@@ -15,8 +15,6 @@ import {
   removeBrowserSigningIdentity,
   signBrowserMessage,
 } from "../identity/browserIdentity";
-import "../account.css";
-
 interface OwnerSession {
   readonly authenticated: true;
   readonly owner: {
@@ -658,7 +656,6 @@ export const OwnerGateway = forwardRef<
         <AgentManagerDialog
           mode={managerMode}
           ownerLogin={session.owner.login}
-          ownerAvatarUrl={session.owner.avatarUrl}
           agents={agents}
           localSignerKeyIds={localSignerKeyIds}
           activeAgentId={activeAgentId}
@@ -707,7 +704,6 @@ export const OwnerGateway = forwardRef<
 function AgentManagerDialog({
   mode,
   ownerLogin,
-  ownerAvatarUrl,
   agents,
   localSignerKeyIds,
   activeAgentId,
@@ -732,7 +728,6 @@ function AgentManagerDialog({
 }: {
   readonly mode: Exclude<ManagerMode, "closed">;
   readonly ownerLogin: string;
-  readonly ownerAvatarUrl: string | null;
   readonly agents: readonly AgentSummary[];
   readonly localSignerKeyIds: ReadonlySet<string>;
   readonly activeAgentId: string | null;
@@ -793,6 +788,9 @@ function AgentManagerDialog({
   );
   const [capabilityDraft, setCapabilityDraft] = useState("");
   const [capabilityError, setCapabilityError] = useState<string | null>(null);
+  const [detailAgentId, setDetailAgentId] = useState<string | null>(
+    () => activeAgentId ?? agents[0]?.agentId ?? null,
+  );
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -805,6 +803,19 @@ function AgentManagerDialog({
   useEffect(() => {
     setFormDirty(false);
   }, [editingAgent?.agentId, mode]);
+
+  useEffect(() => {
+    if (mode !== "list") return;
+    setDetailAgentId((current) => {
+      if (
+        current !== null &&
+        agents.some((agent) => agent.agentId === current)
+      ) {
+        return current;
+      }
+      return activeAgentId ?? agents[0]?.agentId ?? null;
+    });
+  }, [activeAgentId, agents, mode]);
 
   useEffect(() => {
     if (pairingPacket === null) return;
@@ -915,12 +926,55 @@ function AgentManagerDialog({
     ? `Edit ${editingAgent.characterName}`
     : mode === "create"
       ? "Create an Agent"
-      : "Account & Agents";
+      : "Your Agents";
+  const detailAgent =
+    agents.find((agent) => agent.agentId === detailAgentId) ??
+    agents.find((agent) => agent.agentId === activeAgentId) ??
+    agents[0] ??
+    null;
+  const detailSignerAvailable =
+    detailAgent !== null && localSignerKeyIds.has(detailAgent.keyId);
+  const detailAutonomy =
+    detailAgent === null ? undefined : autonomyPolicies[detailAgent.agentId];
+  const detailCapabilities =
+    detailAgent === null ? undefined : agentCapabilities[detailAgent.agentId];
+  const editingDetailCapabilities =
+    detailAgent !== null && capabilityEditorId === detailAgent.agentId;
+  const confirmingDetailSigner =
+    detailAgent !== null && signerConfirmationId === detailAgent.agentId;
+  const confirmingDetailAutonomy =
+    detailAgent !== null && autonomyConfirmationId === detailAgent.agentId;
+  const detailPairing =
+    detailAgent !== null && pairingPacket?.agentId === detailAgent.agentId
+      ? pairingPacket
+      : null;
+  const detailPairingRemainingSeconds =
+    detailPairing === null
+      ? 0
+      : Math.max(
+          0,
+          Math.ceil((Date.parse(detailPairing.expiresAt) - pairingNow) / 1_000),
+        );
+  const detailPairingExpired =
+    detailPairing !== null && detailPairingRemainingSeconds === 0;
+  const detailPairingError =
+    detailAgent !== null && pairingError?.agentId === detailAgent.agentId
+      ? pairingError.message
+      : null;
+
+  function chooseDetailAgent(agentId: string) {
+    setDetailAgentId(agentId);
+    setCapabilityEditorId(null);
+    setCapabilityError(null);
+    setSignerConfirmationId(null);
+    setAutonomyConfirmationId(null);
+    setPairingCopyState("idle");
+  }
 
   return (
     <dialog
       id="agent-manager-dialog"
-      className="agent-manager-dialog"
+      className="agent-manager-dialog account-manager-dialog owner-account"
       ref={dialogRef}
       aria-labelledby="agent-manager-title"
       onCancel={(event) => {
@@ -931,50 +985,35 @@ function AgentManagerDialog({
       <div className="agent-manager-shell">
         <header className="agent-manager-heading">
           <div>
-            <p className="eyebrow">Guildhall account</p>
+            <p className="eyebrow">
+              <span>@{ownerLogin}</span>
+              <span className="account-heading-context">
+                {" "}
+                · Guildhall Account
+              </span>
+            </p>
             <h2 id="agent-manager-title">{title}</h2>
           </div>
-          <button
-            className="dialog-close"
-            type="button"
-            onClick={requestClose}
-            disabled={busy}
-            aria-label="Close agent manager"
-          >
-            ×
-          </button>
-        </header>
-
-        <div className="account-session-row">
-          <div className="account-session-identity">
-            {ownerAvatarUrl === null ? (
-              <span className="owner-avatar" aria-hidden="true">
-                {ownerLogin.charAt(0).toUpperCase()}
-              </span>
-            ) : (
-              <img
-                className="owner-avatar"
-                src={ownerAvatarUrl}
-                alt=""
-                width="38"
-                height="38"
-                referrerPolicy="no-referrer"
-              />
-            )}
-            <span>
-              <small>Signed in as</small>
-              <strong>@{ownerLogin}</strong>
-            </span>
+          <div className="agent-manager-heading-actions">
+            <button
+              className="text-action account-signout"
+              type="button"
+              onClick={() => void onSignOut()}
+              disabled={busy}
+            >
+              {busy ? "Working…" : "Sign Out"}
+            </button>
+            <button
+              className="dialog-close"
+              type="button"
+              onClick={requestClose}
+              disabled={busy}
+              aria-label="Close agent manager"
+            >
+              ×
+            </button>
           </div>
-          <button
-            className="text-action account-signout"
-            type="button"
-            onClick={() => void onSignOut()}
-            disabled={busy}
-          >
-            {busy ? "Working…" : "Sign Out"}
-          </button>
-        </div>
+        </header>
 
         {isForm ? (
           <AgentProfileForm
@@ -989,476 +1028,509 @@ function AgentManagerDialog({
             onSubmit={isEditing ? onUpdate : onCreate}
           />
         ) : (
-          <>
-            <p className="agent-manager-intro">
-              Choose the active agent, declare what it can do, review its
-              signer, and control autonomous public publishing.
-            </p>
-            <ul className="agent-connection-list">
-              {agents.map((agent) => {
-                const isActive = agent.agentId === activeAgentId;
-                const signerAvailable = localSignerKeyIds.has(agent.keyId);
-                const autonomy = autonomyPolicies[agent.agentId];
-                const capabilities = agentCapabilities[agent.agentId];
-                const editingCapabilities =
-                  capabilityEditorId === agent.agentId;
-                const confirmingSigner = signerConfirmationId === agent.agentId;
-                const confirmingAutonomy =
-                  autonomyConfirmationId === agent.agentId;
-                const agentPairing =
-                  pairingPacket?.agentId === agent.agentId
-                    ? pairingPacket
-                    : null;
-                const pairingRemainingSeconds =
-                  agentPairing === null
-                    ? 0
-                    : Math.max(
-                        0,
-                        Math.ceil(
-                          (Date.parse(agentPairing.expiresAt) - pairingNow) /
-                            1_000,
-                        ),
-                      );
-                const pairingExpired =
-                  agentPairing !== null && pairingRemainingSeconds === 0;
-                const agentPairingError =
-                  pairingError?.agentId === agent.agentId
-                    ? pairingError.message
-                    : null;
-                return (
-                  <li key={agent.agentId} data-active={isActive || undefined}>
-                    <div className="agent-connection-main">
-                      <div className="agent-connection-copy">
-                        <div>
-                          <strong>{agent.characterName}</strong>
-                          <span>{agent.characterClass}</span>
-                          {isActive ? (
-                            <span
-                              className="account-status-pill"
-                              data-tone="ready"
-                            >
-                              Active
-                            </span>
-                          ) : null}
-                        </div>
-                        <p>{agent.technicalName}</p>
-                        <small>
-                          @{agent.slug} · {agent.guildName ?? "Independent"}
-                        </small>
-                      </div>
-                      <dl className="agent-connection-stats">
-                        <div>
-                          <dt>Reputation</dt>
-                          <dd>{numberFormatter.format(agent.totalPoints)}</dd>
-                        </div>
-                        <div>
-                          <dt>Missions</dt>
-                          <dd>
-                            {numberFormatter.format(agent.completedMissions)}
-                          </dd>
-                        </div>
-                      </dl>
-                    </div>
-
-                    <div className="account-capabilities-row">
-                      <div>
-                        <span className="account-section-label">
-                          Technical capabilities
-                        </span>
-                        {capabilitiesLoading && capabilities === undefined ? (
-                          <strong>Loading capabilities…</strong>
-                        ) : capabilities === undefined ? (
-                          <strong>Capabilities unavailable</strong>
-                        ) : capabilities.length === 0 ? (
-                          <>
-                            <strong>No capabilities declared</strong>
-                            <p>
-                              This agent cannot be selected for a mission until
-                              at least one matching capability is declared.
-                            </p>
-                          </>
-                        ) : (
-                          <div className="account-capability-tags">
-                            {capabilities.map((item) => (
-                              <span key={item.capability}>
-                                {item.capability}
-                                {item.verifiedMissions > 0 ? (
-                                  <small title="Verified through completed missions">
-                                    ✓
-                                  </small>
-                                ) : null}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      {editingCapabilities ? (
-                        <form
-                          className="account-capability-editor"
-                          onSubmit={(event) => {
-                            event.preventDefault();
-                            void saveCapabilities(agent.agentId);
-                          }}
-                        >
-                          <label
-                            htmlFor={`agent-capabilities-${agent.agentId}`}
-                          >
-                            Comma-separated capability IDs
-                          </label>
-                          <input
-                            id={`agent-capabilities-${agent.agentId}`}
-                            name="capabilities"
-                            value={capabilityDraft}
-                            onChange={(event) => {
-                              setCapabilityDraft(event.currentTarget.value);
-                              setCapabilityError(null);
-                            }}
-                            placeholder="e.g. typescript, protocol-security…"
-                            autoComplete="off"
-                            spellCheck={false}
-                            maxLength={1_295}
-                            aria-invalid={capabilityError !== null}
-                            aria-describedby={
-                              capabilityError === null
-                                ? undefined
-                                : `agent-capabilities-error-${agent.agentId}`
-                            }
-                            autoFocus
-                          />
-                          {capabilityError === null ? null : (
-                            <p
-                              id={`agent-capabilities-error-${agent.agentId}`}
-                              className="account-pairing-error"
-                              role="alert"
-                            >
-                              {capabilityError}
-                            </p>
-                          )}
-                          <div>
-                            <button
-                              className="text-action"
-                              type="button"
-                              onClick={() => {
-                                setCapabilityEditorId(null);
-                                setCapabilityError(null);
-                              }}
-                              disabled={busy}
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              className="quiet-action"
-                              type="submit"
-                              disabled={busy}
-                            >
-                              {busy ? "Saving…" : "Save Capabilities"}
-                            </button>
-                          </div>
-                        </form>
-                      ) : (
-                        <button
-                          className="quiet-action"
-                          type="button"
-                          onClick={() =>
-                            beginCapabilityEdit(agent.agentId, capabilities)
-                          }
-                          disabled={busy || capabilities === undefined}
-                        >
-                          {capabilities?.length === 0
-                            ? "Add Capabilities"
-                            : "Edit Capabilities"}
-                        </button>
-                      )}
-                    </div>
-
-                    <div
-                      className="account-security-row"
-                      data-tone={signerAvailable ? "ready" : "warning"}
+          <div className="agent-manager-workspace">
+            <aside className="agent-roster" aria-label="Your agents">
+              <div className="agent-roster-heading">
+                <span>Roster</span>
+                <small>{numberFormatter.format(agents.length)}</small>
+              </div>
+              <div className="agent-roster-list">
+                {agents.map((agent) => {
+                  const isActive = agent.agentId === activeAgentId;
+                  const isSelected = agent.agentId === detailAgent?.agentId;
+                  return (
+                    <button
+                      type="button"
+                      className="agent-roster-item"
+                      data-selected={isSelected || undefined}
+                      onClick={() => chooseDetailAgent(agent.agentId)}
+                      aria-pressed={isSelected}
+                      key={agent.agentId}
                     >
-                      <div>
-                        <strong>
-                          {signerAvailable
-                            ? "Signer ready on this browser"
-                            : "Signer missing on this browser"}
-                        </strong>
-                        {signerAvailable ? (
-                          <p title={agent.keyId}>
-                            Local key {shortFingerprint(agent.keyId)}. The
-                            private key never leaves this browser.
-                          </p>
-                        ) : (
-                          <p>
-                            This happens after clearing site data or using a
-                            different browser. The public profile and history
-                            remain; the private key cannot be recovered.
-                          </p>
-                        )}
-                      </div>
-                      {signerAvailable ? null : confirmingSigner ? (
-                        <div
-                          className="account-inline-confirmation"
-                          role="group"
-                          aria-label={`Replace signer for ${agent.characterName}`}
-                        >
-                          <p>
-                            Generate a new non-exportable key here and revoke
-                            the old server key?
-                          </p>
-                          <div>
-                            <button
-                              className="text-action"
-                              type="button"
-                              onClick={() => setSignerConfirmationId(null)}
-                              disabled={busy}
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              className="quiet-action"
-                              type="button"
-                              autoFocus
-                              onClick={() => {
-                                void onReplaceSigner(agent.agentId).finally(
-                                  () => setSignerConfirmationId(null),
-                                );
-                              }}
-                              disabled={busy}
-                            >
-                              {busy ? "Replacing…" : "Generate & Replace"}
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <button
-                          className="quiet-action"
-                          type="button"
-                          onClick={() => setSignerConfirmationId(agent.agentId)}
-                          disabled={busy}
-                        >
-                          Restore on This Browser
-                        </button>
-                      )}
-                    </div>
-
-                    <div className="account-autonomy-row">
-                      <div>
-                        <span className="account-section-label">
-                          Autonomous publishing
-                        </span>
-                        <strong>
-                          {autonomyLoading && autonomy === undefined
-                            ? "Checking permission…"
-                            : autonomy?.enabled === true
-                              ? "Enabled for public drafts"
-                              : "Owner approval required"}
-                        </strong>
-                        <p>
-                          This only permits public publishing after Guildhall’s
-                          safety checks. It never shares GitHub, Codex, or
-                          Claude credentials.
-                        </p>
-                      </div>
-                      {autonomy === undefined ? (
-                        <button className="quiet-action" type="button" disabled>
-                          {autonomyLoading ? "Loading…" : "Unavailable"}
-                        </button>
-                      ) : autonomy.enabled ? (
-                        <button
-                          className="quiet-action account-revoke-action"
-                          type="button"
-                          onClick={() =>
-                            void onAutonomyChange(
-                              agent.agentId,
-                              false,
-                              autonomy.version,
-                            )
-                          }
-                          disabled={busy}
-                        >
-                          {busy ? "Updating…" : "Revoke Permission"}
-                        </button>
-                      ) : confirmingAutonomy ? (
-                        <div
-                          className="account-inline-confirmation"
-                          role="group"
-                          aria-label={`Enable autonomous publishing for ${agent.characterName}`}
-                        >
-                          <p>Allow this agent to publish safe public drafts?</p>
-                          <div>
-                            <button
-                              className="text-action"
-                              type="button"
-                              onClick={() => setAutonomyConfirmationId(null)}
-                              disabled={busy}
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              className="quiet-action"
-                              type="button"
-                              autoFocus
-                              onClick={() => {
-                                void onAutonomyChange(
-                                  agent.agentId,
-                                  true,
-                                  autonomy.version,
-                                ).finally(() =>
-                                  setAutonomyConfirmationId(null),
-                                );
-                              }}
-                              disabled={busy}
-                            >
-                              {busy ? "Enabling…" : "Enable Publishing"}
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <button
-                          className="quiet-action"
-                          type="button"
-                          onClick={() =>
-                            setAutonomyConfirmationId(agent.agentId)
-                          }
-                          disabled={busy}
-                        >
-                          Enable Publishing
-                        </button>
-                      )}
-                    </div>
-
-                    <div className="account-pairing-row">
-                      {agentPairing === null ? (
-                        <>
-                          <div>
-                            <span className="account-section-label">
-                              Local harness pairing
-                            </span>
-                            <strong>
-                              Connect Codex, Claude Code, Cursor, or Pi
-                            </strong>
-                            <p>
-                              Create a code and challenge for this agent. They
-                              expire after 10 minutes and work once.
-                            </p>
-                            {agentPairingError === null ? null : (
-                              <p className="account-pairing-error" role="alert">
-                                {agentPairingError}
-                              </p>
-                            )}
-                          </div>
-                          <button
-                            className="quiet-action"
-                            type="button"
-                            onClick={() => void startPairing(agent)}
-                            disabled={busy || pairingLoadingAgentId !== null}
-                          >
-                            {pairingLoadingAgentId === agent.agentId
-                              ? "Creating…"
-                              : "Create Pairing Packet"}
-                          </button>
-                        </>
-                      ) : (
-                        <div className="account-pairing-packet">
-                          <div className="account-pairing-heading">
-                            <div>
-                              <span className="account-section-label">
-                                One-time pairing packet
-                              </span>
-                              <strong>
-                                {pairingExpired
-                                  ? "This packet has expired"
-                                  : `Expires in ${formatPairingCountdown(pairingRemainingSeconds)}`}
-                              </strong>
-                            </div>
-                            <span
-                              className="account-status-pill"
-                              data-tone={pairingExpired ? "expired" : "ready"}
-                            >
-                              {pairingExpired ? "Expired" : "Ready"}
-                            </span>
-                          </div>
-                          <dl className="account-pairing-values">
-                            <div>
-                              <dt>Code</dt>
-                              <dd>
-                                <code>{agentPairing.code}</code>
-                              </dd>
-                            </div>
-                            <div>
-                              <dt>Challenge</dt>
-                              <dd>
-                                <code>{agentPairing.challenge}</code>
-                              </dd>
-                            </div>
-                          </dl>
-                          <p>
-                            Copy both values into <code>guild.pair_node</code>.
-                            Closing this dialog clears them from the page.
-                          </p>
-                          <div className="account-pairing-actions">
-                            <button
-                              className="text-action"
-                              type="button"
-                              onClick={() => void startPairing(agent)}
-                              disabled={busy || pairingLoadingAgentId !== null}
-                            >
-                              {pairingLoadingAgentId === agent.agentId
-                                ? "Creating…"
-                                : "Create New Packet"}
-                            </button>
-                            <button
-                              className="quiet-action"
-                              type="button"
-                              onClick={() =>
-                                void copyPairingPacket(agentPairing)
-                              }
-                              disabled={pairingExpired}
-                            >
-                              {pairingCopyState === "copied"
-                                ? "Packet Copied"
-                                : pairingCopyState === "failed"
-                                  ? "Select Values Manually"
-                                  : "Copy Code + Challenge"}
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="agent-connection-actions">
-                      <button
-                        className={
-                          isActive ? "active-agent-action" : "quiet-action"
-                        }
-                        type="button"
-                        onClick={() => onSelect(agent.agentId)}
-                        disabled={busy || isActive || !signerAvailable}
-                        aria-pressed={isActive}
+                      <span className="agent-roster-sigil" aria-hidden="true">
+                        {agentInitials(agent.characterName)}
+                      </span>
+                      <span className="agent-roster-copy">
+                        <strong>{agent.characterName}</strong>
+                        <small>{agent.characterClass}</small>
+                      </span>
+                      <span
+                        className="agent-roster-state"
+                        data-active={isActive || undefined}
                       >
-                        {isActive ? "Active Agent" : "Use This Agent"}
-                      </button>
+                        {isActive ? "Active" : ""}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <button
+                className="agent-roster-add"
+                type="button"
+                onClick={onAdd}
+              >
+                <span aria-hidden="true">+</span> Add Agent
+              </button>
+              <p className="agent-roster-note">
+                Keys stay local. Provider credentials are never stored.
+              </p>
+            </aside>
+
+            {detailAgent === null ? (
+              <section className="agent-detail-empty">
+                <h3>Create Your First Agent</h3>
+                <p>
+                  Add a public identity before joining or publishing missions.
+                </p>
+                <button
+                  className="primary-action"
+                  type="button"
+                  onClick={onAdd}
+                >
+                  Add Agent
+                </button>
+              </section>
+            ) : (
+              <section
+                className="account-agent-detail"
+                aria-labelledby={`agent-detail-${detailAgent.agentId}`}
+              >
+                <header className="agent-detail-header">
+                  <span className="agent-detail-sigil" aria-hidden="true">
+                    {agentInitials(detailAgent.characterName)}
+                  </span>
+                  <div className="agent-detail-identity">
+                    <div>
+                      <h3 id={`agent-detail-${detailAgent.agentId}`}>
+                        {detailAgent.characterName}
+                      </h3>
+                      <span>{detailAgent.characterClass}</span>
+                      {detailAgent.agentId === activeAgentId ? (
+                        <span className="account-status-pill" data-tone="ready">
+                          Active
+                        </span>
+                      ) : null}
+                    </div>
+                    <p>{detailAgent.technicalName}</p>
+                    <small>
+                      @{detailAgent.slug} ·{" "}
+                      {detailAgent.guildName ?? "Independent"}
+                    </small>
+                  </div>
+                  <div className="agent-detail-actions">
+                    <button
+                      className={
+                        detailAgent.agentId === activeAgentId
+                          ? "active-agent-action"
+                          : "primary-action"
+                      }
+                      type="button"
+                      onClick={() => onSelect(detailAgent.agentId)}
+                      disabled={
+                        busy ||
+                        detailAgent.agentId === activeAgentId ||
+                        !detailSignerAvailable
+                      }
+                      aria-pressed={detailAgent.agentId === activeAgentId}
+                    >
+                      {detailAgent.agentId === activeAgentId
+                        ? "Active Agent"
+                        : detailSignerAvailable
+                          ? "Use This Agent"
+                          : "Signer Required"}
+                    </button>
+                    <button
+                      className="text-action"
+                      type="button"
+                      onClick={() => onEdit(detailAgent.agentId)}
+                      disabled={busy}
+                    >
+                      Edit Profile
+                    </button>
+                  </div>
+                </header>
+
+                <dl className="account-agent-stats">
+                  <div>
+                    <dt>Reputation</dt>
+                    <dd>{numberFormatter.format(detailAgent.totalPoints)}</dd>
+                  </div>
+                  <div>
+                    <dt>Completed Missions</dt>
+                    <dd>
+                      {numberFormatter.format(detailAgent.completedMissions)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Guild Node</dt>
+                    <dd>{detailAgent.transportStatus}</dd>
+                  </div>
+                </dl>
+
+                <section className="agent-capability-panel">
+                  <div className="agent-panel-heading">
+                    <div>
+                      <span className="account-section-label">
+                        Capabilities
+                      </span>
+                      <strong>Mission matching profile</strong>
+                    </div>
+                    {editingDetailCapabilities ? null : (
                       <button
                         className="text-action"
                         type="button"
-                        onClick={() => onEdit(agent.agentId)}
+                        onClick={() =>
+                          beginCapabilityEdit(
+                            detailAgent.agentId,
+                            detailCapabilities,
+                          )
+                        }
+                        disabled={busy || detailCapabilities === undefined}
+                      >
+                        {detailCapabilities?.length === 0 ? "Add" : "Edit"}
+                      </button>
+                    )}
+                  </div>
+                  {editingDetailCapabilities ? (
+                    <form
+                      className="account-capability-editor"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        void saveCapabilities(detailAgent.agentId);
+                      }}
+                    >
+                      <label
+                        htmlFor={`agent-capabilities-${detailAgent.agentId}`}
+                      >
+                        Comma-separated capability IDs
+                      </label>
+                      <input
+                        id={`agent-capabilities-${detailAgent.agentId}`}
+                        name="capabilities"
+                        value={capabilityDraft}
+                        onChange={(event) => {
+                          setCapabilityDraft(event.currentTarget.value);
+                          setCapabilityError(null);
+                        }}
+                        placeholder="e.g. typescript, protocol-security…"
+                        autoComplete="off"
+                        spellCheck={false}
+                        maxLength={1_295}
+                        aria-invalid={capabilityError !== null}
+                        aria-describedby={
+                          capabilityError === null
+                            ? undefined
+                            : `agent-capabilities-error-${detailAgent.agentId}`
+                        }
+                      />
+                      {capabilityError === null ? null : (
+                        <p
+                          id={`agent-capabilities-error-${detailAgent.agentId}`}
+                          className="account-pairing-error"
+                          role="alert"
+                        >
+                          {capabilityError}
+                        </p>
+                      )}
+                      <div>
+                        <button
+                          className="text-action"
+                          type="button"
+                          onClick={() => {
+                            setCapabilityEditorId(null);
+                            setCapabilityError(null);
+                          }}
+                          disabled={busy}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          className="quiet-action"
+                          type="submit"
+                          disabled={busy}
+                        >
+                          {busy ? "Saving…" : "Save Capabilities"}
+                        </button>
+                      </div>
+                    </form>
+                  ) : capabilitiesLoading &&
+                    detailCapabilities === undefined ? (
+                    <p className="agent-panel-muted">Loading capabilities…</p>
+                  ) : detailCapabilities === undefined ? (
+                    <p className="agent-panel-muted">
+                      Capabilities unavailable.
+                    </p>
+                  ) : detailCapabilities.length === 0 ? (
+                    <p className="agent-panel-muted">
+                      Add at least 1 capability to match this agent with
+                      missions.
+                    </p>
+                  ) : (
+                    <div className="account-capability-tags">
+                      {detailCapabilities.map((item) => (
+                        <span key={item.capability}>
+                          {item.capability}
+                          {item.verifiedMissions > 0 ? (
+                            <small title="Verified through completed missions">
+                              ✓
+                            </small>
+                          ) : null}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </section>
+
+                <div className="agent-control-grid">
+                  <section
+                    className="agent-control-card"
+                    data-tone={detailSignerAvailable ? "ready" : "warning"}
+                  >
+                    <header>
+                      <span className="agent-control-code">KEY</span>
+                      <span
+                        className="account-status-pill"
+                        data-tone={detailSignerAvailable ? "ready" : "warning"}
+                      >
+                        {detailSignerAvailable ? "Ready" : "Action Needed"}
+                      </span>
+                    </header>
+                    <div>
+                      <h4>Browser Signer</h4>
+                      <p>
+                        {detailSignerAvailable
+                          ? `Local key ${shortFingerprint(detailAgent.keyId)} can sign here.`
+                          : "This browser cannot sign for this agent yet."}
+                      </p>
+                    </div>
+                    {detailSignerAvailable ? null : confirmingDetailSigner ? (
+                      <div
+                        className="account-inline-confirmation"
+                        role="group"
+                        aria-label={`Replace signer for ${detailAgent.characterName}`}
+                      >
+                        <p>
+                          Replace the old public key with a new local signer?
+                        </p>
+                        <div>
+                          <button
+                            className="text-action"
+                            type="button"
+                            onClick={() => setSignerConfirmationId(null)}
+                            disabled={busy}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            className="quiet-action"
+                            type="button"
+                            onClick={() => {
+                              void onReplaceSigner(detailAgent.agentId).finally(
+                                () => setSignerConfirmationId(null),
+                              );
+                            }}
+                            disabled={busy}
+                          >
+                            {busy ? "Replacing…" : "Replace Signer"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        className="quiet-action"
+                        type="button"
+                        onClick={() =>
+                          setSignerConfirmationId(detailAgent.agentId)
+                        }
                         disabled={busy}
                       >
-                        Edit Public Profile
+                        Set Up This Browser
+                      </button>
+                    )}
+                  </section>
+
+                  <section className="agent-control-card">
+                    <header>
+                      <span className="agent-control-code">AUTO</span>
+                      <span
+                        className="account-status-pill"
+                        data-tone={
+                          detailAutonomy?.enabled ? "ready" : "neutral"
+                        }
+                      >
+                        {autonomyLoading && detailAutonomy === undefined
+                          ? "Checking"
+                          : detailAutonomy?.enabled
+                            ? "Enabled"
+                            : "Approval Required"}
+                      </span>
+                    </header>
+                    <div>
+                      <h4>Public Publishing</h4>
+                      <p>
+                        Let this agent publish public-safe missions after policy
+                        checks.
+                      </p>
+                    </div>
+                    {detailAutonomy === undefined ? (
+                      <button className="quiet-action" type="button" disabled>
+                        {autonomyLoading ? "Loading…" : "Unavailable"}
+                      </button>
+                    ) : detailAutonomy.enabled ? (
+                      <button
+                        className="text-action account-revoke-action"
+                        type="button"
+                        onClick={() =>
+                          void onAutonomyChange(
+                            detailAgent.agentId,
+                            false,
+                            detailAutonomy.version,
+                          )
+                        }
+                        disabled={busy}
+                      >
+                        {busy ? "Updating…" : "Require Approval"}
+                      </button>
+                    ) : confirmingDetailAutonomy ? (
+                      <div
+                        className="account-inline-confirmation"
+                        role="group"
+                        aria-label={`Enable autonomous publishing for ${detailAgent.characterName}`}
+                      >
+                        <p>Allow autonomous public-safe publishing?</p>
+                        <div>
+                          <button
+                            className="text-action"
+                            type="button"
+                            onClick={() => setAutonomyConfirmationId(null)}
+                            disabled={busy}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            className="quiet-action"
+                            type="button"
+                            onClick={() => {
+                              void onAutonomyChange(
+                                detailAgent.agentId,
+                                true,
+                                detailAutonomy.version,
+                              ).finally(() => setAutonomyConfirmationId(null));
+                            }}
+                            disabled={busy}
+                          >
+                            {busy ? "Enabling…" : "Enable Publishing"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        className="quiet-action"
+                        type="button"
+                        onClick={() =>
+                          setAutonomyConfirmationId(detailAgent.agentId)
+                        }
+                        disabled={busy}
+                      >
+                        Enable Publishing
+                      </button>
+                    )}
+                  </section>
+
+                  <section className="agent-control-card">
+                    <header>
+                      <span className="agent-control-code">NODE</span>
+                      <span
+                        className="account-status-pill"
+                        data-tone={detailPairing === null ? "neutral" : "ready"}
+                      >
+                        {detailPairing === null ? "Not Paired" : "Packet Ready"}
+                      </span>
+                    </header>
+                    <div>
+                      <h4>Local Harness</h4>
+                      <p>
+                        Connect Codex, Claude Code, Cursor, or Pi for 10
+                        minutes.
+                      </p>
+                      {detailPairingError === null ? null : (
+                        <p className="account-pairing-error" role="alert">
+                          {detailPairingError}
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      className="quiet-action"
+                      type="button"
+                      onClick={() => void startPairing(detailAgent)}
+                      disabled={busy || pairingLoadingAgentId !== null}
+                    >
+                      {pairingLoadingAgentId === detailAgent.agentId
+                        ? "Creating…"
+                        : detailPairing === null
+                          ? "Create Pairing Packet"
+                          : "Create New Packet"}
+                    </button>
+                  </section>
+                </div>
+
+                {detailPairing === null ? null : (
+                  <section className="account-pairing-packet">
+                    <div className="account-pairing-heading">
+                      <div>
+                        <span className="account-section-label">
+                          One-Time Pairing Packet
+                        </span>
+                        <strong>
+                          {detailPairingExpired
+                            ? "This packet has expired"
+                            : `Expires in ${formatPairingCountdown(detailPairingRemainingSeconds)}`}
+                        </strong>
+                      </div>
+                      <span
+                        className="account-status-pill"
+                        data-tone={detailPairingExpired ? "expired" : "ready"}
+                      >
+                        {detailPairingExpired ? "Expired" : "Ready"}
+                      </span>
+                    </div>
+                    <dl className="account-pairing-values">
+                      <div>
+                        <dt>Code</dt>
+                        <dd>
+                          <code>{detailPairing.code}</code>
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Challenge</dt>
+                        <dd>
+                          <code>{detailPairing.challenge}</code>
+                        </dd>
+                      </div>
+                    </dl>
+                    <p>
+                      Copy both values into <code>guild.pair_node</code>.
+                      Closing this dialog removes them from the page.
+                    </p>
+                    <div className="account-pairing-actions">
+                      <button
+                        className="quiet-action"
+                        type="button"
+                        onClick={() => void copyPairingPacket(detailPairing)}
+                        disabled={detailPairingExpired}
+                      >
+                        {pairingCopyState === "copied"
+                          ? "Packet Copied"
+                          : pairingCopyState === "failed"
+                            ? "Select Values Manually"
+                            : "Copy Code + Challenge"}
                       </button>
                     </div>
-                  </li>
-                );
-              })}
-            </ul>
-            <footer className="agent-manager-actions">
-              <p>
-                Agent keys stay local. Provider credentials are never stored.
-              </p>
-              <button className="primary-action" type="button" onClick={onAdd}>
-                Add Agent
-              </button>
-            </footer>
-          </>
+                  </section>
+                )}
+              </section>
+            )}
+          </div>
         )}
       </div>
     </dialog>
@@ -1597,13 +1669,13 @@ function AgentProfileForm({
         )}
       </label>
       <label>
-        Runtime / Harness
+        Agent Description
         <input
           name="technicalName"
           autoComplete="off"
           required
           maxLength={120}
-          placeholder="e.g. Codex agent for accessibility audits…"
+          placeholder="e.g. Full-stack agent for TypeScript delivery…"
           defaultValue={
             agent?.technicalName ??
             "WebMCP agent for public, verifiable coordination"
@@ -1637,7 +1709,7 @@ function AgentProfileForm({
         </div>
       </div>
       <label className="form-wide">
-        Public Profile
+        Public Bio
         <textarea
           name="publicBio"
           autoComplete="off"
@@ -1699,6 +1771,16 @@ function shortFingerprint(value: string): string {
   const normalized = value.trim();
   if (normalized.length <= 14) return normalized;
   return `${normalized.slice(0, 7)}…${normalized.slice(-5)}`;
+}
+
+function agentInitials(value: string): string {
+  const initials = value
+    .split(/\s+/u)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join("");
+  return initials === "" ? "AG" : initials;
 }
 
 function parsePairingPacket(

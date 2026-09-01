@@ -6,6 +6,7 @@ import { GuildCatalogProvider } from "./catalog/GuildCatalog";
 import "./styles.css";
 import "./mission-theater.css";
 import "./pact-ledger.css";
+import "./account.css";
 
 const rootElement = document.getElementById("root");
 

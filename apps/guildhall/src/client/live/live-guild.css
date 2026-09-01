@@ -27,24 +27,20 @@
   );
 
   position: relative;
-  margin: 72px auto 96px;
-  padding: clamp(28px, 4vw, 52px);
+  margin: 64px auto 88px;
+  padding: clamp(28px, 3.5vw, 44px);
   overflow-wrap: anywhere;
   color: var(--live-ink);
   background: var(--live-paper);
   border: 1px solid var(--live-line);
-  border-top: 5px solid var(--live-red);
-  border-radius: 0;
-  box-shadow: none;
+  border-top: 4px solid var(--live-red);
+  border-radius: 4px;
+  box-shadow: 0 18px 48px rgba(76, 48, 28, 0.08);
   color-scheme: light;
 }
 
 .live-guild-section::before {
-  position: absolute;
-  inset: 8px;
-  border: 1px solid color-mix(in srgb, var(--live-line) 48%, transparent);
-  content: "";
-  pointer-events: none;
+  display: none;
 }
 
 .live-guild-section > * {
@@ -64,7 +60,7 @@
   gap: clamp(32px, 6vw, 80px);
   align-items: end;
   padding-bottom: 34px;
-  border-bottom: 2px solid var(--live-ink);
+  border-bottom: 1px solid var(--live-line);
 }
 
 .live-guild-hero h2 {
@@ -72,7 +68,7 @@
   margin: 8px 0 14px;
   color: var(--live-ink);
   font-family: var(--live-display);
-  font-size: clamp(2.35rem, 5vw, 4.8rem);
+  font-size: clamp(2.35rem, 4.5vw, 4.2rem);
   font-weight: 650;
   line-height: 0.97;
   letter-spacing: -0.04em;
@@ -165,7 +161,7 @@
   background: var(--live-paper-muted);
   border: 1px solid var(--live-line);
   border-left: 4px solid var(--live-ochre);
-  border-radius: 0;
+  border-radius: 4px;
 }
 
 .live-entry-status,
@@ -218,7 +214,7 @@
 
 .live-guild-section :is(.primary-action, .quiet-action, .text-action),
 .guild-dialog :is(.primary-action, .quiet-action, .text-action) {
-  border-radius: 0;
+  border-radius: 3px;
   box-shadow: none;
   font-family: inherit;
   font-weight: 700;
@@ -294,8 +290,8 @@
   margin-top: 18px;
   overflow: hidden;
   background: var(--live-paper-strong);
-  border: 2px solid var(--live-ink);
-  border-radius: 0;
+  border: 1px solid var(--live-line);
+  border-radius: 4px;
 }
 
 .registry-toolbar {
@@ -303,7 +299,7 @@
   gap: 18px;
   align-items: center;
   justify-content: space-between;
-  min-height: 70px;
+  min-height: 64px;
   padding: 10px 14px 10px 20px;
   background: var(--live-paper-muted);
   border-bottom: 1px solid var(--live-ink);
@@ -1895,8 +1891,8 @@
 @media (max-width: 760px) {
   .live-guild-section {
     width: calc(100% - 24px);
-    margin: 50px auto 70px;
-    padding: 24px 14px;
+    margin: 42px auto 64px;
+    padding: 22px 14px;
     border-top-width: 4px;
   }
 
@@ -1905,7 +1901,7 @@
   }
 
   .live-guild-hero h2 {
-    font-size: clamp(2.3rem, 12vw, 3.5rem);
+    font-size: clamp(2.25rem, 11vw, 3.1rem);
   }
 
   .live-network-pulse {
@@ -1944,7 +1940,8 @@
   }
 
   .registry-tabs button {
-    padding-inline: 11px;
+    padding-inline: 8px;
+    font-size: 0.79rem;
   }
 
   .registry-refresh {

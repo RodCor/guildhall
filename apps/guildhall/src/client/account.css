@@ -1,1016 +1,1315 @@
 .owner-account {
-  --account-paper: var(--ledger-paper, #f1e6cc);
-  --account-paper-strong: var(--ledger-paper-strong, #fff9e9);
-  --account-paper-muted: var(--ledger-paper-muted, #e4d5b5);
-  --account-ink: var(--ledger-ink, #241d16);
-  --account-muted: var(--ledger-ink-muted, #695d4e);
-  --account-line: var(--ledger-line, #9b8969);
-  --account-line-soft: var(--ledger-line-soft, #cbbd9f);
-  --account-red: var(--ledger-red, #8c342f);
-  --account-ochre: var(--ledger-ochre, #a66f24);
-  --account-green: var(--ledger-green, #4d6749);
-  --account-focus: var(--ledger-focus, #245d63);
-  --account-display: var(
-    --ledger-display-font,
-    "Iowan Old Style",
-    "Palatino Linotype",
-    Georgia,
-    serif
-  );
-  --account-code: var(
-    --ledger-code-font,
-    ui-monospace,
-    SFMono-Regular,
-    Menlo,
-    Consolas,
-    monospace
-  );
-
-  min-width: 0;
+  color: var(--ledger-ink, #241c17);
+  font-family: var(--ledger-sans, system-ui, sans-serif);
 }
 
-.owner-account .account-owner-strip {
-  min-width: 0;
-  gap: 0;
-}
-
-.owner-account .account-trigger {
-  min-width: 156px;
-  min-height: 46px;
-  display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) auto auto;
-  gap: 9px;
-  padding: 5px 10px 5px 6px;
-  color: var(--account-ink);
-  background: var(--account-paper);
-  border: 1px solid var(--account-line);
-  border-left: 4px solid var(--account-red);
-  border-radius: 0;
-  box-shadow: none;
+.owner-account button,
+.owner-account a,
+.owner-account input,
+.owner-account select,
+.owner-account textarea {
   touch-action: manipulation;
 }
 
-.owner-account .account-trigger:hover {
-  color: var(--account-red);
-  background: var(--account-paper-strong);
-  border-color: var(--account-red);
+.owner-account button:focus-visible,
+.owner-account a:focus-visible,
+.owner-account input:focus-visible,
+.owner-account select:focus-visible,
+.owner-account textarea:focus-visible {
+  outline: 3px solid var(--ledger-oxblood, #7a2730);
+  outline-offset: 2px;
 }
 
-.owner-account .account-trigger:focus-visible,
-.owner-account .agent-manager-dialog button:focus-visible,
-.owner-account .agent-manager-dialog input:focus-visible,
-.owner-account .agent-manager-dialog select:focus-visible,
-.owner-account .agent-manager-dialog textarea:focus-visible,
-.owner-account .agent-manager-dialog code:focus-visible {
-  outline: 3px solid var(--account-focus);
-  outline-offset: 3px;
-}
-
-.owner-account .account-avatar,
-.owner-account .owner-avatar {
-  width: 34px;
-  height: 34px;
-  color: var(--account-paper-strong);
-  background: var(--account-red);
-  border: 1px solid var(--account-ink);
-  border-radius: 0;
-}
-
-.owner-account .account-trigger-copy {
-  min-width: 0;
-  display: block;
-  text-align: left;
-}
-
-.owner-account .account-trigger-copy strong,
-.owner-account .account-trigger-copy small {
-  max-width: 150px;
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.owner-account .account-trigger-copy strong {
-  color: inherit;
+.gateway-status {
+  margin: 0;
+  color: var(--ledger-muted, #66584b);
+  font-family: var(--ledger-mono, monospace);
   font-size: 0.72rem;
 }
 
-.owner-account .account-trigger-copy small {
-  margin-top: 2px;
-  color: var(--account-muted);
-  font-family: var(--account-code);
-  font-size: 0.54rem;
-}
-
-.owner-account .account-trigger .signer-ready-mark {
-  width: 20px;
-  height: 20px;
-  flex-basis: 20px;
-  color: var(--account-green);
+.owner-account-signed-out {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0;
+  border: 0;
   background: transparent;
-  border: 1px solid var(--account-green);
-  border-radius: 0;
-  box-shadow: none;
-  font-size: 0.58rem;
 }
 
-.owner-account .account-trigger-chevron {
-  color: var(--account-muted);
-  font-size: 0.7rem;
+.owner-account-signed-out > div {
+  display: none;
 }
 
-.owner-account-signed-out .account-sign-in {
-  min-height: 44px;
-  color: var(--account-paper-strong);
-  background: var(--account-red);
-  border: 1px solid var(--account-red);
-  border-radius: 0;
+.owner-account .account-sign-in {
+  min-height: 42px;
+  padding-inline: 17px;
+  border: 1px solid var(--ledger-oxblood-dark, #55171d);
+  border-radius: 3px;
+  color: var(--ledger-paper-soft, #f8f0e2);
+  background: var(--ledger-oxblood, #7a2730);
   box-shadow: none;
+  font-size: 0.78rem;
   white-space: nowrap;
 }
 
-.owner-account-signed-out .account-sign-in:hover {
-  color: #fffdf5;
-  background: color-mix(in srgb, var(--account-red) 86%, #000);
-  border-color: var(--account-ink);
+.owner-account .account-sign-in:hover {
+  background: var(--ledger-oxblood-dark, #55171d);
+  transform: translateY(-1px);
 }
 
-.owner-account .agent-manager-dialog {
-  width: min(820px, calc(100vw - 32px));
-  max-height: calc(100svh - 32px);
-  padding: 0;
-  overflow: hidden;
-  overscroll-behavior: contain;
-  color: var(--account-ink);
-  background: var(--account-paper);
-  border: 2px solid var(--account-ink);
-  border-top: 5px solid var(--account-red);
-  border-radius: 0;
-  box-shadow: 8px 8px 0 rgba(20, 15, 10, 0.34);
-  color-scheme: light;
+.gateway-card,
+.account-owner-strip {
+  min-width: 0;
 }
 
-.owner-account .agent-manager-dialog::backdrop {
-  background: rgba(20, 16, 12, 0.76);
-  backdrop-filter: none;
-}
-
-.owner-account .agent-manager-shell {
-  max-height: calc(100svh - 36px);
-  padding: 22px;
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
-}
-
-.owner-account .agent-manager-heading {
-  padding-bottom: 16px;
-  border-bottom: 2px solid var(--account-ink);
-}
-
-.owner-account .agent-manager-heading .eyebrow {
-  color: var(--account-red);
-  font-family: var(--account-code);
-  letter-spacing: 0.1em;
-}
-
-.owner-account .agent-manager-heading h2 {
-  color: var(--account-ink);
-  font-family: var(--account-display);
-  font-size: clamp(1.55rem, 4vw, 2.25rem);
-  font-weight: 650;
-  letter-spacing: -0.025em;
-  text-wrap: balance;
-}
-
-.owner-account .dialog-close {
-  width: 44px;
-  height: 44px;
-  flex-basis: 44px;
-  color: var(--account-ink);
-  background: var(--account-paper-strong);
-  border: 1px solid var(--account-ink);
-  border-radius: 0;
-  box-shadow: none;
-  touch-action: manipulation;
-}
-
-.owner-account .dialog-close:hover {
-  color: var(--account-paper-strong);
-  background: var(--account-red);
-  border-color: var(--account-red);
-}
-
-.owner-account .account-session-row,
-.owner-account .account-session-identity,
-.owner-account .agent-connection-main,
-.owner-account .account-capabilities-row,
-.owner-account .account-security-row,
-.owner-account .account-autonomy-row,
-.owner-account .account-pairing-row {
+.account-owner-strip {
   display: flex;
   align-items: center;
 }
 
-.owner-account .account-session-row {
-  justify-content: space-between;
-  gap: 16px;
-  padding: 12px;
-  background: var(--account-paper-muted);
-  border-bottom: 1px solid var(--account-line);
+.account-trigger {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 9px;
+  width: min(238px, 30vw);
+  min-height: 46px;
+  padding: 5px 9px 5px 6px;
+  border: 1px solid var(--ledger-line, rgba(60, 42, 28, 0.24));
+  border-radius: 4px;
+  color: var(--ledger-ink, #241c17);
+  background: rgba(255, 248, 236, 0.58);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    transform 160ms ease;
 }
 
-.owner-account .account-session-identity {
+.account-trigger:hover,
+.account-trigger[aria-expanded="true"] {
+  border-color: var(--ledger-oxblood, #7a2730);
+  background: var(--ledger-paper-soft, #f8f0e2);
+  transform: translateY(-1px);
+}
+
+.account-avatar,
+.owner-avatar {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid var(--ledger-line-strong, rgba(50, 32, 22, 0.46));
+  border-radius: 50%;
+  color: var(--ledger-oxblood, #7a2730);
+  background: var(--ledger-paper, #eee3cf);
+  font-family: var(--ledger-serif, serif);
+  font-size: 0.8rem;
+  font-weight: 700;
+  object-fit: cover;
+}
+
+.account-trigger-copy {
   min-width: 0;
-  gap: 10px;
 }
 
-.owner-account .account-session-identity > span:last-child {
-  min-width: 0;
-}
-
-.owner-account .account-session-identity small,
-.owner-account .account-session-identity strong {
+.account-trigger-copy strong,
+.account-trigger-copy small {
   display: block;
-}
-
-.owner-account .account-session-identity small {
-  color: var(--account-muted);
-  font-family: var(--account-code);
-  font-size: 0.56rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.owner-account .account-session-identity strong {
-  margin-top: 2px;
   overflow: hidden;
-  color: var(--account-ink);
-  font-size: 0.75rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.owner-account .account-signout {
-  min-height: 44px;
-  padding-inline: 12px;
+.account-trigger-copy strong {
+  font-family: var(--ledger-serif, serif);
+  font-size: 0.86rem;
+  font-weight: 650;
 }
 
-.owner-account .agent-manager-intro {
-  max-width: 680px;
-  padding-block: 16px 12px;
-  color: var(--account-muted);
-  line-height: 1.55;
-  text-wrap: pretty;
+.account-trigger-copy small {
+  margin-top: 1px;
+  color: var(--ledger-muted, #66584b);
+  font-size: 0.66rem;
 }
 
-.owner-account .agent-connection-list {
+.signer-ready-mark {
   display: grid;
-  gap: 14px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--ledger-paper-soft, #f8f0e2);
+  background: var(--ledger-sage, #52614d);
+  font-size: 0.66rem;
 }
 
-.owner-account .agent-connection-list > li {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0;
+.account-trigger-chevron {
+  color: var(--ledger-faint, #8a7764);
+  font-size: 0.8rem;
+}
+
+.agent-manager-dialog {
+  width: min(1180px, calc(100vw - 32px));
+  max-width: none;
+  height: min(820px, calc(100dvh - 32px));
+  max-height: none;
+  margin: auto;
   padding: 0;
   overflow: hidden;
-  color: var(--account-ink);
-  background: var(--account-paper-strong);
-  border: 1px solid var(--account-line);
-  border-left: 4px solid var(--account-line);
-  border-radius: 0;
-  box-shadow: none;
+  border: 1px solid var(--ledger-line-strong, rgba(50, 32, 22, 0.46));
+  border-top: 4px solid var(--ledger-oxblood, #7a2730);
+  border-radius: 5px;
+  color: var(--ledger-ink, #241c17);
+  background: var(--ledger-paper-soft, #f8f0e2);
+  box-shadow: 0 28px 90px rgba(36, 28, 23, 0.28);
 }
 
-.owner-account .agent-connection-list > li[data-active] {
-  background: var(--account-paper-strong);
-  border-color: var(--account-red);
-  border-left-color: var(--account-red);
-  box-shadow: none;
+.agent-manager-dialog::backdrop {
+  background: rgba(36, 28, 23, 0.56);
+  backdrop-filter: blur(5px);
 }
 
-.owner-account .agent-connection-main {
+.agent-manager-shell {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.agent-manager-heading {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
   justify-content: space-between;
   gap: 20px;
-  padding: 16px;
+  min-height: 82px;
+  padding: 16px 20px 15px 24px;
+  border-bottom: 1px solid var(--ledger-line, rgba(60, 42, 28, 0.24));
+  background: rgba(238, 227, 207, 0.62);
 }
 
-.owner-account .agent-connection-copy {
-  min-width: 0;
+.agent-manager-heading .eyebrow {
+  margin: 0 0 4px;
+  color: var(--ledger-oxblood, #7a2730);
+  font-family: var(--ledger-mono, monospace);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
 }
 
-.owner-account .agent-connection-copy > div {
-  flex-wrap: wrap;
+.agent-manager-heading .eyebrow span {
+  display: inline;
 }
 
-.owner-account .agent-connection-copy strong {
-  color: var(--account-ink);
-  font-family: var(--account-display);
-  font-size: 1.05rem;
-}
-
-.owner-account .agent-connection-copy span,
-.owner-account .agent-connection-copy small,
-.owner-account .agent-connection-copy p {
-  color: var(--account-muted);
-}
-
-.owner-account .agent-connection-copy p,
-.owner-account .agent-connection-copy small {
-  overflow-wrap: anywhere;
-}
-
-.owner-account .agent-connection-stats {
-  display: flex;
-  gap: 0;
+.agent-manager-heading h2 {
   margin: 0;
-  text-align: right;
-  border: 1px solid var(--account-line-soft);
+  color: var(--ledger-ink, #241c17);
+  font-family: var(--ledger-serif, serif);
+  font-size: clamp(1.55rem, 2.4vw, 2.05rem);
+  font-weight: 650;
+  line-height: 1;
+  text-wrap: balance;
 }
 
-.owner-account .agent-connection-stats div {
-  min-width: 74px;
-  padding: 8px 10px;
-  border-right: 1px solid var(--account-line-soft);
-}
-
-.owner-account .agent-connection-stats div:last-child {
-  border-right: 0;
-}
-
-.owner-account .agent-connection-stats dt {
-  color: var(--account-muted);
-  font-family: var(--account-code);
-  font-size: 0.52rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.owner-account .agent-connection-stats dd {
-  margin: 4px 0 0;
-  color: var(--account-ink);
-  font-variant-numeric: tabular-nums;
-}
-
-.owner-account .account-status-pill {
-  display: inline-flex;
-  align-items: center;
-  min-height: 22px;
-  padding: 2px 7px;
-  color: var(--account-green);
-  background: transparent;
-  border: 1px solid var(--account-green);
-  border-radius: 0;
-  font-family: var(--account-code);
-  font-size: 0.5rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.owner-account .account-security-row,
-.owner-account .account-autonomy-row,
-.owner-account .account-capabilities-row,
-.owner-account .account-pairing-row {
-  justify-content: space-between;
-  gap: 18px;
-  padding: 14px 16px;
-  border-top: 1px solid var(--account-line-soft);
-}
-
-.owner-account .account-security-row {
-  background: var(--account-paper);
-  border-left: 3px solid var(--account-green);
-}
-
-.owner-account .account-security-row[data-tone="warning"] {
-  background: color-mix(
-    in srgb,
-    var(--account-ochre) 9%,
-    var(--account-paper-strong)
-  );
-  border-left-color: var(--account-ochre);
-}
-
-.owner-account .account-autonomy-row {
-  background: var(--account-paper-strong);
-}
-
-.owner-account .account-security-row > div:first-child,
-.owner-account .account-autonomy-row > div:first-child,
-.owner-account .account-capabilities-row > div:first-child,
-.owner-account .account-pairing-row > div:first-child {
-  min-width: 0;
-  max-width: 500px;
-}
-
-.owner-account .account-security-row strong,
-.owner-account .account-autonomy-row strong,
-.owner-account .account-capabilities-row strong,
-.owner-account .account-pairing-row strong {
-  display: block;
-  color: var(--account-ink);
-  font-size: 0.75rem;
-}
-
-.owner-account .account-security-row p,
-.owner-account .account-autonomy-row p,
-.owner-account .account-capabilities-row p,
-.owner-account .account-pairing-row p,
-.owner-account .account-inline-confirmation p {
-  margin: 4px 0 0;
-  overflow-wrap: anywhere;
-  color: var(--account-muted);
-  font-size: 0.66rem;
-  line-height: 1.5;
-  text-wrap: pretty;
-}
-
-.owner-account .account-section-label {
-  display: block;
-  margin-bottom: 4px;
-  color: var(--account-red);
-  font-family: var(--account-code);
-  font-size: 0.52rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.owner-account .account-security-row > button,
-.owner-account .account-autonomy-row > button,
-.owner-account .account-capabilities-row > button,
-.owner-account .account-pairing-row > button {
-  min-width: 150px;
-  min-height: 44px;
-  flex: 0 0 auto;
-}
-
-.owner-account .account-capabilities-row {
-  align-items: flex-start;
-  background: var(--account-paper-muted);
-}
-
-.owner-account .account-capability-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.owner-account .account-capability-tags > span {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-height: 25px;
-  max-width: 100%;
-  padding: 4px 8px;
-  overflow-wrap: anywhere;
-  color: var(--account-ink);
-  background: var(--account-paper-strong);
-  border: 1px solid var(--account-line);
-  border-radius: 0;
-  font-family: var(--account-code);
-  font-size: 0.59rem;
-}
-
-.owner-account .account-capability-tags small {
-  color: var(--account-green);
-}
-
-.owner-account .account-capability-editor {
-  width: min(360px, 100%);
-  flex: 0 0 auto;
-}
-
-.owner-account .account-capability-editor label {
-  display: block;
-  margin-bottom: 6px;
-  color: var(--account-muted);
-  font-family: var(--account-code);
-  font-size: 0.55rem;
-}
-
-.owner-account .account-capability-editor input,
-.owner-account .agent-profile-form input,
-.owner-account .agent-profile-form select,
-.owner-account .agent-profile-form textarea {
-  width: 100%;
-  min-height: 44px;
-  padding: 9px 10px;
-  color: var(--account-ink);
-  background-color: var(--account-paper-strong);
-  border: 1px solid var(--account-line);
-  border-radius: 0;
-  box-shadow: none;
-  caret-color: var(--account-red);
-  font: inherit;
-}
-
-.owner-account .agent-profile-form select,
-.owner-account .agent-profile-form select option {
-  color: var(--account-ink);
-  background-color: var(--account-paper-strong);
-}
-
-.owner-account .agent-profile-form textarea {
-  min-height: 116px;
-  resize: vertical;
-}
-
-.owner-account .account-capability-editor input::placeholder,
-.owner-account .agent-profile-form input::placeholder,
-.owner-account .agent-profile-form textarea::placeholder {
-  color: var(--account-muted);
-  opacity: 0.78;
-}
-
-.owner-account .account-capability-editor > div {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.owner-account .account-capability-editor button {
-  min-height: 44px;
-}
-
-.owner-account .account-pairing-row {
-  align-items: flex-start;
-  background: var(--account-paper);
-  border-left: 3px solid var(--account-red);
-}
-
-.owner-account .account-pairing-error,
-.owner-account .field-error {
-  color: var(--account-red);
-}
-
-.owner-account .account-pairing-row > .account-pairing-packet:first-child {
-  width: 100%;
-  max-width: none;
-}
-
-.owner-account .account-pairing-heading,
-.owner-account .account-pairing-actions {
+.agent-manager-heading-actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.owner-account
-  .account-pairing-heading
-  .account-status-pill[data-tone="expired"] {
-  color: var(--account-ochre);
-  background: transparent;
-  border-color: var(--account-ochre);
-}
-
-.owner-account .account-pairing-values {
-  display: grid;
-  gap: 0;
-  margin: 12px 0;
-  border-top: 1px solid var(--account-line-soft);
-}
-
-.owner-account .account-pairing-values > div {
-  display: grid;
-  grid-template-columns: 82px minmax(0, 1fr);
   gap: 10px;
-  align-items: start;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--account-line-soft);
 }
 
-.owner-account .account-pairing-values dt {
-  padding-top: 8px;
-  color: var(--account-muted);
-  font-family: var(--account-code);
-  font-size: 0.55rem;
+.dialog-close {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: var(--ledger-muted, #66584b);
+  background: transparent;
+  cursor: pointer;
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.dialog-close:hover {
+  border-color: var(--ledger-line, rgba(60, 42, 28, 0.24));
+  color: var(--ledger-oxblood, #7a2730);
+  background: rgba(238, 227, 207, 0.72);
+}
+
+.owner-account .text-action,
+.owner-account .quiet-action,
+.owner-account .primary-action,
+.owner-account .active-agent-action,
+.agent-roster-add {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 13px;
+  border-radius: 3px;
+  box-shadow: none;
+  cursor: pointer;
+  font-size: 0.74rem;
+  font-weight: 700;
+  line-height: 1.1;
+  text-align: center;
+  text-decoration: none;
+  transition:
+    border-color 150ms ease,
+    color 150ms ease,
+    background-color 150ms ease,
+    transform 150ms ease;
+}
+
+.owner-account .primary-action {
+  border: 1px solid var(--ledger-oxblood-dark, #55171d);
+  color: var(--ledger-paper-soft, #f8f0e2);
+  background: var(--ledger-oxblood, #7a2730);
+}
+
+.owner-account .primary-action:hover:not(:disabled) {
+  background: var(--ledger-oxblood-dark, #55171d);
+  transform: translateY(-1px);
+}
+
+.owner-account .quiet-action,
+.owner-account .active-agent-action,
+.agent-roster-add {
+  border: 1px solid var(--ledger-line-strong, rgba(50, 32, 22, 0.46));
+  color: var(--ledger-ink, #241c17);
+  background: var(--ledger-paper-soft, #f8f0e2);
+}
+
+.owner-account .quiet-action:hover:not(:disabled),
+.agent-roster-add:hover:not(:disabled) {
+  border-color: var(--ledger-oxblood, #7a2730);
+  color: var(--ledger-oxblood, #7a2730);
+  background: #fff8ec;
+}
+
+.owner-account .active-agent-action {
+  border-color: rgba(82, 97, 77, 0.46);
+  color: var(--ledger-sage, #52614d);
+  background: rgba(82, 97, 77, 0.1);
+  cursor: default;
+}
+
+.owner-account .text-action {
+  min-height: 36px;
+  padding-inline: 7px;
+  border: 0;
+  color: var(--ledger-oxblood, #7a2730);
+  background: transparent;
+}
+
+.owner-account .text-action:hover:not(:disabled) {
+  color: var(--ledger-oxblood-dark, #55171d);
+  background: rgba(122, 39, 48, 0.07);
+}
+
+.owner-account button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.account-signout {
+  white-space: nowrap;
+}
+
+.agent-manager-workspace {
+  display: grid;
+  min-height: 0;
+  flex: 1 1 auto;
+  grid-template-columns: 232px minmax(0, 1fr);
+}
+
+.agent-roster {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  padding: 18px 12px 14px;
+  overflow: hidden;
+  border-right: 1px solid var(--ledger-line, rgba(60, 42, 28, 0.24));
+  background: rgba(221, 205, 177, 0.3);
+}
+
+.agent-roster-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px 10px;
+  color: var(--ledger-muted, #66584b);
+  font-family: var(--ledger-mono, monospace);
+  font-size: 0.64rem;
   font-weight: 700;
   letter-spacing: 0.07em;
   text-transform: uppercase;
 }
 
-.owner-account .account-pairing-values dd {
-  min-width: 0;
-  margin: 0;
+.agent-roster-heading small {
+  display: grid;
+  min-width: 23px;
+  height: 23px;
+  place-items: center;
+  border: 1px solid var(--ledger-line, rgba(60, 42, 28, 0.24));
+  border-radius: 50%;
+  font-size: 0.62rem;
 }
 
-.owner-account .account-pairing-values code {
-  display: block;
-  max-height: 96px;
-  padding: 8px 10px;
-  overflow: auto;
-  color: var(--account-paper-strong);
-  background: var(--account-ink);
-  border: 1px solid var(--account-ink);
-  border-radius: 0;
-  font-family: var(--account-code);
-  font-size: 0.62rem;
-  line-height: 1.45;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
+.agent-roster-list {
+  display: grid;
+  min-height: 0;
+  gap: 5px;
+  overflow-y: auto;
   scrollbar-gutter: stable;
 }
 
-.owner-account .account-pairing-actions {
+.agent-roster-item {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 56px;
+  padding: 8px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--ledger-ink, #241c17);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease,
+    transform 150ms ease;
+}
+
+.agent-roster-item:hover {
+  background: rgba(248, 240, 226, 0.72);
+  transform: translateX(2px);
+}
+
+.agent-roster-item[data-selected] {
+  border-color: var(--ledger-line-strong, rgba(50, 32, 22, 0.46));
+  background: var(--ledger-paper-soft, #f8f0e2);
+  box-shadow: inset 3px 0 0 var(--ledger-oxblood, #7a2730);
+}
+
+.agent-roster-sigil,
+.agent-detail-sigil {
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--ledger-line-strong, rgba(50, 32, 22, 0.46));
+  border-radius: 50%;
+  color: var(--ledger-oxblood, #7a2730);
+  background: var(--ledger-paper, #eee3cf);
+  font-family: var(--ledger-serif, serif);
+  font-weight: 700;
+}
+
+.agent-roster-sigil {
+  width: 34px;
+  height: 34px;
+  font-size: 0.68rem;
+}
+
+.agent-roster-copy {
+  min-width: 0;
+}
+
+.agent-roster-copy strong,
+.agent-roster-copy small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-roster-copy strong {
+  font-family: var(--ledger-serif, serif);
+  font-size: 0.84rem;
+  font-weight: 650;
+}
+
+.agent-roster-copy small {
+  margin-top: 2px;
+  color: var(--ledger-muted, #66584b);
+  font-size: 0.64rem;
+}
+
+.agent-roster-state {
+  width: 7px;
+  height: 7px;
+  overflow: hidden;
+  border-radius: 50%;
+  color: transparent;
+  background: var(--ledger-line-strong, rgba(50, 32, 22, 0.46));
+}
+
+.agent-roster-state[data-active] {
+  background: var(--ledger-sage, #52614d);
+  box-shadow: 0 0 0 3px rgba(82, 97, 77, 0.12);
+}
+
+.agent-roster-add {
+  width: 100%;
+  margin-top: 12px;
+  background: transparent;
+}
+
+.agent-roster-add span {
+  color: var(--ledger-oxblood, #7a2730);
+  font-size: 1rem;
+}
+
+.agent-roster-note {
+  margin: 12px 7px 0;
+  color: var(--ledger-faint, #8a7764);
+  font-size: 0.63rem;
+  line-height: 1.45;
+}
+
+.account-agent-detail,
+.agent-detail-empty {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.account-agent-detail {
+  padding: clamp(20px, 2.6vw, 34px);
+}
+
+.agent-detail-empty {
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  padding: 44px;
+}
+
+.agent-detail-empty h3 {
+  margin: 0;
+  font-family: var(--ledger-serif, serif);
+  font-size: 2rem;
+}
+
+.agent-detail-empty p {
+  max-width: 460px;
+  margin: 10px 0 22px;
+  color: var(--ledger-muted, #66584b);
+  line-height: 1.6;
+}
+
+.agent-detail-header {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--ledger-line, rgba(60, 42, 28, 0.24));
+}
+
+.agent-detail-sigil {
+  width: 56px;
+  height: 56px;
+  font-size: 0.86rem;
+  box-shadow: inset 0 0 0 5px var(--ledger-paper-soft, #f8f0e2);
+}
+
+.agent-detail-identity {
+  min-width: 0;
+}
+
+.agent-detail-identity > div {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.agent-detail-identity h3 {
+  margin: 0;
+  overflow: hidden;
+  font-family: var(--ledger-serif, serif);
+  font-size: clamp(1.55rem, 2.5vw, 2.15rem);
+  font-weight: 650;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-detail-identity > div > span:not(.account-status-pill) {
+  color: var(--ledger-muted, #66584b);
+  font-family: var(--ledger-mono, monospace);
+  font-size: 0.68rem;
+}
+
+.agent-detail-identity p {
+  margin: 7px 0 2px;
+  overflow: hidden;
+  color: var(--ledger-muted, #66584b);
+  font-size: 0.84rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-detail-identity > small {
+  color: var(--ledger-faint, #8a7764);
+  font-family: var(--ledger-mono, monospace);
+  font-size: 0.65rem;
+}
+
+.agent-detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.account-status-pill {
+  display: inline-flex;
+  min-height: 22px;
+  align-items: center;
+  width: fit-content;
+  padding: 3px 7px;
+  border: 1px solid var(--ledger-line, rgba(60, 42, 28, 0.24));
+  border-radius: 999px;
+  color: var(--ledger-muted, #66584b);
+  background: rgba(238, 227, 207, 0.58);
+  font-family: var(--ledger-mono, monospace);
+  font-size: 0.57rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.account-status-pill[data-tone="ready"] {
+  border-color: rgba(82, 97, 77, 0.4);
+  color: var(--ledger-sage, #52614d);
+  background: rgba(82, 97, 77, 0.09);
+}
+
+.account-status-pill[data-tone="warning"],
+.account-status-pill[data-tone="expired"] {
+  border-color: rgba(155, 52, 45, 0.38);
+  color: var(--ledger-danger, #9b342d);
+  background: rgba(155, 52, 45, 0.08);
+}
+
+.account-agent-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+  padding: 17px 0;
+  border-bottom: 1px solid var(--ledger-line, rgba(60, 42, 28, 0.24));
+}
+
+.account-agent-stats > div {
+  min-width: 0;
+  padding-inline: 16px;
+}
+
+.account-agent-stats > div:first-child {
+  padding-left: 0;
+}
+
+.account-agent-stats > div + div {
+  border-left: 1px solid var(--ledger-line, rgba(60, 42, 28, 0.24));
+}
+
+.account-agent-stats dt,
+.account-pairing-values dt {
+  color: var(--ledger-faint, #8a7764);
+  font-family: var(--ledger-mono, monospace);
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.account-agent-stats dd {
+  margin: 4px 0 0;
+  overflow: hidden;
+  color: var(--ledger-ink, #241c17);
+  font-family: var(--ledger-serif, serif);
+  font-size: 1.1rem;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.agent-capability-panel {
+  padding: 19px 0 20px;
+  border-bottom: 1px solid var(--ledger-line, rgba(60, 42, 28, 0.24));
+}
+
+.agent-panel-heading,
+.account-pairing-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.agent-panel-heading strong,
+.account-pairing-heading strong {
+  display: block;
+  margin-top: 3px;
+  font-family: var(--ledger-serif, serif);
+  font-size: 0.94rem;
+  font-weight: 650;
+}
+
+.account-section-label {
+  display: block;
+  color: var(--ledger-oxblood, #7a2730);
+  font-family: var(--ledger-mono, monospace);
+  font-size: 0.59rem;
+  font-weight: 700;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.account-capability-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.account-capability-tags > span {
+  display: inline-flex;
+  min-height: 29px;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border: 1px solid var(--ledger-line, rgba(60, 42, 28, 0.24));
+  border-radius: 999px;
+  color: var(--ledger-ink, #241c17);
+  background: rgba(238, 227, 207, 0.5);
+  font-family: var(--ledger-mono, monospace);
+  font-size: 0.64rem;
+}
+
+.account-capability-tags small {
+  color: var(--ledger-sage, #52614d);
+  font-weight: 800;
+}
+
+.agent-panel-muted {
+  margin: 10px 0 0;
+  color: var(--ledger-muted, #66584b);
+  font-size: 0.78rem;
+}
+
+.account-capability-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px 12px;
+  margin-top: 12px;
+}
+
+.account-capability-editor label,
+.account-capability-editor > p {
+  grid-column: 1 / -1;
+}
+
+.account-capability-editor label,
+.agent-profile-form label,
+.agent-field-label {
+  color: var(--ledger-muted, #66584b);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.account-capability-editor input {
+  grid-column: 1;
+}
+
+.account-capability-editor > div {
+  display: flex;
+  grid-column: 2;
+  gap: 5px;
+}
+
+.agent-control-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  padding-top: 20px;
+}
+
+.agent-control-card {
+  display: flex;
+  min-width: 0;
+  min-height: 190px;
+  flex-direction: column;
+  gap: 14px;
+  padding: 15px;
+  border: 1px solid var(--ledger-line, rgba(60, 42, 28, 0.24));
+  border-radius: 4px;
+  background: rgba(238, 227, 207, 0.28);
+}
+
+.agent-control-card[data-tone="ready"] {
+  border-color: rgba(82, 97, 77, 0.38);
+}
+
+.agent-control-card[data-tone="warning"] {
+  border-color: rgba(155, 52, 45, 0.34);
+}
+
+.agent-control-card > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 9px;
+}
+
+.agent-control-code {
+  color: var(--ledger-oxblood, #7a2730);
+  font-family: var(--ledger-mono, monospace);
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.agent-control-card > div:not(.account-inline-confirmation) {
+  flex: 1;
+}
+
+.agent-control-card h4 {
+  margin: 0;
+  font-family: var(--ledger-serif, serif);
+  font-size: 1rem;
+  font-weight: 650;
+}
+
+.agent-control-card p {
+  margin: 6px 0 0;
+  color: var(--ledger-muted, #66584b);
+  font-size: 0.73rem;
+  line-height: 1.5;
+}
+
+.agent-control-card > button {
+  width: 100%;
+}
+
+.account-inline-confirmation {
+  display: grid;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid var(--ledger-line, rgba(60, 42, 28, 0.24));
+  border-radius: 3px;
+  background: var(--ledger-paper-soft, #f8f0e2);
+}
+
+.account-inline-confirmation p {
+  margin: 0;
+  color: var(--ledger-ink, #241c17);
+  font-size: 0.68rem;
+}
+
+.account-inline-confirmation > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.account-pairing-packet {
+  margin-top: 12px;
+  padding: 16px;
+  border: 1px solid var(--ledger-line-strong, rgba(50, 32, 22, 0.46));
+  border-left: 4px solid var(--ledger-ochre, #ad741f);
+  border-radius: 3px;
+  background: rgba(238, 227, 207, 0.42);
+}
+
+.account-pairing-values {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0 10px;
+}
+
+.account-pairing-values > div {
+  min-width: 0;
+}
+
+.account-pairing-values dd {
+  margin: 4px 0 0;
+}
+
+.account-pairing-values code {
+  display: block;
+  max-width: 100%;
+  padding: 9px 10px;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--ledger-line, rgba(60, 42, 28, 0.24));
+  border-radius: 3px;
+  color: var(--ledger-blue, #365c66);
+  background: #fff8ec;
+  font-family: var(--ledger-mono, monospace);
+  font-size: 0.64rem;
+  line-height: 1.45;
+  user-select: text;
+}
+
+.account-pairing-packet > p {
+  margin: 0;
+  color: var(--ledger-muted, #66584b);
+  font-size: 0.7rem;
+  line-height: 1.5;
+}
+
+.account-pairing-actions {
+  display: flex;
   justify-content: flex-end;
   margin-top: 12px;
 }
 
-.owner-account .account-pairing-actions button {
-  min-height: 44px;
+.account-pairing-error,
+.field-error,
+.agent-form-error {
+  color: var(--ledger-danger, #9b342d);
 }
 
-.owner-account .account-revoke-action {
-  color: var(--account-red) !important;
-  background: var(--account-paper-strong) !important;
-  border-color: var(--account-red) !important;
+.account-pairing-error {
+  margin-top: 7px !important;
+  font-size: 0.67rem !important;
 }
 
-.owner-account .account-revoke-action:hover {
-  color: var(--account-paper-strong) !important;
-  background: var(--account-red) !important;
-}
-
-.owner-account .account-inline-confirmation {
-  width: min(280px, 100%);
-  flex: 0 0 auto;
-  padding: 10px;
-  color: var(--account-ink);
-  background: var(--account-paper-muted);
-  border: 1px solid var(--account-red);
-  border-left-width: 4px;
-  border-radius: 0;
-}
-
-.owner-account .account-inline-confirmation p {
-  margin-top: 0;
-}
-
-.owner-account .account-inline-confirmation > div {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.owner-account .account-inline-confirmation button {
-  min-height: 44px;
-  padding: 7px 10px;
-  font-size: 0.62rem;
-}
-
-.owner-account .agent-connection-actions {
-  justify-content: flex-end;
-  padding: 10px 16px 14px;
-  background: var(--account-paper);
-  border-top: 1px solid var(--account-line-soft);
-}
-
-.owner-account .agent-connection-actions button,
-.owner-account .agent-manager-actions button,
-.owner-account .agent-form-actions button {
-  min-height: 44px;
-}
-
-.owner-account .agent-manager-actions {
-  margin-top: 18px;
-  padding-top: 16px;
-  border-top: 2px solid var(--account-ink);
-}
-
-.owner-account .agent-manager-actions p {
-  color: var(--account-muted);
-}
-
-.owner-account .agent-manager-dialog :is(.primary-action, .quiet-action),
-.owner-account .agent-manager-dialog .active-agent-action,
-.owner-account .agent-manager-dialog .text-action {
-  border-radius: 0;
-  box-shadow: none;
-  font-family: inherit;
-  font-weight: 700;
-  touch-action: manipulation;
-}
-
-.owner-account .agent-manager-dialog .primary-action {
-  color: var(--account-paper-strong);
-  background: var(--account-red);
-  border: 1px solid var(--account-red);
-}
-
-.owner-account .agent-manager-dialog .primary-action:hover {
-  color: #fffdf5;
-  background: color-mix(in srgb, var(--account-red) 86%, #000);
-  border-color: var(--account-ink);
-}
-
-.owner-account .agent-manager-dialog .quiet-action {
-  color: var(--account-ink);
-  background: var(--account-paper-strong);
-  border: 1px solid var(--account-line);
-}
-
-.owner-account .agent-manager-dialog .quiet-action:hover {
-  color: var(--account-red);
-  background: var(--account-paper-muted);
-  border-color: var(--account-red);
-}
-
-.owner-account .agent-manager-dialog .active-agent-action {
-  color: var(--account-paper-strong);
-  background: var(--account-green);
-  border: 1px solid var(--account-green);
-}
-
-.owner-account .agent-manager-dialog .text-action {
-  color: var(--account-red);
-  background: transparent;
-  border: 1px solid transparent;
-}
-
-.owner-account .agent-manager-dialog .text-action:hover {
-  color: var(--account-ink);
-  background: transparent;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.owner-account .agent-profile-form {
+.agent-profile-form {
   display: grid;
+  min-height: 0;
+  flex: 1 1 auto;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-  padding-top: 20px;
+  align-content: start;
+  gap: 18px;
+  padding: clamp(22px, 3vw, 36px);
+  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
-.owner-account .agent-profile-form .form-wide {
+.agent-profile-form .form-wide {
   grid-column: 1 / -1;
 }
 
-.owner-account .agent-profile-form label {
-  min-width: 0;
-  display: grid;
-  align-content: start;
-  gap: 7px;
-  color: var(--account-muted);
-  font-family: var(--account-code);
-  font-size: 0.66rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.owner-account .agent-form-explainer {
-  margin: 0;
-  padding: 12px;
-  color: var(--account-muted);
-  background: var(--account-paper-muted);
-  border: 1px solid var(--account-line);
-  border-left: 4px solid var(--account-ochre);
-  border-radius: 0;
+.agent-form-explainer {
+  margin: 0 0 2px;
+  padding: 12px 14px;
+  border-left: 3px solid var(--ledger-ochre, #ad741f);
+  color: var(--ledger-muted, #66584b);
+  background: rgba(238, 227, 207, 0.45);
+  font-size: 0.76rem;
   line-height: 1.55;
 }
 
-.owner-account .agent-guild-field {
-  padding: 12px;
-  color: var(--account-ink);
-  background: var(--account-paper-muted);
-  border: 1px solid var(--account-line);
-  border-radius: 0;
+.agent-profile-form label,
+.agent-guild-field {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 7px;
 }
 
-.owner-account .agent-field-label {
-  color: var(--account-red);
-  font-family: var(--account-code);
+.agent-profile-form input,
+.agent-profile-form select,
+.agent-profile-form textarea,
+.account-capability-editor input {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 10px 11px;
+  border: 1px solid var(--ledger-line-strong, rgba(50, 32, 22, 0.46));
+  border-radius: 3px;
+  color: var(--ledger-ink, #241c17);
+  background: #fff8ec;
+  font-size: 0.82rem;
+  font-weight: 450;
 }
 
-.owner-account .agent-guild-status strong {
-  color: var(--account-ink);
+.agent-profile-form select {
+  color-scheme: light;
 }
 
-.owner-account .agent-guild-status p,
-.owner-account .agent-profile-form small {
-  color: var(--account-muted);
-  overflow-wrap: anywhere;
-  text-transform: none;
+.agent-profile-form textarea {
+  min-height: 112px;
+  resize: vertical;
+  line-height: 1.5;
 }
 
-.owner-account .agent-profile-form [aria-invalid="true"] {
-  border-color: var(--account-red);
-  box-shadow: inset 4px 0 0 var(--account-red);
+.agent-profile-form input::placeholder,
+.agent-profile-form textarea::placeholder,
+.account-capability-editor input::placeholder {
+  color: var(--ledger-faint, #8a7764);
+  opacity: 0.78;
 }
 
-.owner-account .field-error {
-  font-size: 0.63rem;
-  font-weight: 600;
-  letter-spacing: normal;
+.agent-profile-form input[aria-invalid="true"],
+.agent-profile-form select[aria-invalid="true"],
+.agent-profile-form textarea[aria-invalid="true"],
+.account-capability-editor input[aria-invalid="true"] {
+  border-color: var(--ledger-danger, #9b342d);
+}
+
+.agent-profile-form label > small:not(.field-error) {
+  color: var(--ledger-faint, #8a7764);
+  font-size: 0.64rem;
+  font-weight: 450;
   line-height: 1.4;
-  text-transform: none;
 }
 
-.owner-account .agent-form-error {
+.field-error {
+  font-size: 0.65rem;
+}
+
+.agent-guild-status {
+  padding: 12px 13px;
+  border: 1px solid var(--ledger-line, rgba(60, 42, 28, 0.24));
+  border-radius: 3px;
+  background: rgba(238, 227, 207, 0.35);
+}
+
+.agent-guild-status strong {
+  font-family: var(--ledger-serif, serif);
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+
+.agent-guild-status p {
+  margin: 4px 0 0;
+  color: var(--ledger-muted, #66584b);
+  font-size: 0.67rem;
+  line-height: 1.45;
+}
+
+.agent-form-error {
   margin: 0;
-  padding: 12px;
-  color: var(--account-red);
-  background: var(--account-paper-muted);
-  border: 1px solid var(--account-red);
-  border-left-width: 4px;
-  border-radius: 0;
+  padding: 11px 13px;
+  border: 1px solid rgba(155, 52, 45, 0.35);
+  border-radius: 3px;
+  background: rgba(155, 52, 45, 0.07);
+  font-size: 0.72rem;
 }
 
-.owner-account .agent-form-error:focus {
-  outline: 3px solid var(--account-focus);
-  outline-offset: 3px;
-}
-
-.owner-account .agent-form-actions {
-  padding-top: 16px;
-  border-top: 1px solid var(--account-line);
-}
-
-.owner-account .agent-manager-dialog :is(button, input, select, textarea) {
-  -webkit-tap-highlight-color: color-mix(
-    in srgb,
-    var(--account-red) 20%,
-    transparent
-  );
+.agent-form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 4px;
 }
 
 .gateway-toast {
-  grid-template-columns: 5px minmax(0, 1fr) 32px;
-  color: var(--ledger-ink, #241d16);
-  background: var(--ledger-paper-strong, #fff9e9);
-  border: 1px solid var(--ledger-ink, #241d16);
-  border-left: 4px solid var(--ledger-red, #8c342f);
-  border-radius: 0;
-  box-shadow: 5px 5px 0 rgba(20, 15, 10, 0.3);
+  position: fixed;
+  z-index: 200;
+  right: 20px;
+  bottom: max(20px, env(safe-area-inset-bottom));
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: min(380px, calc(100vw - 32px));
+  padding: 12px 13px;
+  border: 1px solid var(--ledger-line-strong, rgba(50, 32, 22, 0.46));
+  border-left: 4px solid var(--ledger-sage, #52614d);
+  border-radius: 4px;
+  color: var(--ledger-ink, #241c17);
+  background: var(--ledger-paper-soft, #f8f0e2);
+  box-shadow: 0 18px 48px rgba(36, 28, 23, 0.2);
 }
 
 .gateway-toast-mark {
-  width: 5px;
-  height: 18px;
-  background: var(--ledger-red, #8c342f);
-  border-radius: 0;
-  box-shadow: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ledger-sage, #52614d);
+}
+
+.gateway-toast p {
+  margin: 0;
+  font-size: 0.76rem;
+  line-height: 1.4;
 }
 
 .gateway-toast button {
-  width: 44px;
-  height: 44px;
-  color: var(--ledger-ink-muted, #695d4e);
+  width: 30px;
+  height: 30px;
+  border: 0;
+  color: var(--ledger-muted, #66584b);
   background: transparent;
-  border: 1px solid transparent;
-  border-radius: 0;
+  cursor: pointer;
+  font-size: 1.1rem;
 }
 
-.gateway-toast button:hover {
-  color: var(--ledger-paper-strong, #fff9e9);
-  background: var(--ledger-red, #8c342f);
-}
+@media (max-width: 920px) {
+  .agent-manager-dialog {
+    width: calc(100vw - 20px);
+    height: calc(100dvh - 20px);
+  }
 
-.gateway-toast button:focus-visible {
-  outline: 3px solid var(--ledger-focus, #245d63);
-  outline-offset: 2px;
+  .agent-manager-workspace {
+    grid-template-columns: 200px minmax(0, 1fr);
+  }
+
+  .agent-detail-header {
+    grid-template-columns: 50px minmax(0, 1fr);
+  }
+
+  .agent-detail-sigil {
+    width: 50px;
+    height: 50px;
+  }
+
+  .agent-detail-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
+
+  .agent-control-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-control-card {
+    min-height: auto;
+  }
 }
 
 @media (max-width: 700px) {
-  .owner-account .account-trigger {
-    min-width: 46px;
-    grid-template-columns: 30px auto;
-    padding: 5px 8px;
-  }
-
-  .owner-account .account-trigger-copy,
-  .owner-account .account-trigger .signer-ready-mark {
+  .account-trigger-copy,
+  .signer-ready-mark {
     display: none;
   }
 
-  .owner-account .account-trigger-chevron {
-    display: block;
+  .account-trigger {
+    display: grid;
+    width: auto;
+    grid-template-columns: 34px auto;
   }
 
-  .owner-account .agent-manager-dialog {
-    width: 100%;
-    max-height: calc(100svh - 8px);
-    margin: auto 0 0;
-    border-right: 0;
-    border-bottom: 0;
-    border-left: 0;
-    box-shadow: none;
+  .agent-manager-dialog {
+    width: 100vw;
+    height: 100dvh;
+    border: 0;
+    border-top: 4px solid var(--ledger-oxblood, #7a2730);
+    border-radius: 0;
   }
 
-  .owner-account .agent-manager-shell {
-    max-height: calc(100svh - 8px);
-    padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+  .agent-manager-heading {
+    min-height: 72px;
+    padding: 12px 10px 11px 14px;
   }
 
-  .owner-account .agent-manager-heading h2 {
+  .account-heading-context {
+    display: none !important;
+  }
+
+  .agent-manager-heading h2 {
     font-size: 1.45rem;
   }
 
-  .owner-account .agent-connection-main,
-  .owner-account .account-capabilities-row,
-  .owner-account .account-security-row,
-  .owner-account .account-autonomy-row,
-  .owner-account .account-pairing-row {
-    align-items: stretch;
-    flex-direction: column;
-    gap: 12px;
+  .agent-manager-heading .eyebrow {
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
-  .owner-account .account-security-row > button,
-  .owner-account .account-autonomy-row > button,
-  .owner-account .account-capabilities-row > button,
-  .owner-account .account-pairing-row > button,
-  .owner-account .account-inline-confirmation {
-    width: 100%;
-    min-width: 0;
+  .agent-manager-heading-actions {
+    gap: 2px;
   }
 
-  .owner-account .agent-connection-stats {
-    align-self: flex-start;
-    text-align: left;
+  .account-signout {
+    padding-inline: 6px !important;
   }
 
-  .owner-account .agent-connection-actions {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .owner-account .agent-connection-actions > button {
-    width: 100%;
-  }
-
-  .owner-account .account-pairing-heading,
-  .owner-account .account-pairing-actions {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .owner-account .account-pairing-actions button {
-    width: 100%;
-  }
-
-  .owner-account .account-pairing-values > div {
+  .agent-manager-workspace {
     grid-template-columns: 1fr;
-    gap: 4px;
+    grid-template-rows: auto minmax(0, 1fr);
   }
 
-  .owner-account .account-capability-editor {
-    width: 100%;
+  .agent-roster {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 10px;
+    overflow: visible;
+    border-right: 0;
+    border-bottom: 1px solid var(--ledger-line, rgba(60, 42, 28, 0.24));
   }
 
-  .owner-account .agent-profile-form {
-    grid-template-columns: 1fr;
-  }
-
-  .owner-account .agent-profile-form .form-wide {
-    grid-column: 1;
-  }
-}
-
-@media (max-width: 420px) {
-  .owner-account .account-session-row {
-    align-items: stretch;
-  }
-
-  .owner-account .account-session-identity .owner-avatar {
+  .agent-roster-heading,
+  .agent-roster-note {
     display: none;
   }
 
-  .owner-account .account-inline-confirmation > div {
+  .agent-roster-list {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: none;
+  }
+
+  .agent-roster-list::-webkit-scrollbar {
+    display: none;
+  }
+
+  .agent-roster-item {
+    min-width: 150px;
+  }
+
+  .agent-roster-add {
+    width: 42px;
+    min-width: 42px;
+    margin: 0;
+    padding: 0;
+    font-size: 0;
+  }
+
+  .agent-roster-add span {
+    font-size: 1.1rem;
+  }
+
+  .account-agent-detail {
+    padding: 18px 14px 28px;
+  }
+
+  .agent-detail-header {
+    grid-template-columns: 46px minmax(0, 1fr);
+    gap: 11px;
+  }
+
+  .agent-detail-sigil {
+    width: 46px;
+    height: 46px;
+  }
+
+  .agent-detail-identity h3 {
+    font-size: 1.55rem;
+  }
+
+  .agent-detail-identity > div {
+    flex-wrap: wrap;
+  }
+
+  .agent-detail-actions,
+  .agent-detail-actions > * {
+    width: 100%;
+  }
+
+  .agent-detail-actions {
     display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .account-agent-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .account-agent-stats > div {
+    padding: 10px 12px;
+  }
+
+  .account-agent-stats > div:first-child {
+    padding-left: 0;
+  }
+
+  .account-agent-stats > div:nth-child(3) {
+    grid-column: 1 / -1;
+    padding-left: 0;
+    border-top: 1px solid var(--ledger-line, rgba(60, 42, 28, 0.24));
+    border-left: 0;
+  }
+
+  .account-capability-editor {
     grid-template-columns: 1fr;
   }
 
-  .owner-account .agent-manager-actions,
-  .owner-account .agent-form-actions {
-    align-items: stretch;
-    flex-direction: column;
+  .account-capability-editor input,
+  .account-capability-editor > div {
+    grid-column: 1;
   }
 
-  .owner-account .agent-manager-actions button,
-  .owner-account .agent-form-actions button {
+  .account-capability-editor > div {
+    justify-content: flex-end;
+  }
+
+  .account-pairing-heading {
+    align-items: flex-start;
+  }
+
+  .agent-profile-form {
+    grid-template-columns: 1fr;
+    gap: 15px;
+    padding: 20px 14px 28px;
+  }
+
+  .agent-profile-form .form-wide {
+    grid-column: 1;
+  }
+
+  .agent-form-actions,
+  .agent-form-actions > * {
     width: 100%;
+  }
+
+  .agent-form-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 430px) {
+  .owner-account .account-sign-in {
+    min-height: 40px;
+    padding-inline: 12px;
+    font-size: 0.7rem;
+  }
+
+  .agent-manager-heading .eyebrow {
+    max-width: 150px;
+  }
+
+  .agent-detail-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .account-agent-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .account-agent-stats > div,
+  .account-agent-stats > div:first-child,
+  .account-agent-stats > div:nth-child(3) {
+    grid-column: auto;
+    padding: 9px 0;
+    border-top: 0;
+    border-left: 0;
+  }
+
+  .account-agent-stats > div + div {
+    border-top: 1px solid var(--ledger-line, rgba(60, 42, 28, 0.24));
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .owner-account *,
-  .owner-account *::before,
-  .owner-account *::after,
-  .gateway-toast,
-  .gateway-toast * {
-    scroll-behavior: auto !important;
-    transition-duration: 0.01ms !important;
+  .account-trigger,
+  .agent-roster-item,
+  .owner-account .text-action,
+  .owner-account .quiet-action,
+  .owner-account .primary-action,
+  .agent-roster-add {
+    transition: none;
   }
 }

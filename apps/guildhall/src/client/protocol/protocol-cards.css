@@ -6,7 +6,7 @@
 .protocol-card-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: clamp(14px, 1.8vw, 24px);
+  gap: clamp(14px, 1.6vw, 20px);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -17,8 +17,8 @@
   --protocol-accent: var(--ledger-ochre, #a76f23);
   position: relative;
   min-width: 0;
-  height: 352px;
-  border-radius: 2px;
+  height: 320px;
+  border-radius: 4px;
   isolation: isolate;
 }
 
@@ -52,36 +52,30 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  padding: clamp(24px, 2.6vw, 36px);
+  padding: clamp(22px, 2.2vw, 30px);
   overflow: hidden;
   border: 1px solid var(--ledger-line, #9b9484);
   border-radius: inherit;
   color: var(--ledger-ink, #171713);
   background: var(--ledger-paper, #e8e0d0);
-  box-shadow: 6px 7px 0 rgba(36, 28, 23, 0.14);
+  box-shadow: 0 12px 30px rgba(36, 28, 23, 0.08);
   backface-visibility: hidden;
 }
 
 .protocol-card-face::before {
   position: absolute;
   top: 0;
-  bottom: 0;
+  right: 0;
   left: 0;
-  width: 7px;
+  width: auto;
+  height: 3px;
   z-index: -1;
   background: var(--protocol-accent);
   content: "";
 }
 
 .protocol-card-face::after {
-  position: absolute;
-  top: 11px;
-  right: 11px;
-  width: 18px;
-  height: 18px;
-  border-top: 1px solid var(--ledger-line, #9b9484);
-  border-right: 1px solid var(--ledger-line, #9b9484);
-  content: "";
+  display: none;
 }
 
 .protocol-card-technical {
@@ -144,7 +138,7 @@
   flex-direction: column;
   justify-content: center;
   min-width: 0;
-  padding-block: 18px;
+  padding-block: 14px;
 }
 
 .protocol-card-copy h3 {
@@ -152,9 +146,9 @@
   margin: 0 0 14px;
   color: var(--ledger-ink, #171713);
   font-family: var(--ledger-serif, Georgia, "Times New Roman", serif);
-  font-size: clamp(1.9rem, 2.9vw, 2.8rem);
+  font-size: clamp(1.8rem, 2.5vw, 2.4rem);
   font-weight: 520;
-  line-height: 0.96;
+  line-height: 1;
   letter-spacing: -0.035em;
   text-wrap: balance;
 }
@@ -236,7 +230,7 @@
 
 .protocol-card-face > footer {
   justify-content: space-between;
-  padding-top: 14px;
+  padding-top: 12px;
   border-top: 1px solid var(--ledger-line, #9b9484);
   color: var(--ledger-muted, #565348);
   font-family: var(
@@ -280,12 +274,12 @@
 @media (hover: hover) {
   .protocol-card:not(.is-technical):has(.protocol-card-trigger:hover)
     .protocol-card-inner {
-    transform: translate(-3px, -3px);
+    transform: translateY(-2px);
   }
 
   .protocol-card.is-technical:has(.protocol-card-trigger:hover)
     .protocol-card-inner {
-    transform: translate(-3px, -3px) rotateY(180deg);
+    transform: translateY(-2px) rotateY(180deg);
   }
 }
 
@@ -297,15 +291,15 @@
 
 @media (max-width: 520px) {
   .protocol-card {
-    height: 372px;
+    height: 326px;
   }
 
   .protocol-card-face {
-    padding: 22px;
+    padding: 20px;
   }
 
   .protocol-card-copy h3 {
-    font-size: 2rem;
+    font-size: 1.9rem;
   }
 
   .protocol-card-technical dl > div {

@@ -143,12 +143,12 @@ textarea:focus-visible {
   min-height: 72px;
   grid-template-columns: auto 1fr auto;
   gap: 28px;
-  padding: 10px max(24px, calc((100vw - 1440px) / 2));
+  padding: 10px max(24px, calc((100vw - 1320px) / 2));
   border-top: 4px solid var(--ledger-oxblood);
   border-bottom: 1px solid var(--ledger-line-strong);
   color: var(--ledger-ink);
   background: var(--ledger-paper-soft);
-  box-shadow: 0 4px 0 rgba(75, 48, 30, 0.08);
+  box-shadow: 0 4px 18px rgba(75, 48, 30, 0.07);
   backdrop-filter: none;
 }
 
@@ -215,10 +215,10 @@ textarea:focus-visible {
 
 .mobile-site-nav summary {
   border: 1px solid var(--ledger-line-strong);
-  border-radius: 0;
+  border-radius: 3px;
   color: var(--ledger-ink);
   background: var(--ledger-paper-soft);
-  box-shadow: 3px 3px 0 var(--ledger-paper-deep);
+  box-shadow: 0 3px 10px rgba(75, 48, 30, 0.08);
 }
 
 .mobile-site-nav summary span {
@@ -234,8 +234,8 @@ textarea:focus-visible {
   color: var(--ledger-ink);
   background: var(--ledger-paper-soft);
   border: 1px solid var(--ledger-line-strong);
-  border-radius: 0;
-  box-shadow: 8px 8px 0 rgba(68, 43, 27, 0.16);
+  border-radius: 4px;
+  box-shadow: 0 16px 38px rgba(68, 43, 27, 0.16);
   backdrop-filter: none;
 }
 
@@ -271,16 +271,16 @@ textarea:focus-visible {
 .demo-section,
 .live-guild-section,
 .site-footer {
-  width: min(1440px, calc(100% - 48px));
+  width: min(1320px, calc(100% - 48px));
   margin-inline: auto;
 }
 
 .home-section {
-  min-height: min(820px, calc(100svh - 72px));
-  grid-template-columns: minmax(0, 0.78fr) minmax(580px, 1.22fr);
+  min-height: min(760px, calc(100svh - 72px));
+  grid-template-columns: minmax(0, 0.86fr) minmax(540px, 1.14fr);
   align-items: center;
-  gap: clamp(48px, 7vw, 112px);
-  padding-block: clamp(68px, 8vw, 112px);
+  gap: clamp(40px, 6vw, 82px);
+  padding-block: clamp(58px, 7vw, 90px);
 }
 
 .home-hero-copy {
@@ -318,57 +318,61 @@ textarea:focus-visible {
 .home-hero-copy h1 {
   max-width: 700px;
   margin: 0;
-  font-size: clamp(3.35rem, 5.4vw, 5.5rem);
+  font-size: clamp(3.25rem, 4.9vw, 4.9rem);
   font-weight: 650;
-  line-height: 0.94;
+  line-height: 0.97;
   letter-spacing: -0.045em;
   text-wrap: balance;
 }
 
 .home-lede {
   max-width: 610px;
-  margin-top: 28px;
+  margin-top: 24px;
   color: var(--ledger-muted);
   font-size: clamp(1.02rem, 1.4vw, 1.18rem);
-  line-height: 1.7;
+  line-height: 1.62;
 }
 
 .home-actions {
   gap: 12px;
-  margin-top: 32px;
+  margin-top: 28px;
 }
 
 .primary-action,
 .quiet-action,
 .pause-action {
   min-height: 46px;
-  border-radius: 0;
+  border-radius: 3px;
   padding: 0 17px;
   font-size: 0.82rem;
   font-weight: 750;
-  transition: transform 150ms var(--ledger-ease);
+  transition:
+    border-color 150ms var(--ledger-ease),
+    color 150ms var(--ledger-ease),
+    background-color 150ms var(--ledger-ease),
+    transform 150ms var(--ledger-ease);
 }
 
 .primary-action {
   border: 1px solid var(--ledger-oxblood-dark);
   color: var(--ledger-paper-soft);
   background: var(--ledger-oxblood);
-  box-shadow: 4px 4px 0 var(--ledger-ink);
+  box-shadow: 0 5px 14px rgba(85, 23, 29, 0.16);
 }
 
 .quiet-action,
 .pause-action {
   border: 1px solid var(--ledger-line-strong);
   color: var(--ledger-ink);
-  background: transparent;
-  box-shadow: 3px 3px 0 var(--ledger-paper-deep);
+  background: rgba(248, 240, 226, 0.52);
+  box-shadow: none;
 }
 
 .primary-action:hover,
 .quiet-action:hover,
 .pause-action:hover {
   border-color: var(--ledger-ink);
-  transform: translate(-1px, -1px);
+  transform: translateY(-1px);
 }
 
 .primary-action:hover {
@@ -393,7 +397,7 @@ textarea:focus-visible {
   display: grid;
   grid-template-columns: repeat(3, max-content);
   gap: 9px 0;
-  margin-top: 34px;
+  margin-top: 28px;
   color: var(--ledger-muted);
   font-family: var(--ledger-mono);
   font-size: 0.7rem;
@@ -424,9 +428,10 @@ textarea:focus-visible {
 .home-pact-folio {
   position: relative;
   min-width: 0;
-  padding: clamp(26px, 4vw, 46px);
+  padding: clamp(26px, 3.4vw, 40px);
   border: 1px solid var(--ledger-line-strong);
-  border-top: 6px solid var(--ledger-oxblood);
+  border-top: 4px solid var(--ledger-oxblood);
+  border-radius: 4px;
   color: var(--ledger-ink);
   background:
     linear-gradient(
@@ -436,9 +441,7 @@ textarea:focus-visible {
       transparent 43px
     ),
     var(--ledger-paper-soft);
-  box-shadow:
-    14px 14px 0 rgba(81, 53, 32, 0.16),
-    0 28px 70px rgba(76, 48, 28, 0.08);
+  box-shadow: 0 20px 54px rgba(76, 48, 28, 0.11);
   animation: ledger-rise 580ms 90ms var(--ledger-ease) both;
 }
 
@@ -643,21 +646,21 @@ textarea:focus-visible {
 .protocol-section,
 .demo-section,
 .live-guild-section {
-  padding-block: clamp(78px, 8vw, 118px);
-  border-top: 3px double var(--ledger-line-strong);
+  padding-block: clamp(70px, 7vw, 96px);
+  border-top: 1px solid var(--ledger-line-strong);
 }
 
 .page-section-heading {
   grid-template-columns: minmax(0, 1fr) minmax(300px, 0.58fr);
   gap: clamp(30px, 6vw, 88px);
-  margin-bottom: 40px;
+  margin-bottom: 32px;
 }
 
 .page-section-heading h2 {
   max-width: 820px;
-  font-size: clamp(2.5rem, 4.2vw, 4.2rem);
+  font-size: clamp(2.4rem, 3.8vw, 3.7rem);
   font-weight: 650;
-  line-height: 0.98;
+  line-height: 1;
 }
 
 .page-section-heading > p {
@@ -690,7 +693,7 @@ textarea:focus-visible {
 
 .site-footer {
   min-height: 132px;
-  border-top: 3px double var(--ledger-line-strong);
+  border-top: 1px solid var(--ledger-line-strong);
   color: var(--ledger-muted);
   font-size: 0.76rem;
 }
@@ -755,11 +758,11 @@ textarea:focus-visible {
 
   .home-section {
     min-height: auto;
-    padding-block: 68px 86px;
+    padding-block: 58px 74px;
   }
 
   .home-hero-copy h1 {
-    font-size: clamp(3.1rem, 12vw, 4.6rem);
+    font-size: clamp(3rem, 11vw, 4.2rem);
   }
 
   .page-section-heading {
@@ -794,7 +797,7 @@ textarea:focus-visible {
 
   .home-pact-folio {
     padding: 24px 20px 24px 34px;
-    box-shadow: 7px 7px 0 rgba(81, 53, 32, 0.16);
+    box-shadow: 0 14px 34px rgba(76, 48, 28, 0.12);
   }
 
   .pact-folio-header {
@@ -844,7 +847,7 @@ textarea:focus-visible {
 
 @media (max-width: 430px) {
   .home-hero-copy h1 {
-    font-size: clamp(2.7rem, 13vw, 3.6rem);
+    font-size: clamp(2.65rem, 12vw, 3.3rem);
   }
 
   .folio-deck,
