@@ -28,7 +28,7 @@ export interface ModelContextTool {
   };
   readonly execute: (
     input: Readonly<Record<string, unknown>>,
-    options: { readonly signal: AbortSignal },
+    options?: { readonly signal?: AbortSignal },
   ) => Promise<unknown>;
 }
 
@@ -176,6 +176,11 @@ export function toWebMcpTool(
       untrustedContentHint: capability.untrustedOutput,
     },
     execute: async (rawInput, executionOptions) => {
+      // Chromium's native WebMCP dispatcher currently invokes execute(input)
+      // without an execution-options argument. External harnesses may still
+      // supply a cancellation signal, so support both call shapes.
+      const executionSignal =
+        executionOptions?.signal ?? new AbortController().signal;
       const input = asInputRecord(rawInput);
       const command = capability.readOnly
         ? undefined
@@ -202,7 +207,7 @@ export function toWebMcpTool(
         );
       };
 
-      executionOptions.signal.addEventListener("abort", queueReconciliation, {
+      executionSignal.addEventListener("abort", queueReconciliation, {
         once: true,
       });
 
@@ -211,7 +216,7 @@ export function toWebMcpTool(
           actionName: capability.name,
           canonicalHandlerId: capability.canonicalHandlerId,
           ...(command === undefined ? {} : { commandId: command.commandId }),
-          signal: executionOptions.signal,
+          signal: executionSignal,
           provenance: "webmcp",
           provenanceTrusted: true,
         });
@@ -221,11 +226,8 @@ export function toWebMcpTool(
           ...(eventSequence === undefined ? {} : { eventSequence }),
         });
       } finally {
-        executionOptions.signal.removeEventListener(
-          "abort",
-          queueReconciliation,
-        );
-        if (executionOptions.signal.aborted) {
+        executionSignal.removeEventListener("abort", queueReconciliation);
+        if (executionSignal.aborted) {
           queueReconciliation();
         }
       }

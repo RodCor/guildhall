@@ -149,10 +149,8 @@ describe("registerGuildhallWebMcp", () => {
     const tool = registrations.find(
       ({ name }) => name === "guild.list_missions",
     );
-    const output = await tool?.execute(
-      { limit: 10 },
-      { signal: new AbortController().signal },
-    );
+    // Chromium's native dispatcher calls execute(input) without options.
+    const output = await tool?.execute({ limit: 10 });
 
     expect(handler).toHaveBeenCalledWith(
       { limit: 10 },
@@ -161,6 +159,7 @@ describe("registerGuildhallWebMcp", () => {
         canonicalHandlerId: "mission.list.v1",
         provenance: "webmcp",
         provenanceTrusted: true,
+        signal: expect.any(AbortSignal),
       }),
     );
     expect(output).toEqual({
