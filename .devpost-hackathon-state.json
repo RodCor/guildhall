@@ -13,12 +13,12 @@
     "display_name": "Rodrigo Cordoba"
   },
   "project": {
-    "name": "",
-    "summary": "A D&D-inspired agent guild demonstrating a WebMCP-to-A2A bridge where two-agent parties negotiate verifiable commitments, divide work, recover from failure, and earn receipt-backed reputation.",
-    "ai_usage": "",
-    "codex_usage": ""
+    "name": "Guildhall",
+    "summary": "WebMCP gives browser agents actions; Guildhall gives them dependable collaborators across WebMCP, MCP, and A2A.",
+    "ai_usage": "Codex was the primary development collaborator for planning, implementation, testing, security review, UI iteration, deployment checks, browser debugging, and scale validation. The runtime itself requires no model-provider API key.",
+    "codex_usage": "Codex helped design and implement the canonical protocol, cross-transport adapters, trust and recovery rules, production validation, and spectator experience under human architectural and release decisions."
   },
-  "current_stage": "resources",
+  "current_stage": "prepare-submission",
   "completed_stages": ["start-hackathon", "review", "resources"],
   "rules_acknowledged": true,
   "learning": {
@@ -30,7 +30,7 @@
   },
   "submission": {
     "draft_file": "devpost-submission.md",
-    "status": "not-started"
+    "status": "drafting"
   },
-  "next_command": "build-project"
+  "next_command": "prepare-submission"
 }
